@@ -76,6 +76,7 @@ pub fn cmd_list_packages: () {
 
 pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8 {
     set ec = 0 :u8 mut
+    set no_verify = false
     set resolved = use! semver::resolve_from_registry(name version)
     set pkg_ver = version :str mut
     if resolved != "" { set pkg_ver = resolved }
@@ -176,21 +177,59 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
         }
     }
 
-    if ec == 0 && !no_verify && sha256_val != "" {
-        use dasu("  verifying SHA-256...")
-        set actual = use! util::trim(proc::run("sha256sum \"" + tarball_file + "\" 2>/dev/null | cut -d' ' -f1 || true"))
-        if actual == "" {
-            use dasu("  warning: could not compute SHA-256 (sha256sum missing?)")
+    if ec == 0 {
+        if sha256_val == "" {
+            use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+            use dasu("  error: registry entry for \"" + pkg_name + "\" has no sha256 - refusing to install unverified package")
+            set ec = 1 :u8
         } else {
-            if actual != sha256_val {
+            use dasu("  verifying SHA-256...")
+            set actual = use! util::trim(proc::run("sha256sum \"" + tarball_file + "\" 2>/dev/null | cut -d' ' -f1 || true"))
+            if actual == "" {
                 use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
-                use dasu("  error: SHA-256 mismatch")
-                use dasu("    expected: " + sha256_val)
-                use dasu("    actual:   " + actual)
+                use dasu("  error: could not compute SHA-256 (sha256sum missing) - refusing to install unverified package")
                 set ec = 1 :u8
             } else {
-                use dasu("  SHA-256 OK")
+                if actual != sha256_val {
+                    use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+                    use dasu("  error: SHA-256 mismatch")
+                    use dasu("    expected: " + sha256_val)
+                    use dasu("    actual:   " + actual)
+                    set ec = 1 :u8
+                } else {
+                    use dasu("  SHA-256 OK")
+                }
             }
+        }
+    }
+
+    if ec == 0 {
+        set sig_url = tarball_url + ".sig"
+        set sig_file = tarball_file + ".sig"
+        use proc::run("curl -sL --fail -o \"" + sig_file + "\" \"" + sig_url + "\" 2>/dev/null || true")
+        if fs_exists(sig_file) {
+            set pubkey = "" :str mut
+            if fs_exists(reg_dir + "/" + reg_name + "/registry.json") {
+                set reg_content = fs::read(reg_dir + "/" + reg_name + "/registry.json")
+                set pubkey = use! util::json_get_str(reg_content "public-key") :str mut
+            }
+            if pubkey == "" {
+                use proc::run("rm -f \"" + tarball_file + "\" \"" + sig_file + "\" 2>/dev/null")
+                use dasu("  error: no public-key for registry \"" + reg_name + "\" - refusing to install signed package without verification")
+                set ec = 1 :u8
+            } else {
+                use dasu("  verifying Ed25519 signature...")
+                set tf = tarball_file + ""
+                set sf = sig_file + ""
+                if !use! crypto::crypto_verify_ed25519_sigfile(pubkey tf sf) {
+                    use proc::run("rm -f \"" + tarball_file + "\" \"" + sig_file + "\" 2>/dev/null")
+                    use dasu("  error: Ed25519 signature verification failed")
+                    set ec = 1 :u8
+                } else {
+                    use dasu("  Ed25519 signature OK")
+                }
+            }
+            use proc::run("rm -f \"" + sig_file + "\" 2>/dev/null")
         }
     }
 
