@@ -5,12 +5,12 @@ load! /code/semver
 pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_val :str yes :bool name :str ver :str) :u8 {
     set ec = 0 :u8 mut
     if has_l {
-        use! cmd_list_packages()
+        use! install::cmd_list_packages()
     } else {
         set is_empty = len(name) == 0
         if is_empty {
             if has_t { use dasu("Usage: owl install -t <name>") } else {
-                if target_val == "d" || target_val == "r" { use! cmd_target_install(target_val "") } else {
+                if target_val == "d" || target_val == "r" { use! install::cmd_target_install(target_val "") } else {
                     use dasu("Usage: owl install [-l] [-t] [--target=d|r] <name> [version]")
                     use dasu("  -l, --list   List packages from all registries")
                     use dasu("  -t, --test   Test install")
@@ -20,7 +20,7 @@ pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_
         } else {
             set version = ver :str mut
             if len(version) == 0 || version == "*" { set version = "latest" }
-            set ec = use! cmd_install_pkg(name version no_verify force)
+            set ec = use! install::cmd_install_pkg(name version no_verify force)
         }
     }
     return ec

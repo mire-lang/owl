@@ -3,7 +3,7 @@ load! /code/registry
 load! /code/deps
 load! /code/args
 
-pub fn cmd_load_url: (args :vec[str]) {
+pub fn cmd_load_url: (args :&vec[str]) {
     set url = use! args::get_flag_value(args "--url") :str mut
     if url == "" {
         set url = use! args::get_flag_value(args "-u")
@@ -20,7 +20,7 @@ pub fn cmd_load_url: (args :vec[str]) {
     return
 }
 
-pub fn cmd_load_dep: (args :vec[str]) {
+pub fn cmd_load_dep: (args :&vec[str]) {
     set n = rt_vec_len(args)
     set proceed = true :bool mut
     if n < 3 {
@@ -129,7 +129,7 @@ pub fn cmd_load_dep: (args :vec[str]) {
     return
 }
 
-pub fn cmd_load_remove_registry: (args :vec[str]) {
+pub fn cmd_load_remove_registry: (args :&vec[str]) {
     set name = use! args::get_positional(args 0) :str mut
     if name == "" {
         set name = use! args::get_flag_value(args "-r")
@@ -145,16 +145,16 @@ pub fn cmd_load_remove_registry: (args :vec[str]) {
     return
 }
 
-pub fn cmd_load: (args :vec[str]) {
+pub fn cmd_load: (args :&vec[str]) {
     set is_url = use! args::has_flag(args "-u") || use! args::has_flag(args "--url")
     set is_list = use! args::has_flag(args "-l") || use! args::has_flag(args "--list")
     set is_sync = use! args::has_flag(args "-s") || use! args::has_flag(args "--sync")
     set is_rm = use! args::has_flag(args "-r") || use! args::has_flag(args "--remove")
-    if is_url { use! cmd_load_url(args) } else {
+    if is_url { use! dload::cmd_load_url(args) } else {
         if is_list { use! registry::cmd_registry_list() } else {
             if is_sync { use! registry::cmd_registry_sync() } else {
-                if is_rm { use! cmd_load_remove_registry(args) } else {
-                    use! cmd_load_dep(args)
+                if is_rm { use! dload::cmd_load_remove_registry(args) } else {
+                    use! dload::cmd_load_dep(args)
                 }
             }
         }

@@ -1,6 +1,6 @@
 load! /code/util
 
-pub fn cmd_profile: (args :vec[str]) {
+pub fn cmd_profile: (args :&vec[str]) {
     if !use! util::has_project() {
         use dasu("error: no owl.toml found")
         return

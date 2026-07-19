@@ -1,7 +1,7 @@
 load! /code/util
 load! /code/lockfile
 
-pub fn compile_pipeline: (args :vec[str] is_run :bool) {
+pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
     set mire = use! util::compiler_cmd()
     set is_proj = use! util::has_project()
 

@@ -6,13 +6,13 @@ pub fn lockfile_exists: () :bool {
 
 pub fn lockfile_in_sync: () :bool {
     set ok = false :bool mut
-    if use! lockfile_exists() {
+    if use! lockfile::lockfile_exists() {
         set content = fs::read("owl.lock")
         if content != "" {
             if strings::contains(content "no dependencies") {
                 set ok = use! deps::count_deps() == 0
             } else {
-                set lock_str = use! lockfile_package_names()
+                set lock_str = use! lockfile::lockfile_package_names()
                 set lock_str_len = len(lock_str)
                 set toml_names = use! deps::get_dep_names()
                 set toml_count = use! deps::count_deps()
@@ -70,7 +70,7 @@ pub fn lockfile_in_sync: () :bool {
 
 pub fn lockfile_package_names: () :str {
     set result = "" :str mut
-    if use! lockfile_exists() {
+    if use! lockfile::lockfile_exists() {
         set content = fs::read("owl.lock")
         if content != "" {
             set search = "[[package]]"
@@ -190,15 +190,15 @@ pub fn generate_lockfile: () :bool {
 
 pub fn ensure_lockfile: () :bool {
     set ok = false :bool mut
-    if use! lockfile_exists() {
-        if use! lockfile_in_sync() {
+    if use! lockfile::lockfile_exists() {
+        if use! lockfile::lockfile_in_sync() {
             set ok = true
         } else {
             use dasu("  owl.lock is out of sync with owl.toml - run owl install to update")
         }
     } else {
         use dasu("  owl.lock not found - generating from owl.toml ...")
-        set ok = use! generate_lockfile()
+        set ok = use! lockfile::generate_lockfile()
     }
     return ok
 }

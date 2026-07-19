@@ -1,6 +1,6 @@
 load! /code/util
 
-pub fn cmd_gc: (args :vec[str]) {
+pub fn cmd_gc: (args :&vec[str]) {
     set lib_dir = use! util::owl_home_modules()
     set has_libs = fs_exists(lib_dir)
     set removed = 0 :i64 mut

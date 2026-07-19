@@ -1,7 +1,7 @@
 load! /code/util
 load! /code/deps
 
-pub fn cmd_tree: (args :vec[str]) {
+pub fn cmd_tree: (args :&vec[str]) {
     if !use! util::has_project() {
         use dasu("error: no owl.toml found")
         return

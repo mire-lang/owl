@@ -55,7 +55,8 @@ fn find_cmd_index: (args :&vec[str]) :i64 {
     while i < n {
         set a = rt_vec_get_str(args i)
         if !use! util::startswith(a "-") {
-            if idx == -1 { set idx = i }
+            set idx = i
+            break
         }
         set i += 1
     }
@@ -85,93 +86,97 @@ pub fn main: () {
     set n = rt_vec_len(args)
     if n <= 1 {
         use! ui::print_help()
-    } else {
-        set cmd_idx = find_cmd_index(args)
-        set cmd = rt_vec_get_str(args cmd_idx)
-        if cmd == "-V" || cmd == "--version" {
-            use dasu("Owl v" + use! util::owl_version())
-            use dasu(use! util::compiler_version())
-        } else {
-            if cmd == "-h" || cmd == "--help" || cmd == "help" {
-                use! ui::print_help()
-            } else {
-                if cmd == "-T" || cmd == "test" {
-                    set out = proc::run("mire test " + collect_test_flags(args))
-                    use dasu(out)
-                } else {
-                    if cmd == "-B" || cmd == "build" {
-                        use! build::compile_pipeline(args false)
-                    } else {
-                        if cmd == "run" || cmd == "-R" {
-                            use! build::compile_pipeline(args true)
-                        } else {
-                            if cmd == "-N" || cmd == "new" {
-                                if n <= 2 {
-                                    use dasu("Usage: owl new <Name>")
-                                } else {
-                                    use! build::cmd_new(rt_vec_get_str(args 2))
-                                }
-                            } else {
-                                if cmd == "-C" || cmd == "clean" {
-                                    use! info::cmd_clean(args)
-                                } else {
-                                    if cmd == "checkup" {
-                                        use! check::cmd_checkup(args)
-                                    } else {
-                                        if cmd == "check" || cmd == "-K" {
-                                            use! check::cmd_check(args)
-                                        } else {
-                                            if cmd == "info" || cmd == "-Q" {
-                                                use! info::cmd_info(args)
-                                            } else {
-                                                if cmd == "install" || cmd == "-S" {
-                                                    set i_has_l = use! args::has_flag(args "-l") || use! args::has_flag(args "--list")
-                                                    set i_has_t = use! args::has_flag(args "-t") || use! args::has_flag(args "--test")
-                                                    set i_no_verify = use! args::has_flag(args "--no-verify")
-                                                    set i_force = use! args::has_flag(args "--force")
-                                                    set i_target = use! args::get_flag_value(args "--target")
-                                                    set i_yes = use! args::has_flag(args "-y") || use! args::has_flag(args "--yes")
-                                                    set i_name = use! args::get_positional(args 0)
-                                                    set i_ver = use! args::get_positional(args 1)
-                                                    set ec = use! install::cmd_install(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver) :i64
-                                                    if ec != 0 { proc_exit(ec) }
-                                                } else {
-                                                    if cmd == "load" || cmd == "-L" {
-                                                        use! dload::cmd_load(args)
-                                                    } else {
-                                                        if cmd == "-e" || cmd == "export" {
-                                                            use! export::cmd_export(args)
-                                                        } else {
-                                                            if cmd == "gc" {
-                                                                use! gc::cmd_gc(args)
-                                                            } else {
-                                                                if cmd == "tree" {
-                                                                    use! tree::cmd_tree(args)
-                                                                    } else {
-                                                                        if cmd == "profile" {
-                                                                            use! profile::cmd_profile(args)
-                                                                        } else {
-                                                                            if cmd == "upgrade" {
-                                                                                set ec = use! upgrade::cmd_upgrade(args) :i64
-                                                                                if ec != 0 { proc_exit(ec) }
-                                                                            } else {
-                                                                                use dasu("use 'owl help' for available commands")
-                                                                            }
-                                                                        }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        return
     }
+
+    set cmd_idx = find_cmd_index(args)
+    set cmd = rt_vec_get_str(args cmd_idx)
+
+    if cmd == "-V" || cmd == "--version" {
+        use dasu("Owl v" + use! util::owl_version())
+        use dasu(use! util::compiler_version())
+        return
+    }
+    if cmd == "-h" || cmd == "--help" || cmd == "help" {
+        use! ui::print_help()
+        return
+    }
+    if cmd == "-T" || cmd == "test" {
+        set out = proc::run("mire test " + collect_test_flags(args))
+        use dasu(out)
+        return
+    }
+    if cmd == "-B" || cmd == "build" {
+        use! build::compile_pipeline(args false)
+        return
+    }
+    if cmd == "run" || cmd == "-R" {
+        use! build::compile_pipeline(args true)
+        return
+    }
+    if cmd == "-N" || cmd == "new" {
+        if n <= 2 {
+            use dasu("Usage: owl new <Name>")
+        } else {
+            use! build::cmd_new(rt_vec_get_str(args 2))
+        }
+        return
+    }
+    if cmd == "-C" || cmd == "clean" {
+        use! info::cmd_clean(args)
+        return
+    }
+    if cmd == "checkup" {
+        use! check::cmd_checkup(args)
+        return
+    }
+    if cmd == "check" || cmd == "-K" {
+        use! check::cmd_check(args)
+        return
+    }
+    if cmd == "info" || cmd == "-Q" {
+        use! info::cmd_info(args)
+        return
+    }
+    if cmd == "install" || cmd == "-S" {
+        set i_has_l = use! args::has_flag(args "-l") || use! args::has_flag(args "--list")
+        set i_has_t = use! args::has_flag(args "-t") || use! args::has_flag(args "--test")
+        set i_no_verify = use! args::has_flag(args "--no-verify")
+        set i_force = use! args::has_flag(args "--force")
+        set i_target = use! args::get_flag_value(args "--target")
+        set i_yes = use! args::has_flag(args "-y") || use! args::has_flag(args "--yes")
+        set i_name = use! args::get_positional(args 0)
+        set i_ver = use! args::get_positional(args 1)
+        set ec = use! install::cmd_install(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver) :u8
+        set ec_i64 = ec :i64
+        if ec_i64 != 0 { proc_exit(ec_i64) }
+        return
+    }
+    if cmd == "load" || cmd == "-L" {
+        use! dload::cmd_load(args)
+        return
+    }
+    if cmd == "-e" || cmd == "export" {
+        use! export::cmd_export(args)
+        return
+    }
+    if cmd == "gc" {
+        use! gc::cmd_gc(args)
+        return
+    }
+    if cmd == "tree" {
+        use! tree::cmd_tree(args)
+        return
+    }
+    if cmd == "profile" {
+        use! profile::cmd_profile(args)
+        return
+    }
+    if cmd == "upgrade" {
+        set ec = use! upgrade::cmd_upgrade(args) :i64
+        if ec != 0 { proc_exit(ec) }
+        return
+    }
+
+    use dasu("use 'owl help' for available commands")
 }

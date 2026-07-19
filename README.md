@@ -99,7 +99,7 @@ cache = "bin/.cache"
 - [Technical notes](docs/technical.md) — architecture overview
 - [Roadmap](docs/roadmap.md) — planned features
 
-## Recent changes (v0.26.2)
+## Recent changes (v0.27.0)
 
 - **Flag passthrough to the compiler:** `owl build` / `owl run` now forward
   any extra flag starting with `-` to the underlying `mire` invocation

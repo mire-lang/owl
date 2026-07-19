@@ -3,7 +3,7 @@ load! /code/crypto
 load! /code/trust
 
 pub fn cmd_registry_add: (url :str) {
-    set tmp = crypto::crypto_tempdir("owl-reg")
+    set tmp = use! crypto::crypto_tempdir("owl-reg")
     set proceed = true :bool mut
     if tmp == "" {
         use dasu("  [FAIL]  could not create temp directory")
@@ -197,7 +197,7 @@ pub fn cmd_registry_sync_one: (name :str, reg_path :str) {
             set reg_url = use! util::json_get_str(content "name")
         }
 
-        set tmp = crypto::crypto_tempdir("owl-sync")
+        set tmp = use! crypto::crypto_tempdir("owl-sync")
         if tmp == "" {
             use dasu("    [FAIL]  could not create temp directory")
             set proceed = false
@@ -247,7 +247,7 @@ pub fn cmd_registry_sync_one: (name :str, reg_path :str) {
                 set sig_size = use! util::trim(proc::run("stat -c%s \"" + sig_file + "\" 2>/dev/null || echo 0"))
                 if sig_size != "0" && pubkey != "" {
                     use dasu("    [INFO]  verifying index.toml signature...")
-                    set verify_result = crypto::crypto_verify_ed25519_sigfile(pubkey tmp + "/index.toml" sig_file)
+                    set verify_result = use! crypto::crypto_verify_ed25519_sigfile(pubkey tmp + "/index.toml" sig_file)
                     if verify_result {
                         use dasu("    [OK]    signature valid")
                     } else {
@@ -303,7 +303,7 @@ pub fn cmd_registry_sync: () {
                     if fs_exists(reg_path + "/registry.json") && !fs_exists(reg_path + "/.disabled") {
                         set found += 1
                         use dasu("  syncing " + entry + "...")
-                        use! cmd_registry_sync_one(entry reg_path)
+                        use! registry::cmd_registry_sync_one(entry reg_path)
                     }
                 }
                 set i += 1

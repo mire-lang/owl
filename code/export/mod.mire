@@ -2,7 +2,7 @@ load! /code/util
 load! /code/crypto
 load! /code/args
 
-pub fn cmd_export: (args :vec[str]) {
+pub fn cmd_export: (args :&vec[str]) {
     set proceed = true :bool mut
     if !use! util::has_project() {
         use dasu("error: no owl.toml found")
@@ -64,7 +64,7 @@ pub fn cmd_export: (args :vec[str]) {
                 }
 
                 if proceed {
-                    set hash = crypto::crypto_sha256(a2)
+                    set hash = use! crypto::crypto_sha256(a2)
                     if hash == "" {
                         use dasu("  error: failed to checksum " + archive)
                         set proceed = false

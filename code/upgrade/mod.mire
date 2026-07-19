@@ -3,7 +3,7 @@ module upgrade
 load! /code/util
 load! /code/args
 
-pub fn cmd_upgrade: (args :vec[str]) :i64 {
+pub fn cmd_upgrade: (args :&vec[str]) :i64 {
     set yes = use! args::has_flag(args "--yes") || use! args::has_flag(args "-y")
     set url_flag = use! args::get_flag_value(args "--url")
 

@@ -1,7 +1,7 @@
 load! /code/util
 load! /code/deps
 
-pub fn cmd_info: (args :vec[str]) {
+pub fn cmd_info: (args :&vec[str]) {
     set json_mode = false :bool mut
     set i = 2 :i64 mut
     set argc = rt_vec_len(args)
@@ -165,7 +165,7 @@ pub fn cmd_info: (args :vec[str]) {
     }
 }
 
-pub fn cmd_clean: (args :vec[str]) {
+pub fn cmd_clean: (args :&vec[str]) {
     set clean_bin = false :bool mut
     set clean_cache = false :bool mut
     set clean_all = false :bool mut

@@ -23,8 +23,8 @@ pub fn parse_version: (ver :&str) :str {
 }
 
 pub fn compare_versions: (a :&str b :&str) :i64 {
-    set pa = use! parse_version(a)
-    set pb = use! parse_version(b)
+    set pa = use! semver::parse_version(a)
+    set pb = use! semver::parse_version(b)
 
     set dot1a = strings::index(pa ".")
     set major_a = use! util::string_to_i64(strings::substr(pa 0 dot1a))
@@ -84,30 +84,30 @@ pub fn constraint_matches: (version :&str constraint :&str) :bool {
     set result = false :bool mut
     if c == "*" || c == "latest" { set result = true }
     if c != "*" && c != "latest" {
-        set op = use! get_constraint_type(c)
-        set ver_str = use! get_constraint_version(c)
-        set pv = use! parse_version(ver_str)
-        set vv = use! parse_version(v)
+        set op = use! semver::get_constraint_type(c)
+        set ver_str = use! semver::get_constraint_version(c)
+        set pv = use! semver::parse_version(ver_str)
+        set vv = use! semver::parse_version(v)
 
-        if op == ">=" { set result = use! compare_versions(vv pv) >= 0 }
-        if op == "<=" { set result = use! compare_versions(vv pv) <= 0 }
-        if op == ">" { set result = use! compare_versions(vv pv) > 0 }
-        if op == "<" { set result = use! compare_versions(vv pv) < 0 }
+        if op == ">=" { set result = use! semver::compare_versions(vv pv) >= 0 }
+        if op == "<=" { set result = use! semver::compare_versions(vv pv) <= 0 }
+        if op == ">" { set result = use! semver::compare_versions(vv pv) > 0 }
+        if op == "<" { set result = use! semver::compare_versions(vv pv) < 0 }
 
         if op == "^" {
-            set result = use! compare_versions(vv pv) >= 0
-            if use! compare_versions(vv pv) >= 0 {
+            set result = use! semver::compare_versions(vv pv) >= 0
+            if use! semver::compare_versions(vv pv) >= 0 {
                 set dot1 = strings::index(pv ".")
                 set major_s = strings::substr(pv 0 dot1)
                 set major = use! util::string_to_i64(major_s)
                 set upper = use! util::i64_to_string(major + 1) + ".0.0"
-                set result = use! compare_versions(vv upper) < 0
+                set result = use! semver::compare_versions(vv upper) < 0
             }
         }
 
         if op == "~" {
-            set result = use! compare_versions(vv pv) >= 0
-            if use! compare_versions(vv pv) >= 0 {
+            set result = use! semver::compare_versions(vv pv) >= 0
+            if use! semver::compare_versions(vv pv) >= 0 {
                 set dot1 = strings::index(pv ".")
                 set rest = strings::substr(pv dot1 + 1 9999)
                 set dot2 = strings::index(rest ".")
@@ -115,11 +115,11 @@ pub fn constraint_matches: (version :&str constraint :&str) :bool {
                 set minor_s = strings::substr(rest 0 dot2)
                 set minor = use! util::string_to_i64(minor_s)
                 set upper = major_s + "." + use! util::i64_to_string(minor + 1) + ".0"
-                set result = use! compare_versions(vv upper) < 0
+                set result = use! semver::compare_versions(vv upper) < 0
             }
         }
 
-        if op == "=" { set result = use! compare_versions(vv pv) == 0 }
+        if op == "=" { set result = use! semver::compare_versions(vv pv) == 0 }
     }
     return result
 }
@@ -158,12 +158,12 @@ pub fn best_match: (versions :&str constraint :&str) :str {
         set best = "" :str mut
         set vlist = use! util::trim(versions) :str mut
         while vlist != "" {
-            set ver = use! first_token(vlist)
-            set vlist = use! rest_tokens(vlist)
+            set ver = use! semver::first_token(vlist)
+            set vlist = use! semver::rest_tokens(vlist)
             if ver != "" {
-                if use! constraint_matches(ver constraint) {
+                if use! semver::constraint_matches(ver constraint) {
                     if best == "" { set best = ver } else {
-                        if use! compare_versions(ver best) > 0 { set best = ver }
+                        if use! semver::compare_versions(ver best) > 0 { set best = ver }
                     }
                 }
             }
@@ -206,7 +206,7 @@ pub fn nth_line: (s :&str n :i64) :str {
 
 pub fn resolve_from_registry: (name :&str constraint :&str) :str {
     set result = "" :str mut
-    set cached = use! get_cached_resolution(name constraint)
+    set cached = use! semver::get_cached_resolution(name constraint)
     if cached != "" { set result = cached }
     if cached == "" {
         set reg_dir = use! util::owl_home_registries()
@@ -231,9 +231,9 @@ pub fn resolve_from_registry: (name :&str constraint :&str) :str {
             }
             if all_versions == "" { set result = "" }
             if all_versions != "" {
-                set best = use! best_match(all_versions constraint)
+                set best = use! semver::best_match(all_versions constraint)
                 if best != "" {
-                    use! cache_resolution(name constraint best)
+                    use! semver::cache_resolution(name constraint best)
                 }
                 set result = best
             }
@@ -245,7 +245,7 @@ pub fn resolve_from_registry: (name :&str constraint :&str) :str {
 pub fn check_version: (name :&str constraint :&str) {
     set n = use! util::trim(name)
     set c = use! util::trim(constraint)
-    set resolved = use! resolve_from_registry(name constraint)
+    set resolved = use! semver::resolve_from_registry(name constraint)
     if resolved == "" {
         use dasu("  warning: \"" + n + "\" not found in any registry for constraint \"" + c + "\"")
     } else {

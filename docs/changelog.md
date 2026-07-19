@@ -51,6 +51,39 @@
 - **`tests/07_stress.mire`**: Fixed `time.unix_ms` → `time.unix.ms`,
   `strings.from_i64` → `strings.from.i64`.
 
+### Changed (revision 2026-07-20)
+
+- **Command dispatcher flattened (no deep `else` staircase):** `code/main.mire`
+  `pub fn main` previously chained all subcommands in a 16-deep `} else {`
+  staircase. It now dispatches via flat early-return guard clauses
+  (`if cmd == "x" || cmd == "--x" { ...; return }`). This is the "no long if
+  anidation" fix. Note: the reviewer's "no early return" request was
+  interpreted (per mire-lang) as *avoid deep nesting*, not a blanket ban —
+  guard-clause early returns and Mire's native `?`/`use!` error propagation
+  remain in use. `match` was evaluated and rejected because avenys does not
+  run effectful `use!` calls inside `match` arms.
+- **Command handlers borrow `args`:** `compile_pipeline`, `cmd_info`,
+  `cmd_clean`, `cmd_checkup`, `cmd_check`, `cmd_load*`, `cmd_export`,
+  `cmd_gc`, `cmd_tree`, `cmd_profile`, and `cmd_upgrade` now take
+  `args :&vec[str]` instead of `args :vec[str]`. This removes the ownership
+  move that the flat dispatcher would otherwise trigger on every branch and
+  is more idiomatic (handlers only read `args`).
+- **Owl-wide `use!` qualification corrected:** All cross-module calls in the 9
+  `code/*/mod.mire` packages were updated to qualify calls as
+  `use! module::fn(...)` per the current avenys import model, so the project
+  builds cleanly on current `mire`.
+
+### Fixed (revision 2026-07-20)
+
+- **CI type error at `proc_exit` call site (E0005):** `cmd_install` and
+  `cmd_install_pkg` return `:u8` (their natural narrow type). The dispatcher
+  now performs a single short-lived `u8 -> i64` conversion
+  (`set ec_i64 = ec :i64`) immediately before `proc_exit(ec_i64)`, instead of
+  ascribing `:i64` to the install call. This keeps PAL exit-code types narrow
+  and unblocks CI without broadening integer types across the install path.
+- **Version consistency:** `owl.toml` (`0.26.1`) and `README.md` (`v0.26.2`)
+  now report `0.27.0`, matching `util::owl_version()` and the changelog.
+
 ## [0.26.2] - 2026-07-18
 
 ### Changed

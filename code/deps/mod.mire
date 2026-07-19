@@ -16,7 +16,7 @@ pub fn deps_section: () :str {
 
 pub fn find_dep_raw: (dep_name :str) :str {
     set result = "" :str mut
-    set section = use! deps_section()
+    set section = use! deps::deps_section()
     if section != "" {
         set search_a = "\n" + dep_name + " = "
         set pos = strings::index(section search_a) :i64 mut
@@ -68,18 +68,18 @@ pub fn extract_field: (tbl :str, field :str) :str {
 
 pub fn get_dep_field: (dep_name :str, field :str) :str {
     set result = "" :str mut
-    set raw = use! find_dep_raw(dep_name)
-    if raw != "" { set result = use! extract_field(raw field) }
+    set raw = use! deps::find_dep_raw(dep_name)
+    if raw != "" { set result = use! deps::extract_field(raw field) }
     return result
 }
 
 pub fn dep_exists: (dep_name :str) :bool {
-    return use! get_dep_field(dep_name "path") != ""
+    return use! deps::get_dep_field(dep_name "path") != ""
 }
 
 pub fn get_dep_names: () :str {
     set result = "" :str mut
-    set section = use! deps_section()
+    set section = use! deps::deps_section()
     if section != "" {
         set content = "\n" + section
         set clen = len(content)
@@ -108,7 +108,7 @@ pub fn get_dep_names: () :str {
 
 pub fn count_deps: () :i64 {
     set count = 0 :i64 mut
-    set names = use! get_dep_names()
+    set names = use! deps::get_dep_names()
     if names != "" {
         set pos = 0 :i64 mut
         set nlen = len(names)
@@ -191,5 +191,5 @@ pub fn get_dep_field_from: (toml_file :str dep_name :str field :str) :str {
             }
         }
     }
-    return use! extract_field(raw field)
+    return use! deps::extract_field(raw field)
 }

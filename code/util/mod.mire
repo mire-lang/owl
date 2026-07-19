@@ -3,7 +3,7 @@
 // throughout the codebase. It works because substr clamps to string bounds.
 
 /! TOML parser (helpers first) !/
-pub fn toml_extract_val: (content :&str, val_start :i64) :str {
+fn toml_extract_val: (content :&str, val_start :i64) :str {
     set val = "" :str mut
     set after_key = strings::substr(content val_start 9999)
     set nl_pos = strings::index(after_key "\n")
@@ -34,13 +34,13 @@ pub fn toml_get: (file :str section :str key :str) :str {
             set key_pos1 = strings::index(content key_with_space)
             if key_pos1 >= 0 {
                 set val_start = key_pos1 + len(key_with_space)
-                set val = use! toml_extract_val(content val_start)
+                set val = toml_extract_val(content val_start)
             } else {
                 set key_no_space = "\n" + key + "="
                 set key_pos2 = strings::index(content key_no_space)
                 if key_pos2 >= 0 {
                     set val_start = key_pos2 + len(key_no_space)
-                    set val = use! toml_extract_val(content val_start)
+                    set val = toml_extract_val(content val_start)
                 }
             }
         }
@@ -57,13 +57,13 @@ pub fn toml_get_from_string: (content :str section :str key :str) :str {
         set key_pos1 = strings::index(content key_with_space)
         if key_pos1 >= 0 {
             set val_start = key_pos1 + len(key_with_space)
-            set val = use! toml_extract_val(content val_start)
+            set val = toml_extract_val(content val_start)
         } else {
             set key_no_space = "\n" + key + "="
             set key_pos2 = strings::index(content key_no_space)
             if key_pos2 >= 0 {
                 set val_start = key_pos2 + len(key_no_space)
-                set val = use! toml_extract_val(content val_start)
+                set val = toml_extract_val(content val_start)
             }
         }
     }
@@ -146,27 +146,27 @@ pub fn owl_home: () :str {
 }
 
 pub fn owl_home_registries: () :str {
-    return use! owl_home() + "/registries"
+    return use! util::owl_home() + "/registries"
 }
 
 pub fn owl_home_lib: () :str {
-    return use! owl_home() + "/lib"
+    return use! util::owl_home() + "/lib"
 }
 
 pub fn owl_home_modules: () :str {
-    return use! owl_home() + "/modules"
+    return use! util::owl_home() + "/modules"
 }
 
 pub fn owl_home_cache_tarballs: () :str {
-    return use! owl_home() + "/cache/tarballs"
+    return use! util::owl_home() + "/cache/tarballs"
 }
 
 pub fn owl_home_cache_resolution: () :str {
-    return use! owl_home() + "/cache/resolution.toml"
+    return use! util::owl_home() + "/cache/resolution.toml"
 }
 
 pub fn owl_home_keys: () :str {
-    return use! owl_home() + "/keys"
+    return use! util::owl_home() + "/keys"
 }
 
 /! Version and compiler info !/
@@ -191,7 +191,7 @@ pub fn abi_version: () :str {
 
 pub fn language_version: () :str {
     set ver = "" :str mut
-    set v = use! compiler_version()
+    set v = use! util::compiler_version()
     if v == "" {
         set ver = "mire"
     } else {
@@ -212,8 +212,8 @@ pub fn has_project: () :bool {
 
 pub fn compiler_cmd: () :str {
     set cmd = "" :str mut
-    if use! has_project() {
-        set c = use! toml_get("owl.toml" "build" "compiler")
+    if use! util::has_project() {
+        set c = use! util::toml_get("owl.toml" "build" "compiler")
         if c != "" { set cmd = c }
     }
     if cmd == "" { set cmd = "mire" }
@@ -222,14 +222,14 @@ pub fn compiler_cmd: () :str {
 
 pub fn config_required: (section :str key :str) :str {
     set val = "" :str mut
-    if use! has_project() {
+    if use! util::has_project() {
         set s = section
         set k = key
-        set v = use! toml_get("owl.toml" s k)
+        set v = use! util::toml_get("owl.toml" s k)
         if v != "" {
             set val = v
         } else {
-            use! error_line("OWL0003" "missing [" + section + "]." + key + " in owl.toml")
+            use! util::error_line("OWL0003" "missing [" + section + "]." + key + " in owl.toml")
             use dasu("")
             use dasu("  Run 'owl checkup --fix' to regenerate owl.toml with defaults")
             proc_exit(1)

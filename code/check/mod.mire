@@ -33,7 +33,7 @@ pub fn regenerate_owl_toml: (fields :str) {
     }
 }
 
-pub fn cmd_checkup: (args :vec[str]) {
+pub fn cmd_checkup: (args :&vec[str]) {
     set do_fix = false :bool mut
     set fix_fields = "" :str mut
     set n = rt_vec_len(args)
@@ -194,7 +194,7 @@ pub fn cmd_checkup: (args :vec[str]) {
 
         if do_fix {
             use dasu("")
-            use! regenerate_owl_toml(fix_fields)
+            use! check::regenerate_owl_toml(fix_fields)
         }
 
         if !toml_valid {
@@ -216,7 +216,7 @@ pub fn cmd_checkup: (args :vec[str]) {
     }
 }
 
-pub fn cmd_check: (args :vec[str]) {
+pub fn cmd_check: (args :&vec[str]) {
     if !use! util::has_project() {
         use dasu("  [FAIL]  no owl.toml found")
     } else {

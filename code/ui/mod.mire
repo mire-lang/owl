@@ -7,7 +7,7 @@ pub fn print_banner: () {
 }
 
 pub fn print_help: () {
-    use! print_banner()
+    use! ui::print_banner()
     use dasu("")
     use dasu("Usage: owl <command> [flags]")
     use dasu("")
