@@ -53,10 +53,11 @@ fn find_cmd_index: (args :&vec[str]) :i64 {
     set idx = -1 :i64 mut
     set i = 1 :i64 mut
     while i < n {
-        set a = rt_vec_get_str(args i)
-        if !use! util::startswith(a "-") {
-            set idx = i
-            break
+        if idx == -1 {
+            set a = rt_vec_get_str(args i)
+            if !use! util::startswith(a "-") {
+                set idx = i
+            }
         }
         set i += 1
     }
@@ -112,6 +113,10 @@ pub fn main: () {
     }
     if cmd == "run" || cmd == "-R" {
         use! build::compile_pipeline(args true)
+        return
+    }
+    if cmd == "debug" || cmd == "-D" {
+        use! build::cmd_debug(args)
         return
     }
     if cmd == "-N" || cmd == "new" {

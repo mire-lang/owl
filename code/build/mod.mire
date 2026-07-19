@@ -128,6 +128,82 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
     }
 }
 
+pub fn cmd_debug: (args :&vec[str]) {
+    set mire = use! util::compiler_cmd()
+    set is_proj = use! util::has_project()
+    set n = rt_vec_len(args)
+
+    set file_idx = 1 :i64 mut
+    set fi = 1 :i64 mut
+    while fi < n {
+        set fa = rt_vec_get_str(args fi)
+        if !use! util::startswith(fa "-") {
+            set file_idx = fi
+            set fi = n
+        }
+        set fi += 1
+    }
+
+    set extra_flags = "" :str mut
+    set i = 1 :i64 mut
+    while i < n {
+        set a = rt_vec_get_str(args i)
+        if a == "--tokens" || a == "-t" {
+            set extra_flags = extra_flags + " --tokens"
+        } else {
+            if a == "--ast" || a == "-p" {
+                set extra_flags = extra_flags + " --ast"
+            } else {
+                if a == "--ir" {
+                    set extra_flags = extra_flags + " --ir"
+                } else {
+                    if a == "--run" || a == "-r" {
+                        set extra_flags = extra_flags + " --run"
+                    } else {
+                        if !use! util::startswith(a "-") && (fs_exists(a) || use! util::endswith(a ".mire")) {
+                            set file_idx = i
+                        } else {
+                            if use! util::startswith(a "-") {
+                                set extra_flags = extra_flags + " " + a
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        set i += 1
+    }
+
+    set cli_file = "" :str mut
+    if file_idx > 0 && file_idx < n { set cli_file = rt_vec_get_str(args file_idx) }
+
+    if !is_proj {
+        if cli_file == "" {
+            use! util::error_line("OWL0002" "no file specified and no owl.toml found")
+            return
+        }
+        set cmd = mire + " debug " + cli_file + extra_flags
+        set out = proc::run(cmd)
+        use dasu(out)
+        return
+    }
+
+    if !use! lockfile::ensure_lockfile() {
+        use! util::error_line("OWL0003" "lockfile missing - run owl install first")
+        return
+    }
+    set entry = use! util::config_required("project" "entry")
+    set file = entry :str mut
+    if cli_file != "" && fs_exists(cli_file) { set file = cli_file }
+    if !fs_exists(file) {
+        use! util::error_line("OWL0002" "input not found: " + file)
+        return
+    }
+    set cmd = mire + " debug " + file + extra_flags
+    set out = proc::run(cmd)
+    use dasu(out)
+}
+
 pub fn cmd_new: (name :str) {
     if fs_exists(name) {
         use dasu("Error: directory already exists")
