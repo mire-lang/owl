@@ -28,22 +28,22 @@ pub fn main: () {
     testlib.assert_eq(4 lists.get(r 4))
     use dasu("  math.range: ok")
 
-    set rb = math.range_between(2 6) :vec[i64]
+    set rb = math.between(2 6) :vec[i64]
     testlib.assert_eq(4 len(rb))
     testlib.assert_eq(2 lists.get(rb 0))
     testlib.assert_eq(5 lists.get(rb 3))
-    use dasu("  math.range_between: ok")
+    use dasu("  math.between: ok")
 
-    set rs = math.range_step(0 10 3) :vec[i64]
+    set rs = math.step(0 10 3) :vec[i64]
     testlib.assert_eq(4 len(rs))
     testlib.assert_eq(0 lists.get(rs 0))
     testlib.assert_eq(9 lists.get(rs 3))
-    use dasu("  math.range_step: ok")
+    use dasu("  math.step: ok")
 
     set nums = [5 2 8 1 9] :vec[i64]
-    testlib.assert_eq(1 math.min_list(nums))
-    testlib.assert_eq(9 math.max_list(nums))
-    use dasu("  math.min_list/max_list: ok")
+    testlib.assert_eq(1 math.minlist(nums))
+    testlib.assert_eq(9 math.maxlist(nums))
+    use dasu("  math.minlist/max_list: ok")
 
     testlib.assert_eq(25 math.sum(nums))
     use dasu("  math.sum: ok")

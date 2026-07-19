@@ -99,6 +99,20 @@ cache = "bin/.cache"
 - [Technical notes](docs/technical.md) — architecture overview
 - [Roadmap](docs/roadmap.md) — planned features
 
+## Recent changes (v0.27.0)
+
+- **Flag passthrough to the compiler:** `owl build` / `owl run` now forward
+  any extra flag starting with `-` to the underlying `mire` invocation
+  (e.g. `owl run -- --some-mire-flag`), so compiler-specific options no longer
+  need dedicated owl flags.
+- **`owl test` forwards all flags:** `collect_test_flags` now passes through
+  every argument beginning with `-` (instead of a fixed allowlist) and quotes
+  non-flag arguments, so custom test flags reach the runner correctly.
+- **Lockfile parser fix:** Corrected `[[package]]` section splitting in
+  `lockfile_package_names` (off-by-one at the section delimiter) and removed a
+  duplicated consistency check. Lockfile/dependency name extraction is now
+  accurate.
+
 ## Recent changes (v0.17.0)
 
 - **Modularized codebase:** Split monolithic `code/main.mire` into 8

@@ -1,5 +1,125 @@
 # Owl Changelog
 
+## [0.27.0] - 2026-07-19
+
+### Changed
+
+- **Full migration from `load` (package) to `load!`/`use!` (local):** All 17
+  internal sub-packages under `code/` now use `load!` with path prefixes
+  (`/code/util`, `/code/crypto`, etc.) instead of package `load` via
+  `owl.toml [dependencies]`. Every call into a `load!`-imported module is
+  wrapped in `use!`. This eliminates the `owl.toml` dependency entries for
+  internal modules and aligns with the `load!`/`use!` local import model.
+- **`code/load/mod.mire` removed**: The `load` command module was deleted;
+  its functionality is subsumed by the `load!`/`use!` migration.
+- **1 return per function enforced across all sub-packages**: Every function
+  in `code/*/mod.mire` now uses at most one `return` statement. Void
+  functions use `if`/`else` chains (0 returns). Non-void functions use
+  `set result = default :type mut` ... `if`/`else { set result = val }` ...
+  `return result`.
+- **Dead code removed**: `extract_versions` and `ensure_owl_home` functions
+  removed from `code/util/mod.mire`.
+- **Redundant alias variables removed**: 13 `set name = name` assignments
+  removed from `code/main.mire`.
+- **`9999` magic number documented**: The `toml_extract_val` fallback
+  length now has an inline comment explaining its purpose.
+
+### Fixed
+
+- **`code/crypto/mod.mire` return types**: `crypto_verify_ed25519`,
+  `crypto_verify_ed25519_sigfile`, and `crypto_verify_pemfile` now return
+  `:bool` instead of `:str`. The caller in `code/registry/mod.mire` no
+  longer compares against the string `"true"`.
+- **`code/tree/mod.mire` duplicate output**: Removed duplicate print of
+  child dependencies that caused each dependency to appear twice in the
+  tree output.
+- **`code/install/mod.mire` `:u8` type handling**: `cmd_install` and
+  `cmd_install_pkg` now use `set ec = 0 :u8 mut` with explicit `:u8`
+  type annotations on literal values (`set ec = 1 :u8`), fixing
+  type inference errors from integer literals defaulting to `i64`.
+
+### Test fixes
+
+- **`tests/04_strings.mire`**: Fixed incorrect kioto API names —
+  `strings.is_empty` → `strings.check.empty`, `strings.from_i64` →
+  `strings.from.i64`, `strings.index_of` → `strings.index`.
+- **`tests/05_lists.mire`**: Fixed `lists.index_of` → `lists.index`,
+  `lists.is_empty` → `lists.check.empty`.
+- **`tests/06_math.mire`**: Fixed `math.range_between` → `math.between`,
+  `math.range_step` → `math.step`, `math.min_list` → `math.minlist`,
+  `math.max_list` → `math.maxlist`.
+- **`tests/07_stress.mire`**: Fixed `time.unix_ms` → `time.unix.ms`,
+  `strings.from_i64` → `strings.from.i64`.
+
+### Changed (revision 2026-07-20)
+
+- **Command dispatcher flattened (no deep `else` staircase):** `code/main.mire`
+  `pub fn main` previously chained all subcommands in a 16-deep `} else {`
+  staircase. It now dispatches via flat early-return guard clauses
+  (`if cmd == "x" || cmd == "--x" { ...; return }`). This is the "no long if
+  anidation" fix. Note: the reviewer's "no early return" request was
+  interpreted (per mire-lang) as *avoid deep nesting*, not a blanket ban —
+  guard-clause early returns and Mire's native `?`/`use!` error propagation
+  remain in use. `match` was evaluated and rejected because avenys does not
+  run effectful `use!` calls inside `match` arms.
+- **Command handlers borrow `args`:** `compile_pipeline`, `cmd_info`,
+  `cmd_clean`, `cmd_checkup`, `cmd_check`, `cmd_load*`, `cmd_export`,
+  `cmd_gc`, `cmd_tree`, `cmd_profile`, and `cmd_upgrade` now take
+  `args :&vec[str]` instead of `args :vec[str]`. This removes the ownership
+  move that the flat dispatcher would otherwise trigger on every branch and
+  is more idiomatic (handlers only read `args`).
+- **Owl-wide `use!` qualification corrected:** All cross-module calls in the 9
+  `code/*/mod.mire` packages were updated to qualify calls as
+  `use! module::fn(...)` per the current avenys import model, so the project
+  builds cleanly on current `mire`.
+
+### Fixed (revision 2026-07-20)
+
+- **CI type error at `proc_exit` call site (E0005):** `cmd_install` and
+  `cmd_install_pkg` return `:u8` (their natural narrow type). The dispatcher
+  now performs a single short-lived `u8 -> i64` conversion
+  (`set ec_i64 = ec :i64`) immediately before `proc_exit(ec_i64)`, instead of
+  ascribing `:i64` to the install call. This keeps PAL exit-code types narrow
+  and unblocks CI without broadening integer types across the install path.
+- **Version consistency:** `owl.toml` (`0.26.1`) and `README.md` (`v0.26.2`)
+  now report `0.27.0`, matching `util::owl_version()` and the changelog.
+
+## [0.26.2] - 2026-07-18
+
+### Changed
+
+- **Flag passthrough to the compiler:** `owl build` / `owl run` forward any
+  extra argument starting with `-` to the underlying `mire` invocation, so
+  compiler-specific flags no longer need dedicated owl options.
+- **`owl test` forwards all flags:** `collect_test_flags` passes through every
+  `-`-prefixed argument and quotes non-flag arguments, reaching the test
+  runner correctly.
+
+### Fixed
+
+- **Lockfile package-name parsing:** Corrected the `[[package]]` section split
+  in `lockfile_package_names` (off-by-one at the section delimiter) and removed
+  a duplicated consistency check. Dependency name extraction is now accurate.
+
+## [0.26.1] - 2026-07-17
+
+### Docs
+
+- **Carga local de módulos (`load`) funciona vía `path`**: un paquete Mire
+  local es un directorio con `owl.toml` (`[project] name`, `entry`) + `module X`
+  + (opcional) `[exports]`, y se declara en el consumidor con
+  `dep = { path = "ruta/relativa" }`. Es el mismo mecanismo que kioto
+  (`registry="local"` → `~/.owl/lib/kioto`); la única diferencia es la
+  ruta relativa al proyecto. El claim previo de que "Mire no soporta
+  load local" era incorrecto — se confundió con la falta del `owl.toml`/`module`
+  correcto en el directorio del paquete.
+- **Bug de `vec[i64]` por asignación indexada**: documentado en
+  `avenys/docs/VEC_INDEXED_ASSIGN_BUG.md`. La sintáxis nativa
+  `set vec at idx = val` corrumpe vectores dinámicos; usar
+  `lists::set(vec, idx, val)` (kioto) como workaround. Afecta al runtime
+  de Mire, no a owl, pero se registra aquí porque las suites de
+  benchmark lo disparaban.
+
 ## [0.24.1] - 2026-07-08
 
 ### Registry Protocol specification

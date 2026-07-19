@@ -1,25 +1,24 @@
-module profile
-load util
+load! /code/util
 
-pub fn cmd_profile: (args :vec[str]) {
-    if !util::has_project() {
+pub fn cmd_profile: (args :&vec[str]) {
+    if !use! util::has_project() {
         use dasu("error: no owl.toml found")
         return
     }
 
-    set mire = util::compiler_cmd()
-    set status_path = util::owl_home() + "/cache/build_status.toml"
+    set mire = use! util::compiler_cmd()
+    set status_path = use! util::owl_home() + "/cache/build_status.toml"
 
-    use dasu("  Build profile for " + util::toml_get("owl.toml" "project" "name"))
+    use dasu("  Build profile for " + use! util::toml_get("owl.toml" "project" "name"))
     use dasu("")
     use dasu("  Compiler:  " + mire)
-    use dasu("  Profile:   " + util::toml_get("owl.toml" "build" "profile"))
-    use dasu("  Opt level: " + util::toml_get("owl.toml" "build" "opt-level"))
-    use dasu("  Output:    " + util::toml_get("owl.toml" "paths" "output") + "/" + util::toml_get("owl.toml" "build" "profile") + "/main")
+    use dasu("  Profile:   " + use! util::toml_get("owl.toml" "build" "profile"))
+    use dasu("  Opt level: " + use! util::toml_get("owl.toml" "build" "opt-level"))
+    use dasu("  Output:    " + use! util::toml_get("owl.toml" "paths" "output") + "/" + use! util::toml_get("owl.toml" "build" "profile") + "/main")
 
     set binary_size = "0" :str mut
-    if fs_exists("bin/" + util::toml_get("owl.toml" "build" "profile") + "/main") {
-        set sz = util::trim(proc::run("stat --format=%s \"bin/" + util::toml_get("owl.toml" "build" "profile") + "/main\" 2>/dev/null || echo 0"))
+    if fs_exists("bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main") {
+        set sz = use! util::trim(proc::run("stat --format=%s \"bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main\" 2>/dev/null || echo 0"))
         set binary_size = sz
     }
     use dasu("  Binary:    " + binary_size + " bytes")
@@ -27,8 +26,8 @@ pub fn cmd_profile: (args :vec[str]) {
     if fs_exists(status_path) {
         set status_content = fs::read(status_path)
         set status_copy = status_content :str
-        set last_build = util::toml_get_from_string(status_content "build" "last_build_time") :str mut
-        set build_count = util::toml_get_from_string(status_copy "build" "build_count") :str mut
+        set last_build = use! util::toml_get_from_string(status_content "build" "last_build_time") :str mut
+        set build_count = use! util::toml_get_from_string(status_copy "build" "build_count") :str mut
         if last_build == "" { set last_build = "never" }
         if build_count == "" { set build_count = "0" }
         use dasu("  Last build: " + last_build)
@@ -38,13 +37,13 @@ pub fn cmd_profile: (args :vec[str]) {
         use dasu("  Builds:    0")
     }
 
-    if args::has_flag(args "--json") {
+    if use! args::has_flag(args "--json") {
         set json = "{\n" :str mut
-        set json = json + "  \"project\": \"" + util::toml_get("owl.toml" "project" "name") + "\",\n"
-        set json = json + "  \"version\": \"" + util::toml_get("owl.toml" "project" "version") + "\",\n"
+        set json = json + "  \"project\": \"" + use! util::toml_get("owl.toml" "project" "name") + "\",\n"
+        set json = json + "  \"version\": \"" + use! util::toml_get("owl.toml" "project" "version") + "\",\n"
         set json = json + "  \"compiler\": \"" + mire + "\",\n"
-        set json = json + "  \"profile\": \"" + util::toml_get("owl.toml" "build" "profile") + "\",\n"
-        set json = json + "  \"opt_level\": \"" + util::toml_get("owl.toml" "build" "opt-level") + "\",\n"
+        set json = json + "  \"profile\": \"" + use! util::toml_get("owl.toml" "build" "profile") + "\",\n"
+        set json = json + "  \"opt_level\": \"" + use! util::toml_get("owl.toml" "build" "opt-level") + "\",\n"
         set json = json + "  \"binary_size\": " + binary_size + "\n"
         set json = json + "}"
         use dasu("")

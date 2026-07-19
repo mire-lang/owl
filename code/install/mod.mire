@@ -1,104 +1,106 @@
-module install
-load util
-load crypto
-load semver
+load! /code/util
+load! /code/crypto
+load! /code/semver
 
 pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_val :str yes :bool name :str ver :str) :u8 {
+    set ec = 0 :u8 mut
     if has_l {
-        cmd_list_packages()
-        return 0
-    }
-    set is_empty = len(name) == 0
-    if is_empty {
-        if has_t { use dasu("Usage: owl install -t <name>") } else {
-            if target_val == "d" || target_val == "r" { cmd_target_install(target_val "") } else {
-                use dasu("Usage: owl install [-l] [-t] [--target=d|r] <name> [version]")
-                use dasu("  -l, --list   List packages from all registries")
-                use dasu("  -t, --test   Test install")
-                use dasu("  --target=d|r Install compiled binary to owl cache")
+        use! install::cmd_list_packages()
+    } else {
+        set is_empty = len(name) == 0
+        if is_empty {
+            if has_t { use dasu("Usage: owl install -t <name>") } else {
+                if target_val == "d" || target_val == "r" { use! install::cmd_target_install(target_val "") } else {
+                    use dasu("Usage: owl install [-l] [-t] [--target=d|r] <name> [version]")
+                    use dasu("  -l, --list   List packages from all registries")
+                    use dasu("  -t, --test   Test install")
+                    use dasu("  --target=d|r Install compiled binary to owl cache")
+                }
             }
+        } else {
+            set version = ver :str mut
+            if len(version) == 0 || version == "*" { set version = "latest" }
+            set ec = use! install::cmd_install_pkg(name version no_verify force)
         }
-        return 0
     }
-    set version = ver :str mut
-    if len(version) == 0 || version == "*" { set version = "latest" }
-    return cmd_install_pkg(name version no_verify force)
+    return ec
 }
 
 pub fn cmd_list_packages: () {
-    set reg_dir = util::owl_home_registries()
-    set reg_list = util::trim(proc::run("ls \"" + reg_dir + "\" 2>/dev/null || true"))
+    set reg_dir = use! util::owl_home_registries()
+    set reg_list = use! util::trim(proc::run("ls \"" + reg_dir + "\" 2>/dev/null || true"))
     if len(reg_list) == 0 {
         use dasu("  no registries configured -- run: owl load --url <registry-url>")
-        return
-    }
-    use dasu("  available packages:")
-    set entries = util::split(reg_list "\n")
-    set ni = len(entries)
-    set i_reg = 0 :i64 mut
-    while i_reg < ni {
-        set reg_name = util::trim(util::list_get(entries i_reg))
-        if len(reg_name) > 0 {
-            set idx_path = reg_dir + "/" + reg_name + "/index.toml"
-            set content = util::trim(proc::run("cat \"" + idx_path + "\" 2>/dev/null || true"))
-            if len(content) > 0 {
-                set lines = semver::count_lines(content)
-                set in_pkg = false :bool mut
-                set cur_name = "" :str mut
-                set cur_ver = "" :str mut
-                set i = 0 :i64 mut
-                while i < lines {
-                    set line = util::trim(semver::nth_line(content i))
-                    if line == "[[packages]]" {
-                        if in_pkg && len(cur_name) > 0 {
-                            use dasu("  " + reg_name + " / " + cur_name + " v" + cur_ver)
+    } else {
+        use dasu("  available packages:")
+        set entries = use! util::split(reg_list "\n")
+        set ni = len(entries)
+        set i_reg = 0 :i64 mut
+        while i_reg < ni {
+            set reg_name = use! util::trim(use! util::list_get(entries i_reg))
+            if len(reg_name) > 0 {
+                set idx_path = reg_dir + "/" + reg_name + "/index.toml"
+                set content = use! util::trim(proc::run("cat \"" + idx_path + "\" 2>/dev/null || true"))
+                if len(content) > 0 {
+                    set lines = use! semver::count_lines(content)
+                    set in_pkg = false :bool mut
+                    set cur_name = "" :str mut
+                    set cur_ver = "" :str mut
+                    set i = 0 :i64 mut
+                    while i < lines {
+                        set line = use! util::trim(use! semver::nth_line(content i))
+                        if line == "[[packages]]" {
+                            if in_pkg && len(cur_name) > 0 {
+                                use dasu("  " + reg_name + " / " + cur_name + " v" + cur_ver)
+                            }
+                            set in_pkg = true
+                            set cur_name = ""
+                            set cur_ver = ""
+                        } else {
+                            if in_pkg {
+                                if use! util::startswith(line "name =") { set cur_name = use! semver::extract_str_val(line) }
+                                if use! util::startswith(line "version =") { set cur_ver = use! semver::extract_str_val(line) }
+                            }
                         }
-                        set in_pkg = true
-                        set cur_name = ""
-                        set cur_ver = ""
-                    } else {
-                        if in_pkg {
-                            if util::startswith(line "name =") { set cur_name = semver::extract_str_val(line) }
-                            if util::startswith(line "version =") { set cur_ver = semver::extract_str_val(line) }
-                        }
+                        set i += 1
                     }
-                    set i += 1
-                }
-                if in_pkg && len(cur_name) > 0 {
-                    use dasu("  " + reg_name + " / " + cur_name + " v" + cur_ver)
+                    if in_pkg && len(cur_name) > 0 {
+                        use dasu("  " + reg_name + " / " + cur_name + " v" + cur_ver)
+                    }
                 }
             }
+            set i_reg += 1
         }
-        set i_reg += 1
     }
 }
 
 pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8 {
-    set resolved = semver::resolve_from_registry(name version)
+    set ec = 0 :u8 mut
+    set resolved = use! semver::resolve_from_registry(name version)
     set pkg_ver = version :str mut
     if resolved != "" { set pkg_ver = resolved }
 
     set pkg_info = "" :str mut
     set pkg_name = name :str
 
-    set reg_dir = util::owl_home_registries()
-    set reg_list = util::trim(proc::run("ls \"" + reg_dir + "\" 2>/dev/null || true"))
+    set reg_dir = use! util::owl_home_registries()
+    set reg_list = use! util::trim(proc::run("ls \"" + reg_dir + "\" 2>/dev/null || true"))
     if reg_list != "" {
-        set entries = util::split(reg_list "\n")
+        set entries = use! util::split(reg_list "\n")
         set ni = len(entries)
         set i_reg = 0 :i64 mut
         while i_reg < ni {
-            set reg_name = util::trim(util::list_get(entries i_reg))
+            set reg_name = use! util::trim(use! util::list_get(entries i_reg))
             if pkg_info != "" { break }
             if len(reg_name) > 0 {
                 set idx_path = reg_dir + "/" + reg_name + "/index.toml"
                 set tmp = "/tmp/owl_install_pkg.tmp"
                 set cmd = "grep -A10 '^name = \"" + pkg_name + "\"' \"" + idx_path + "\" > \"" + tmp + "\" 2>/dev/null"
                 use proc::run(cmd)
-                set grep_out = util::trim(fs::read(tmp))
+                set grep_out = use! util::trim(fs::read(tmp))
                 if grep_out != "" {
-                    set tarball_line = util::trim(proc::run("grep '^tarball =' \"" + tmp + "\" 2>/dev/null | sed 's/.*= \"\\(.*\\)\"/\\1/'"))
-                    set sha256_line = util::trim(proc::run("grep '^sha256 =' \"" + tmp + "\" 2>/dev/null | sed 's/.*= \"\\(.*\\)\"/\\1/'"))
+                    set tarball_line = use! util::trim(proc::run("grep '^tarball =' \"" + tmp + "\" 2>/dev/null | sed 's/.*= \"\\(.*\\)\"/\\1/'"))
+                    set sha256_line = use! util::trim(proc::run("grep '^sha256 =' \"" + tmp + "\" 2>/dev/null | sed 's/.*= \"\\(.*\\)\"/\\1/'"))
                     if tarball_line != "" {
                         set pkg_info = tarball_line + "|" + sha256_line + "|" + reg_name
                     }
@@ -109,60 +111,74 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
         }
     }
 
-    if pkg_info == "" {
+    if ec == 0 && pkg_info == "" {
         use dasu("  error: could not find package \"" + pkg_name + "\" in any registry")
-        return 1
+        set ec = 1 :u8
     }
 
-    set pipe1 = strings::index(pkg_info "|")
-    if pipe1 < 0 {
-        use dasu("  error: invalid package info from registry")
-        return 1
-    }
-    set pipe2 = strings::index(strings::substr(pkg_info pipe1 + 1 9999) "|")
-    if pipe2 < 0 {
-        use dasu("  error: invalid package info from registry (missing sha256 or reg)")
-        return 1
-    }
-    set tarball_path = strings::substr(pkg_info 0 pipe1)
-    set sha256_val = strings::substr(pkg_info pipe1 + 1 pipe2)
-    set reg_name = strings::substr(pkg_info pipe1 + pipe2 + 2 9999)
-
-    set reg_url = "" :str mut
-    if fs_exists(reg_dir + "/" + reg_name + "/registry.json") {
-        set reg_content = fs::read(reg_dir + "/" + reg_name + "/registry.json")
-        set reg_url = util::json_get_str(reg_content "url") :str mut
-        if reg_url == "" {
-            set reg_url = util::json_get_str(reg_content "name")
+    if ec == 0 {
+        set pipe1 = strings::index(pkg_info "|")
+        if pipe1 < 0 {
+            use dasu("  error: invalid package info from registry")
+            set ec = 1 :u8
         }
     }
-    if reg_url == "" {
+    set tarball_path = "" :str mut
+    set sha256_val = "" :str mut
+    set reg_name = "" :str mut
+    if ec == 0 {
+        set pipe1 = strings::index(pkg_info "|")
+        set pipe2 = strings::index(strings::substr(pkg_info pipe1 + 1 9999) "|")
+        if pipe2 < 0 {
+            use dasu("  error: invalid package info from registry (missing sha256 or reg)")
+            set ec = 1 :u8
+        } else {
+            set tarball_path = strings::substr(pkg_info 0 pipe1)
+            set sha256_val = strings::substr(pkg_info pipe1 + 1 pipe2)
+            set reg_name = strings::substr(pkg_info pipe1 + pipe2 + 2 9999)
+        }
+    }
+
+    set reg_url = "" :str mut
+    if ec == 0 && fs_exists(reg_dir + "/" + reg_name + "/registry.json") {
+        set reg_content = fs::read(reg_dir + "/" + reg_name + "/registry.json")
+        set reg_url = use! util::json_get_str(reg_content "url") :str mut
+        if reg_url == "" {
+            set reg_url = use! util::json_get_str(reg_content "name")
+        }
+    }
+    if ec == 0 && reg_url == "" {
         use dasu("  error: could not determine URL for registry \"" + reg_name + "\"")
-        return 1
+        set ec = 1 :u8
     }
 
-    set tarball_url = reg_url + "/" + tarball_path
-    use dasu("  downloading from " + tarball_url + "...")
+    set tarball_url = "" :str mut
+    set tarball_file = "" :str mut
+    if ec == 0 {
+        set tarball_url = reg_url + "/" + tarball_path
+        use dasu("  downloading from " + tarball_url + "...")
+        set tarball_file = use! util::owl_home() + "/cache/tarballs/" + pkg_name + "-" + pkg_ver + ".tar.zst"
+        use! util::mkdir_p(use! util::owl_home() + "/cache/tarballs")
+        use proc::run("curl -sL --fail -o \"" + tarball_file + "\" \"" + tarball_url + "\" 2>/dev/null || true")
 
-    set tarball_file = util::owl_home() + "/cache/tarballs/" + pkg_name + "-" + pkg_ver + ".tar.zst"
-    use util::mkdir_p(util::owl_home() + "/cache/tarballs")
-    use proc::run("curl -sL --fail -o \"" + tarball_file + "\" \"" + tarball_url + "\" 2>/dev/null || true")
-
-    if !fs_exists(tarball_file) {
-        use dasu("  error: download failed")
-        return 1
+        if !fs_exists(tarball_file) {
+            use dasu("  error: download failed")
+            set ec = 1 :u8
+        }
     }
 
-    set file_size = util::trim(proc::run("stat -c%s \"" + tarball_file + "\" 2>/dev/null || echo 0"))
-    if file_size == "0" {
-        use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
-        use dasu("  error: download failed (empty file)")
-        return 1
+    if ec == 0 {
+        set file_size = use! util::trim(proc::run("stat -c%s \"" + tarball_file + "\" 2>/dev/null || echo 0"))
+        if file_size == "0" {
+            use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+            use dasu("  error: download failed (empty file)")
+            set ec = 1 :u8
+        }
     }
 
-    if !no_verify && sha256_val != "" {
+    if ec == 0 && !no_verify && sha256_val != "" {
         use dasu("  verifying SHA-256...")
-        set actual = util::trim(proc::run("sha256sum \"" + tarball_file + "\" 2>/dev/null | cut -d' ' -f1 || true"))
+        set actual = use! util::trim(proc::run("sha256sum \"" + tarball_file + "\" 2>/dev/null | cut -d' ' -f1 || true"))
         if actual == "" {
             use dasu("  warning: could not compute SHA-256 (sha256sum missing?)")
         } else {
@@ -171,59 +187,62 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
                 use dasu("  error: SHA-256 mismatch")
                 use dasu("    expected: " + sha256_val)
                 use dasu("    actual:   " + actual)
-                return 1
+                set ec = 1 :u8
+            } else {
+                use dasu("  SHA-256 OK")
             }
-            use dasu("  SHA-256 OK")
         }
     }
 
-    set meta_path = util::owl_home_modules() + "/" + pkg_name + "/meta.toml"
-    use util::mkdir_p(util::owl_home_modules() + "/" + pkg_name)
+    if ec == 0 {
+        set meta_path = use! util::owl_home_modules() + "/" + pkg_name + "/meta.toml"
+        use! util::mkdir_p(use! util::owl_home_modules() + "/" + pkg_name)
 
-    use dasu("  extracting...")
-    use proc::run("tar -xzf \"" + tarball_file + "\" -C \"" + util::owl_home_modules() + "/" + pkg_name + "\" 2>/dev/null || true")
+        use dasu("  extracting...")
+        use proc::run("tar -xzf \"" + tarball_file + "\" -C \"" + use! util::owl_home_modules() + "/" + pkg_name + "\" 2>/dev/null || true")
 
-    if !fs_exists(meta_path) {
-        use dasu("  writing metadata...")
-        set meta = "[package]\n" :str mut
-        set meta = meta + "name = \"" + pkg_name + "\"\n"
-        set meta = meta + "version = \"" + pkg_ver + "\"\n"
-        set meta = meta + "compiler = \"" + util::compiler_cmd() + "\"\n"
-        set meta = meta + "abi = " + util::abi_version() + "\n"
-        set meta = meta + "language = \"" + util::language_version() + "\"\n"
-        use fs_write(util::owl_home_modules() + "/" + pkg_name + "/meta.toml" meta)
+        if !fs_exists(meta_path) {
+            use dasu("  writing metadata...")
+            set meta = "[package]\n" :str mut
+            set meta = meta + "name = \"" + pkg_name + "\"\n"
+            set meta = meta + "version = \"" + pkg_ver + "\"\n"
+            set meta = meta + "compiler = \"" + use! util::compiler_cmd() + "\"\n"
+            set meta = meta + "abi = " + use! util::abi_version() + "\n"
+            set meta = meta + "language = \"" + use! util::language_version() + "\"\n"
+            use fs_write(use! util::owl_home_modules() + "/" + pkg_name + "/meta.toml" meta)
+        }
+
+        use! util::fs_make_readonly(use! util::owl_home_modules() + "/" + pkg_name)
+        use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+        use dasu("  installed " + pkg_name + " v" + pkg_ver)
     }
-
-    use util::fs_make_readonly(util::owl_home_modules() + "/" + pkg_name)
-    use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
-    use dasu("  installed " + pkg_name + " v" + pkg_ver)
-    return 0
+    return ec
 }
 
 pub fn cmd_target_install: (target_val :str named :str) {
     if len(named) > 0 {
         if !fs_exists(named) {
             use dasu("  error: binary not found at " + named)
-            return
+        } else {
+            use proc::run("cp \"" + named + "\" \"" + use! util::owl_home() + "/bin/\"")
+            use proc::run("chmod +x \"" + named + "\"")
+            use dasu("  installed to owl cache")
         }
-        use proc::run("cp \"" + named + "\" \"" + util::owl_home() + "/bin/\"")
-        use proc::run("chmod +x \"" + named + "\"")
-        use dasu("  installed to owl cache")
-        return
+    } else {
+        if !use! util::has_project() {
+            use dasu("  usage: owl install --target=d|r [bin-path]")
+        } else {
+            set profile = "debug" :str mut
+            if target_val == "r" { set profile = "release" }
+            set out_dir = use! util::toml_get("owl.toml" "paths" "output") :str mut
+            if len(out_dir) == 0 { set out_dir = "bin" }
+            set bin_path = out_dir + "/" + profile
+            if !fs_exists(bin_path) {
+                use dasu("  error: no build output at " + bin_path + " -- run owl build first")
+            } else {
+                use proc::run("cp \"" + bin_path + "\"/* \"" + use! util::owl_home() + "/bin/\" 2>/dev/null || true")
+                use dasu("  installed build artifacts to owl cache")
+            }
+        }
     }
-    if !util::has_project() {
-        use dasu("  usage: owl install --target=d|r [bin-path]")
-        return
-    }
-    set profile = "debug" :str mut
-    if target_val == "r" { set profile = "release" }
-    set out_dir = util::toml_get("owl.toml" "paths" "output") :str mut
-    if len(out_dir) == 0 { set out_dir = "bin" }
-    set bin_path = out_dir + "/" + profile
-    if !fs_exists(bin_path) {
-        use dasu("  error: no build output at " + bin_path + " -- run owl build first")
-        return
-    }
-    use proc::run("cp \"" + bin_path + "\"/* \"" + util::owl_home() + "/bin/\" 2>/dev/null || true")
-    use dasu("  installed build artifacts to owl cache")
 }

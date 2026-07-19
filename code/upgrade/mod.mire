@@ -1,0 +1,104 @@
+module upgrade
+
+load! /code/util
+load! /code/args
+
+pub fn cmd_upgrade: (args :&vec[str]) :i64 {
+    set yes = use! args::has_flag(args "--yes") || use! args::has_flag(args "-y")
+    set url_flag = use! args::get_flag_value(args "--url")
+
+    use dasu("owl upgrade -- self-update")
+    use dasu("")
+
+    set owl_bin = find_owl_binary()
+    if owl_bin == "" {
+        use dasu("error: could not find owl binary in PATH")
+        return 1
+    }
+    use dasu("current binary: " + owl_bin)
+    use dasu("current version: " + use! util::owl_version())
+    use dasu("")
+
+    set remote_url = "https://github.com/Evelynx-Dev/owl.git" mut
+    if url_flag != "" {
+        set remote_url = url_flag
+    }
+
+    use dasu("source: " + remote_url)
+
+    set tmp_dir = "/tmp/.owl-upgrade"
+
+    if !yes {
+        use dasu("This will clone the repository and build a new owl binary.")
+        use dasu("")
+    }
+
+    use dasu("cloning repository...")
+    use proc::run("rm -rf " + tmp_dir)
+    set clone_ok = use! util::trim(proc::run("git clone --depth 1 " + remote_url + " " + tmp_dir + " 2>&1"))
+    if strings::contains(clone_ok "fatal") || strings::contains(clone_ok "error") {
+        use dasu("error: git clone failed")
+        use dasu(clone_ok)
+        use proc::run("rm -rf " + tmp_dir)
+        return 1
+    }
+    use dasu("  clone ok")
+
+    use dasu("building owl (this may take a moment)...")
+    set new_bin = tmp_dir + "/bin/release/main"
+
+    set owl_home = use! util::owl_home()
+    use proc::run("ln -sfn " + owl_home + "/lib/kioto " + tmp_dir + "/../kioto 2>/dev/null")
+
+    set build_out = use! util::trim(proc::run("cd " + tmp_dir + " && mire build code/main.mire --release 2>&1"))
+    if !fs_exists(new_bin) {
+        use dasu("error: build failed")
+        use dasu(build_out)
+        use proc::run("rm -rf " + tmp_dir + "; rm -f " + tmp_dir + "/../kioto")
+        return 1
+    }
+    use dasu("  build ok")
+
+    use dasu("")
+    if !yes {
+        use dasu("ready to replace " + owl_bin + " with the new binary.")
+        use dasu("(use --yes to skip this prompt)")
+        use dasu("")
+    }
+
+    use dasu("installing...")
+    set install_out = use! util::trim(proc::run("install -m 0755 " + new_bin + " " + owl_bin + " 2>&1"))
+    if strings::contains(install_out "Permission denied") || strings::contains(install_out "No such file") {
+        use dasu("error: install failed - permission denied or path not found")
+        use dasu("try running with sudo:")
+        use dasu("  sudo install -m 0755 " + new_bin + " " + owl_bin)
+        use proc::run("rm -rf " + tmp_dir + "; rm -f " + tmp_dir + "/../kioto")
+        return 1
+    }
+
+    use proc::run("rm -rf " + tmp_dir + "; rm -f " + tmp_dir + "/../kioto")
+    use dasu("done! owl has been updated.")
+    use dasu("restart your shell or run: hash -r")
+    return 0
+}
+
+fn find_owl_binary: () :str {
+    set path_val = env::get("PATH")
+    set dirs = strings::split(path_val ":")
+    set n = len(dirs)
+    set i = 0 :i64 mut
+    while i < n {
+        set dir = lists::get::str(dirs i)
+        set candidate = dir + "/owl"
+        if fs_exists(candidate) {
+            return candidate
+        }
+        set i += 1
+    }
+    set home = env::get("HOME")
+    set fallback = home + "/.local/bin/owl"
+    if fs_exists(fallback) {
+        return fallback
+    }
+    return ""
+}

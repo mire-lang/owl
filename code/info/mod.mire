@@ -1,8 +1,7 @@
-module info
-load util
-load deps
+load! /code/util
+load! /code/deps
 
-pub fn cmd_info: (args :vec[str]) {
+pub fn cmd_info: (args :&vec[str]) {
     set json_mode = false :bool mut
     set i = 2 :i64 mut
     set argc = rt_vec_len(args)
@@ -11,7 +10,7 @@ pub fn cmd_info: (args :vec[str]) {
         set i += 1
     }
 
-    set has_proj = util::has_project()
+    set has_proj = use! util::has_project()
 
     set n_val = "?" :str mut
     set v_val = "?" :str mut
@@ -23,57 +22,57 @@ pub fn cmd_info: (args :vec[str]) {
     set kernel_val = "?" :str mut
 
     if has_proj {
-        set n_val = util::toml_get("owl.toml" "project" "name") :str mut
+        set n_val = use! util::toml_get("owl.toml" "project" "name") :str mut
         if n_val == "" { set n_val = "?" }
-        set v_val = util::toml_get("owl.toml" "project" "version") :str mut
+        set v_val = use! util::toml_get("owl.toml" "project" "version") :str mut
         if v_val == "" { set v_val = "?" }
-        set e_val = util::toml_get("owl.toml" "project" "entry") :str mut
+        set e_val = use! util::toml_get("owl.toml" "project" "entry") :str mut
         if e_val == "" { set e_val = "?" }
-        set p_val = util::toml_get("owl.toml" "build" "profile") :str mut
+        set p_val = use! util::toml_get("owl.toml" "build" "profile") :str mut
         if p_val == "" { set p_val = "?" }
-        set o_val = util::toml_get("owl.toml" "paths" "output") :str mut
+        set o_val = use! util::toml_get("owl.toml" "paths" "output") :str mut
         if o_val == "" { set o_val = "?" }
-        set c_val = util::toml_get("owl.toml" "paths" "cache") :str mut
+        set c_val = use! util::toml_get("owl.toml" "paths" "cache") :str mut
         if c_val == "" { set c_val = "?" }
 
-        set arch_val = util::trim(proc::run("uname -m 2>/dev/null || true")) :str mut
-        set kernel_val = util::trim(proc::run("uname -s | tr '[:upper:]' '[:lower:]' 2>/dev/null || true")) :str mut
+        set arch_val = use! util::trim(proc::run("uname -m 2>/dev/null || true")) :str mut
+        set kernel_val = use! util::trim(proc::run("uname -s | tr '[:upper:]' '[:lower:]' 2>/dev/null || true")) :str mut
         if arch_val == "" { set arch_val = "?" }
         if kernel_val == "" { set kernel_val = "?" }
     }
 
     set compiler_line = "?" :str mut
-    set compiler_out = util::trim(proc::run("mire --version 2>/dev/null || true"))
+    set compiler_out = use! util::trim(proc::run("mire --version 2>/dev/null || true"))
     if compiler_out != "" {
-        set clines = util::split(compiler_out "\n")
-        set compiler_line = util::list_get(clines 0)
+        set clines = use! util::split(compiler_out "\n")
+        set compiler_line = use! util::list_get(clines 0)
     }
 
-    set llvm = util::trim(proc::run("llvm-config --version 2>/dev/null || true")) :str mut
+    set llvm = use! util::trim(proc::run("llvm-config --version 2>/dev/null || true")) :str mut
     if llvm == "" { set llvm = "?" }
 
     set deps_raw = "" :str mut
     if has_proj {
-        set names = deps::get_dep_names()
+        set names = use! deps::get_dep_names()
         set nlen = len(names)
         set pos = 0 :i64 mut
         while pos < nlen {
             set nl = strings::index(strings::substr(names pos nlen - pos) "\n")
             set key = "" :str mut
             if nl < 0 {
-                set key = util::trim(strings::substr(names pos nlen - pos))
+                set key = use! util::trim(strings::substr(names pos nlen - pos))
                 set pos = nlen
             } else {
-                set key = util::trim(strings::substr(names pos nl))
+                set key = use! util::trim(strings::substr(names pos nl))
                 set pos = pos + nl + 1
             }
             if key != "" {
                 set key_ver = key
                 set key_path = key
                 set key_display = key
-                set ver_s = deps::get_dep_field(key_ver "version") :str mut
+                set ver_s = use! deps::get_dep_field(key_ver "version") :str mut
                 if ver_s == "" { set ver_s = "-" }
-                set src_s = deps::get_dep_field(key_path "path") :str mut
+                set src_s = use! deps::get_dep_field(key_path "path") :str mut
                 if src_s == "" { set src_s = "?" }
                 set deps_raw = deps_raw + key_display + "|" + ver_s + "|" + src_s + "\n"
             }
@@ -86,32 +85,32 @@ pub fn cmd_info: (args :vec[str]) {
             set out_path = o_val + "/" + p_val :str
             set out_target = arch_val + "-" + kernel_val :str
             set out = out + "  \"project\": {\n"
-            set out = out + "    \"name\": " + util::json_quote(n_val) + ",\n"
-            set out = out + "    \"version\": " + util::json_quote(v_val) + "\n"
+            set out = out + "    \"name\": " + use! util::json_quote(n_val) + ",\n"
+            set out = out + "    \"version\": " + use! util::json_quote(v_val) + "\n"
             set out = out + "  },\n"
-            set out = out + "  \"entry\": " + util::json_quote(e_val) + ",\n"
-            set out = out + "  \"profile\": " + util::json_quote(p_val) + ",\n"
-            set out = out + "  \"output\": " + util::json_quote(out_path) + ",\n"
-            set out = out + "  \"cache\": " + util::json_quote(c_val) + ",\n"
-            set out = out + "  \"target\": " + util::json_quote(out_target) + ",\n"
+            set out = out + "  \"entry\": " + use! util::json_quote(e_val) + ",\n"
+            set out = out + "  \"profile\": " + use! util::json_quote(p_val) + ",\n"
+            set out = out + "  \"output\": " + use! util::json_quote(out_path) + ",\n"
+            set out = out + "  \"cache\": " + use! util::json_quote(c_val) + ",\n"
+            set out = out + "  \"target\": " + use! util::json_quote(out_target) + ",\n"
         }
-        set out = out + "  \"compiler\": " + util::json_quote(compiler_line) + ",\n"
-        set out = out + "  \"owl\": " + util::json_quote(util::owl_version()) + ",\n"
-        set out = out + "  \"llvm\": " + util::json_quote(llvm) + ",\n"
+        set out = out + "  \"compiler\": " + use! util::json_quote(compiler_line) + ",\n"
+        set out = out + "  \"owl\": " + use! util::json_quote(use! util::owl_version()) + ",\n"
+        set out = out + "  \"llvm\": " + use! util::json_quote(llvm) + ",\n"
         set out = out + "  \"language\": \"Mire\",\n"
         set out = out + "  \"abi\": 1"
         if has_proj {
             set out = out + ",\n  \"dependencies\": [\n"
-            set dep_lines = util::split(util::trim(deps_raw) "\n")
+            set dep_lines = use! util::split(use! util::trim(deps_raw) "\n")
             set dli = 0 :i64 mut
             while dli < len(dep_lines) {
-                set parts = util::split(util::list_get(dep_lines dli) "|")
+                set parts = use! util::split(use! util::list_get(dep_lines dli) "|")
                 if len(parts) >= 3 {
-                    set dk = util::list_get(parts 0)
-                    set dv = util::list_get(parts 1)
-                    set dp = util::list_get(parts 2)
+                    set dk = use! util::list_get(parts 0)
+                    set dv = use! util::list_get(parts 1)
+                    set dp = use! util::list_get(parts 2)
                     if dli > 0 { set out = out + ",\n" }
-                    set out = out + "    { \"name\": " + util::json_quote(dk) + ", \"version\": " + util::json_quote(dv) + ", \"path\": " + util::json_quote(dp) + " }"
+                    set out = out + "    { \"name\": " + use! util::json_quote(dk) + ", \"version\": " + use! util::json_quote(dv) + ", \"path\": " + use! util::json_quote(dp) + " }"
                 }
                 set dli += 1
             }
@@ -121,7 +120,7 @@ pub fn cmd_info: (args :vec[str]) {
             set out = out + "\n  ]"
         }
         set out = out + "\n}\n"
-        use dasu(util::trim(out))
+        use dasu(use! util::trim(out))
     } else {
         if has_proj {
             use dasu("project:     " + n_val + " v" + v_val)
@@ -138,7 +137,7 @@ pub fn cmd_info: (args :vec[str]) {
         }
 
         use dasu("compiler:    " + compiler_line)
-        use dasu("owl:         v" + util::owl_version())
+        use dasu("owl:         v" + use! util::owl_version())
         use dasu("LLVM:        " + llvm)
         use dasu("language:    Mire")
         use dasu("abi:         1")
@@ -147,14 +146,14 @@ pub fn cmd_info: (args :vec[str]) {
             use dasu("")
             use dasu("dependencies:")
             if deps_raw != "" {
-                set dep_lines = util::split(util::trim(deps_raw) "\n")
+                set dep_lines = use! util::split(use! util::trim(deps_raw) "\n")
                 set dli = 0 :i64 mut
                 while dli < len(dep_lines) {
-                    set parts = util::split(util::list_get(dep_lines dli) "|")
+                    set parts = use! util::split(use! util::list_get(dep_lines dli) "|")
                     if len(parts) >= 3 {
-                        set dk = util::list_get(parts 0)
-                        set dv = util::list_get(parts 1)
-                        set dp = util::list_get(parts 2)
+                        set dk = use! util::list_get(parts 0)
+                        set dv = use! util::list_get(parts 1)
+                        set dp = use! util::list_get(parts 2)
                         use dasu("  " + dk + "  " + dv + "  (" + dp + ")")
                     }
                     set dli += 1
@@ -166,7 +165,7 @@ pub fn cmd_info: (args :vec[str]) {
     }
 }
 
-pub fn cmd_clean: (args :vec[str]) {
+pub fn cmd_clean: (args :&vec[str]) {
     set clean_bin = false :bool mut
     set clean_cache = false :bool mut
     set clean_all = false :bool mut
@@ -184,8 +183,8 @@ pub fn cmd_clean: (args :vec[str]) {
     }
 
     if clean_global {
-        use util::rm_RF(util::owl_home() + "/cache")
-        use util::rm_RF(util::owl_home() + "/modules")
+        use! util::rm_RF(use! util::owl_home() + "/cache")
+        use! util::rm_RF(use! util::owl_home() + "/modules")
         use dasu("cleaned global caches")
         return
     }
@@ -199,19 +198,19 @@ pub fn cmd_clean: (args :vec[str]) {
 
     if clean_all || clean_bin {
         if fs_exists("bin") {
-            use util::rm_RF("bin")
+            use! util::rm_RF("bin")
             set cleaned = true
         }
     }
     if clean_all || clean_cache {
         if fs_exists(".cache") {
-            use util::rm_RF(".cache")
+            use! util::rm_RF(".cache")
             set cleaned = true
         }
     }
     if clean_all {
         if fs_exists("deps") {
-            use util::rm_RF("deps")
+            use! util::rm_RF("deps")
             set cleaned = true
         }
     }

@@ -1,14 +1,13 @@
-module ui
-load util
+load! /code/util
 
 pub fn print_banner: () {
-    use dasu("Owl v" + util::owl_version())
-    use dasu("Compiler: " + util::compiler_version())
+    use dasu("Owl v" + use! util::owl_version())
+    use dasu("Compiler: " + use! util::compiler_version())
     use dasu("Language: Mire")
 }
 
 pub fn print_help: () {
-    print_banner()
+    use! ui::print_banner()
     use dasu("")
     use dasu("Usage: owl <command> [flags]")
     use dasu("")
@@ -36,6 +35,7 @@ pub fn print_help: () {
     use dasu("  install -S  <name> [ver] download and install package")
     use dasu("  export -e  [--check|--dry-run]  package and sign")
     use dasu("  gc                   garbage collect orphaned packages")
+    use dasu("  upgrade [--yes]      self-update owl from source")
     use dasu("")
     use dasu("Global:")
     use dasu("  -V, --version     Show version")

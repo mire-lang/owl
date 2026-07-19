@@ -1,22 +1,23 @@
 load kioto
-load semver
-load util
+load! semver
+load! util
 load crypto
-load trust
-load registry
-load build
-load check
-load info
-load ui
-load deps
-load args
-load lockfile
-load dload
-load install
-load export
-load gc
-load tree
-load profile
+load! trust
+load! registry
+load! build
+load! check
+load! info
+load! ui
+load! deps
+load! args
+load! lockfile
+load! dload
+load! install
+load! export
+load! gc
+load! tree
+load! profile
+load! upgrade
 
 extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
 extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
@@ -30,7 +31,7 @@ fn expand_short_flags: (args :&vec[str]) :vec[str] {
         if i == 0 {
             set result = a
         } else {
-            if util::startswith(a "-") && !util::startswith(a "--")
+            if use! util::startswith(a "-") && !use! util::startswith(a "--")
                && len(a) > 2 {
                 set j = 1 :i64 mut
                 while j < len(a) {
@@ -49,15 +50,18 @@ fn expand_short_flags: (args :&vec[str]) :vec[str] {
 
 fn find_cmd_index: (args :&vec[str]) :i64 {
     set n = rt_vec_len(args)
+    set idx = -1 :i64 mut
     set i = 1 :i64 mut
     while i < n {
         set a = rt_vec_get_str(args i)
-        if !util::startswith(a "-") {
-            return i
+        if !use! util::startswith(a "-") {
+            set idx = i
+            break
         }
         set i += 1
     }
-    return 1
+    if idx == -1 { set idx = 1 }
+    return idx
 }
 
 fn collect_test_flags: (args :&vec[str]) :str {
@@ -66,14 +70,10 @@ fn collect_test_flags: (args :&vec[str]) :str {
     set flags = "" :str mut
     while i < n {
         set a = rt_vec_get_str(args i)
-        if a == "--verbose" || a == "-v" || a == "--no-run" || a == "-j" || a == "--jobs" {
+        if use! util::startswith(a "-") {
             set flags = flags + " " + a
         } else {
-            if util::startswith(a "--jobs=") {
-                set flags = flags + " " + a
-            } else {
-                set flags = flags + " \"" + a + "\""
-            }
+            set flags = flags + " \"" + a + "\""
         }
         set i += 1
     }
@@ -85,7 +85,7 @@ pub fn main: () {
     set args = expand_short_flags(raw_args)
     set n = rt_vec_len(args)
     if n <= 1 {
-        ui::print_help()
+        use! ui::print_help()
         return
     }
 
@@ -93,111 +93,88 @@ pub fn main: () {
     set cmd = rt_vec_get_str(args cmd_idx)
 
     if cmd == "-V" || cmd == "--version" {
-        use dasu("Owl v" + util::owl_version())
-        use dasu(util::compiler_version())
+        use dasu("Owl v" + use! util::owl_version())
+        use dasu(use! util::compiler_version())
         return
     }
-
     if cmd == "-h" || cmd == "--help" || cmd == "help" {
-        ui::print_help()
+        use! ui::print_help()
         return
     }
-
-    set a_build = args
-    set a_run = args
-    set a_new = args
-    set a_checkup = args
-    set a_check = args
-    set a_info = args
-    set a_clean = args
-    set a_test = args
-    set a_load = args
-    set a_export = args
-    set a_gc = args
-    set a_tree = args
-    set a_profile = args
-
     if cmd == "-T" || cmd == "test" {
-        set out = proc::run("mire test " + collect_test_flags(a_test))
+        set out = proc::run("mire test " + collect_test_flags(args))
         use dasu(out)
         return
     }
-
     if cmd == "-B" || cmd == "build" {
-        build::compile_pipeline(a_build false)
+        use! build::compile_pipeline(args false)
         return
     }
-
     if cmd == "run" || cmd == "-R" {
-        build::compile_pipeline(a_run true)
+        use! build::compile_pipeline(args true)
         return
     }
-
     if cmd == "-N" || cmd == "new" {
         if n <= 2 {
             use dasu("Usage: owl new <Name>")
-            return
+        } else {
+            use! build::cmd_new(rt_vec_get_str(args 2))
         }
-        build::cmd_new(rt_vec_get_str(a_new 2))
         return
     }
-
     if cmd == "-C" || cmd == "clean" {
-        info::cmd_clean(a_clean)
+        use! info::cmd_clean(args)
         return
     }
-
     if cmd == "checkup" {
-        check::cmd_checkup(a_checkup)
+        use! check::cmd_checkup(args)
         return
     }
-
     if cmd == "check" || cmd == "-K" {
-        check::cmd_check(a_check)
+        use! check::cmd_check(args)
         return
     }
-
     if cmd == "info" || cmd == "-Q" {
-        info::cmd_info(a_info)
+        use! info::cmd_info(args)
         return
     }
-
     if cmd == "install" || cmd == "-S" {
-        set i_has_l = args::has_flag(args "-l") || args::has_flag(args "--list")
-        set i_has_t = args::has_flag(args "-t") || args::has_flag(args "--test")
-        set i_no_verify = args::has_flag(args "--no-verify")
-        set i_force = args::has_flag(args "--force")
-        set i_target = args::get_flag_value(args "--target")
-        set i_yes = args::has_flag(args "-y") || args::has_flag(args "--yes")
-        set i_name = args::get_positional(args 0)
-        set i_ver = args::get_positional(args 1)
-        set ec = install::cmd_install(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver) :i64
-        if ec != 0 { proc_exit(ec) }
+        set i_has_l = use! args::has_flag(args "-l") || use! args::has_flag(args "--list")
+        set i_has_t = use! args::has_flag(args "-t") || use! args::has_flag(args "--test")
+        set i_no_verify = use! args::has_flag(args "--no-verify")
+        set i_force = use! args::has_flag(args "--force")
+        set i_target = use! args::get_flag_value(args "--target")
+        set i_yes = use! args::has_flag(args "-y") || use! args::has_flag(args "--yes")
+        set i_name = use! args::get_positional(args 0)
+        set i_ver = use! args::get_positional(args 1)
+        set ec = use! install::cmd_install(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver) :u8
+        set ec_i64 = ec :i64
+        if ec_i64 != 0 { proc_exit(ec_i64) }
         return
     }
-
     if cmd == "load" || cmd == "-L" {
-        dload::cmd_load(a_load)
+        use! dload::cmd_load(args)
         return
     }
-
     if cmd == "-e" || cmd == "export" {
-        export::cmd_export(a_export)
+        use! export::cmd_export(args)
         return
     }
-
     if cmd == "gc" {
-        gc::cmd_gc(a_gc)
+        use! gc::cmd_gc(args)
         return
     }
-
     if cmd == "tree" {
-        tree::cmd_tree(a_tree)
+        use! tree::cmd_tree(args)
         return
     }
-
     if cmd == "profile" {
-        profile::cmd_profile(a_profile)
+        use! profile::cmd_profile(args)
+        return
+    }
+    if cmd == "upgrade" {
+        set ec = use! upgrade::cmd_upgrade(args) :i64
+        if ec != 0 { proc_exit(ec) }
         return
     }
 

@@ -22,9 +22,9 @@ pub fn main: () {
     testlib.assert_false(lists.contains([1 2 3] 5))
     use dasu("  lists.contains: ok")
 
-    testlib.assert_eq(1 lists.index_of([10 20 30] 20))
-    testlib.assert_eq(-1 lists.index_of([10 20 30] 99))
-    use dasu("  lists.index_of: ok")
+    testlib.assert_eq(1 lists.index([10 20 30] 20))
+    testlib.assert_eq(-1 lists.index([10 20 30] 99))
+    use dasu("  lists.index: ok")
 
     testlib.assert_eq(1 lists.first([1 2 3]))
     testlib.assert_eq(3 lists.last([1 2 3]))
@@ -36,8 +36,8 @@ pub fn main: () {
     testlib.assert_eq(1 lists.get(rev 2))
     use dasu("  lists.reverse: ok")
 
-    testlib.assert_true(lists.is_empty([] :vec[i64]))
-    testlib.assert_false(lists.is_empty([1] :vec[i64]))
+    testlib.assert_true(lists.check.empty([] :vec[i64]))
+    testlib.assert_false(lists.check.empty([1] :vec[i64]))
     use dasu("  lists.is_empty: ok")
 
     set big = [] :vec[i64] mut

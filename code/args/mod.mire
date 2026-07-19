@@ -1,51 +1,52 @@
-module args
-load util
+load! /code/util
 
 extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
 extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
 
 pub fn has_flag: (args :&vec[str], flag :&str) :bool {
     set n = rt_vec_len(args)
+    set result = false :bool mut
     set i = 0 :i64 mut
     while i < n {
         set a = rt_vec_get_str(args i)
-        if a == flag { return true }
+        if a == flag { set result = true }
         set i += 1
     }
-    return false
+    return result
 }
 
 pub fn get_flag_value: (args :&vec[str], flag :&str) :str {
     set n = rt_vec_len(args)
+    set result = "" :str mut
     set i = 0 :i64 mut
     while i < n {
         set a = rt_vec_get_str(args i)
         if a == flag {
             set next = i + 1
-            if next < n { return rt_vec_get_str(args next) }
-            return ""
+            if next < n { set result = rt_vec_get_str(args next) }
         }
         set i += 1
     }
-    return ""
+    return result
 }
 
 pub fn get_positional: (args :&vec[str], nth :i64) :str {
     set n = rt_vec_len(args)
+    set result = "" :str mut
     set found = 0 :i64 mut
     set skipped_cmd = false :bool mut
     set i = 1 :i64 mut
     while i < n {
         set a = rt_vec_get_str(args i)
-        if !util::startswith(a "-") && a != "" {
+        if !use! util::startswith(a "-") && a != "" {
             if skipped_cmd == false {
                 set skipped_cmd = true
             } else {
-                if found == nth { return a }
+                if found == nth { set result = a }
                 set found += 1
             }
         }
         set i += 1
     }
-    return ""
+    return result
 }

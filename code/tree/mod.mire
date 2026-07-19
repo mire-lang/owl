@@ -1,22 +1,21 @@
-module tree
-load util
-load deps
+load! /code/util
+load! /code/deps
 
-pub fn cmd_tree: (args :vec[str]) {
-    if !util::has_project() {
+pub fn cmd_tree: (args :&vec[str]) {
+    if !use! util::has_project() {
         use dasu("error: no owl.toml found")
         return
     }
 
-    set show_all = args::has_flag(args "--all")
+    set show_all = use! args::has_flag(args "--all")
 
-    set dep_names = deps::get_dep_names()
+    set dep_names = use! deps::get_dep_names()
     if dep_names == "" {
         use dasu("  no dependencies")
         return
     }
 
-    use dasu("  " + util::toml_get("owl.toml" "project" "name") + " v" + util::toml_get("owl.toml" "project" "version"))
+    use dasu("  " + use! util::toml_get("owl.toml" "project" "name") + " v" + use! util::toml_get("owl.toml" "project" "version"))
     use dasu("  |")
 
     set remaining = dep_names :str mut
@@ -24,18 +23,18 @@ pub fn cmd_tree: (args :vec[str]) {
         set sp = strings::index(remaining " ")
         set name = "" :str mut
         if sp < 0 {
-            set name = util::trim(remaining)
+            set name = use! util::trim(remaining)
             set remaining = ""
         } else {
-            set name = util::trim(strings::substr(remaining 0 sp))
+            set name = use! util::trim(strings::substr(remaining 0 sp))
             set remaining = strings::substr(remaining sp + 1 9999)
         }
         if name == "" { continue }
 
         set display_name = name :str
         set ver_copy = name :str
-        set path = deps::get_dep_field(name "path")
-        set ver = deps::get_dep_field(ver_copy "version") :str mut
+        set path = use! deps::get_dep_field(name "path")
+        set ver = use! deps::get_dep_field(ver_copy "version") :str mut
         if ver == "" { set ver = "*" }
         set details = path :str mut
         if details == "" { set details = ver }
@@ -47,26 +46,24 @@ pub fn cmd_tree: (args :vec[str]) {
             set child_toml = strings::replace(child_toml_raw "\"" "")
             if fs_exists(child_toml) {
                 set child_toml_copy = child_toml :str
-                set child_deps = deps::get_dep_names_from(child_toml)
+                set child_deps = use! deps::get_dep_names_from(child_toml)
                 if child_deps != "" {
                     set cr = child_deps :str mut
                     while cr != "" {
                         set sp2 = strings::index(cr " ")
                         set cn = "" :str mut
                         if sp2 < 0 {
-                            set cn = util::trim(cr)
+                            set cn = use! util::trim(cr)
                             set cr = ""
                         } else {
-                            set cn = util::trim(strings::substr(cr 0 sp2))
+                            set cn = use! util::trim(strings::substr(cr 0 sp2))
                             set cr = strings::substr(cr sp2 + 1 9999)
                         }
                         if cn != "" {
                             set tml = child_toml_copy :str
                             set cn_func = cn :str
                             set cn_copy = cn :str
-                            set cv = deps::get_dep_field_from(tml cn_func "version") :str mut
-                            if cv == "" { set cv = "*" }
-                            use dasu("  |   +-- " + cn_copy + " (" + cv + ")")
+                            set cv = use! deps::get_dep_field_from(tml cn_func "version") :str mut
                             if cv == "" { set cv = "*" }
                             use dasu("  |   +-- " + cn_copy + " (" + cv + ")")
                         }

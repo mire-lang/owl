@@ -1,203 +1,204 @@
-module lockfile
-load util
+load! /code/util
 
 pub fn lockfile_exists: () :bool {
     return fs_exists("owl.lock")
 }
 
 pub fn lockfile_in_sync: () :bool {
-    if !lockfile_exists() { return false }
+    set ok = false :bool mut
+    if use! lockfile::lockfile_exists() {
+        set content = fs::read("owl.lock")
+        if content != "" {
+            if strings::contains(content "no dependencies") {
+                set ok = use! deps::count_deps() == 0
+            } else {
+                set lock_str = use! lockfile::lockfile_package_names()
+                set lock_str_len = len(lock_str)
+                set toml_names = use! deps::get_dep_names()
+                set toml_count = use! deps::count_deps()
 
-    set content = fs::read("owl.lock")
-    if content == "" { return false }
+                set lock_count = 0 :i64 mut
+                set lcount_pos = 0 :i64 mut
+                while lcount_pos < lock_str_len {
+                    set lrem = strings::substr(lock_str lcount_pos lock_str_len - lcount_pos)
+                    set lnl = strings::index(lrem "\n")
+                    if lnl < 0 {
+                        if use! util::trim(lrem) != "" { set lock_count += 1 }
+                        set lcount_pos = lock_str_len
+                    } else {
+                        if use! util::trim(strings::substr(lock_str lcount_pos lnl)) != "" { set lock_count += 1 }
+                        set lcount_pos = lcount_pos + lnl + 1
+                    }
+                }
 
-    if strings::contains(content "no dependencies") {
-        return deps::count_deps() == 0
-    }
-
-    set lock_str = lockfile_package_names()
-    set lock_str_len = len(lock_str)
-    set toml_names = deps::get_dep_names()
-    set toml_count = deps::count_deps()
-
-    set lock_count = 0 :i64 mut
-    set lcount_pos = 0 :i64 mut
-    while lcount_pos < lock_str_len {
-        set lrem = strings::substr(lock_str lcount_pos lock_str_len - lcount_pos)
-        set lnl = strings::index(lrem "\n")
-        if lnl < 0 {
-            if util::trim(lrem) != "" { set lock_count += 1 }
-            set lcount_pos = lock_str_len
-        } else {
-            if util::trim(strings::substr(lock_str lcount_pos lnl)) != "" { set lock_count += 1 }
-            set lcount_pos = lcount_pos + lnl + 1
-        }
-    }
-
-    if lock_count != toml_count { return false }
-
-    if lock_count != toml_count { return false }
-
-    set pos = 0 :i64 mut
-    set nlen = len(toml_names)
-    while pos < nlen {
-        set remaining_toml = strings::substr(toml_names pos nlen - pos)
-        set nl = strings::index(remaining_toml "\n")
-        set end = 0 :i64 mut
-        if nl < 0 { set end = nlen } else { set end = pos + nl }
-        set name_line = strings::substr(toml_names pos end - pos)
-        set dep_name = util::trim(name_line)
-        set pos = end + 1
-        if dep_name != "" {
-            set found = false :bool mut
-            set lpos = 0 :i64 mut
-            set lnlen = len(lock_str)
-            while lpos < lnlen {
-                set lrem = strings::substr(lock_str lpos lnlen - lpos)
-                set lnl = strings::index(lrem "\n")
-                set lend = 0 :i64 mut
-                if lnl < 0 { set lend = lnlen } else { set lend = lpos + lnl }
-                set lname_line = strings::substr(lock_str lpos lend - lpos)
-                set lnm = util::trim(lname_line)
-                if lnm == dep_name { set found = true }
-                set lpos = lend + 1
-                if lpos >= lnlen { break }
-            }
-            if !found { return false }
-        }
-    }
-    return true
-}
-
-fn lockfile_package_names: () :str {
-    if !lockfile_exists() { return "" }
-    set content = fs::read("owl.lock")
-    if content == "" { return "" }
-    set result = "" :str mut
-    set search = "[[package]]"
-    set pos = 0 :i64 mut
-    set clen = len(content)
-    set running = true :bool mut
-    while running {
-        set remaining = strings::substr(content pos clen - pos)
-        set idx = strings::index(remaining search)
-        if idx < 0 { set running = false } else {
-            set pkg_start = pos + idx
-            set after_pkg = strings::substr(content pkg_start clen - pkg_start)
-            set next_pkg = strings::index(after_pkg "[[package]]")
-            set pkg_end = 0 :i64 mut
-            if next_pkg > 0 { set pkg_end = pkg_start + next_pkg } else { set pkg_end = clen }
-            set pkg_content = strings::substr(content pkg_start pkg_end - pkg_start)
-            set name_search = "\nname     = \""
-            set npos = strings::index(pkg_content name_search)
-            if npos >= 0 {
-                set nstart = npos + len(name_search)
-                set after_name = strings::substr(pkg_content nstart len(pkg_content) - nstart)
-                set nend = strings::index(after_name "\"")
-                if nend >= 0 {
-                    set pkg_name = strings::substr(after_name 0 nend)
-                    if result == "" { set result = pkg_name } else { set result = result + "\n" + pkg_name }
+                if lock_count == toml_count {
+                    set ok = true
+                    set pos = 0 :i64 mut
+                    set nlen = len(toml_names)
+                    while pos < nlen {
+                        set remaining_toml = strings::substr(toml_names pos nlen - pos)
+                        set nl = strings::index(remaining_toml "\n")
+                        set end = 0 :i64 mut
+                        if nl < 0 { set end = nlen } else { set end = pos + nl }
+                        set name_line = strings::substr(toml_names pos end - pos)
+                        set dep_name = use! util::trim(name_line)
+                        set pos = end + 1
+                        if dep_name != "" {
+                            set found = false :bool mut
+                            set lpos = 0 :i64 mut
+                            set lnlen = len(lock_str)
+                            while lpos < lnlen {
+                                set lrem = strings::substr(lock_str lpos lnlen - lpos)
+                                set lnl = strings::index(lrem "\n")
+                                set lend = 0 :i64 mut
+                                if lnl < 0 { set lend = lnlen } else { set lend = lpos + lnl }
+                                set lname_line = strings::substr(lock_str lpos lend - lpos)
+                                set lnm = use! util::trim(lname_line)
+                                if lnm == dep_name { set found = true }
+                                set lpos = lend + 1
+                                if lpos >= lnlen { break }
+                            }
+                            if !found { set ok = false }
+                        }
+                    }
                 }
             }
-            set pos = pkg_end
-            if pos >= clen { set running = false }
+        }
+    }
+    return ok
+}
+
+pub fn lockfile_package_names: () :str {
+    set result = "" :str mut
+    if use! lockfile::lockfile_exists() {
+        set content = fs::read("owl.lock")
+        if content != "" {
+            set search = "[[package]]"
+            set pos = 0 :i64 mut
+            set clen = len(content)
+            set running = true :bool mut
+            while running {
+                set remaining = strings::substr(content pos clen - pos)
+                set idx = strings::index(remaining search)
+                if idx < 0 { set running = false } else {
+                    set pkg_start = pos + idx
+                    set after_this = strings::substr(content pkg_start + len("[[package]]") clen - pkg_start - len("[[package]]"))
+                    set next_pkg = strings::index(after_this "[[package]]")
+                    set pkg_end = 0 :i64 mut
+                    if next_pkg >= 0 { set pkg_end = pkg_start + len("[[package]]") + next_pkg } else { set pkg_end = clen }
+                    set pkg_content = strings::substr(content pkg_start pkg_end - pkg_start)
+                    set name_search = "\nname     = \""
+                    set npos = strings::index(pkg_content name_search)
+                    if npos >= 0 {
+                        set nstart = npos + len(name_search)
+                        set after_name = strings::substr(pkg_content nstart len(pkg_content) - nstart)
+                        set nend = strings::index(after_name "\"")
+                        if nend >= 0 {
+                            set pkg_name = strings::substr(after_name 0 nend)
+                            if result == "" { set result = pkg_name } else { set result = result + "\n" + pkg_name }
+                        }
+                    }
+                    set pos = pkg_end
+                    if pos >= clen { set running = false }
+                }
+            }
         }
     }
     return result
 }
 
-fn lockfile_count_names: (names :str) :i64 {
-    if names == "" { return 0 }
+pub fn lockfile_count_names: (names :str) :i64 {
     set count = 0 :i64 mut
-    set pos = 0 :i64 mut
-    set nlen = len(names)
-    set running = true :bool mut
-    while running {
-        set remaining = strings::substr(names pos nlen - pos)
-        set nl = strings::index(remaining "\n")
-        if nl < 0 {
-            if util::trim(remaining) != "" { set count += 1 }
-            set running = false
-        } else {
-            if util::trim(strings::substr(names pos nl)) != "" { set count += 1 }
-            set pos = pos + nl + 1
-            if pos >= nlen { set running = false }
+    if names != "" {
+        set pos = 0 :i64 mut
+        set nlen = len(names)
+        set running = true :bool mut
+        while running {
+            set remaining = strings::substr(names pos nlen - pos)
+            set nl = strings::index(remaining "\n")
+            if nl < 0 {
+                if use! util::trim(remaining) != "" { set count += 1 }
+                set running = false
+            } else {
+                if use! util::trim(strings::substr(names pos nl)) != "" { set count += 1 }
+                set pos = pos + nl + 1
+                if pos >= nlen { set running = false }
+            }
         }
     }
     return count
 }
 
 pub fn generate_lockfile: () :bool {
-    set dep_count = deps::count_deps()
+    set ok = false :bool mut
+    set dep_count = use! deps::count_deps()
     if dep_count == 0 {
         use fs_write("owl.lock" "# Generated by owl - no dependencies\n")
-        return true
-    }
+        set ok = true
+    } else {
+        set header = "# Generated by owl - do not edit manually\n\n"
+        set content = header :str mut
 
-    set header = "# Generated by owl - do not edit manually\n\n"
-    set content = header :str mut
+        set names = use! deps::get_dep_names()
+        if names == "" {
+            use fs_write("owl.lock" header)
+            set ok = true
+        } else {
+            set pos = 0 :i64 mut
+            set nlen = len(names)
+            set first = true :bool mut
 
-    set names = deps::get_dep_names()
-    if names == "" {
-        use fs_write("owl.lock" header)
-        return true
-    }
+            set running = true :bool mut
+            while running {
+                set remaining = strings::substr(names pos nlen - pos)
+                set nl = strings::index(remaining "\n")
+                set end = 0 :i64 mut
+                if nl < 0 { set end = nlen } else { set end = pos + nl }
+                set name_line = strings::substr(names pos end - pos)
+                set dep_name = use! util::trim(name_line)
+                set pos = end + 1
+                if dep_name != "" {
+                    set dname = dep_name :str mut
+                    set version = use! deps::get_dep_field(dname "version")
+                    set dname2 = dep_name :str mut
+                    set path = use! deps::get_dep_field(dname2 "path")
+                    set dname3 = dep_name :str mut
+                    set abi = use! deps::get_dep_field(dname3 "abi")
+                    set dname4 = dep_name :str mut
+                    set registry = use! deps::get_dep_field(dname4 "registry") :str mut
+                    if registry == "" { set registry = "local" }
 
-    set pos = 0 :i64 mut
-    set nlen = len(names)
-    set first = true :bool mut
+                    if !first { set content = content + "\n" } else { set first = false }
 
-    set running = true :bool mut
-    while running {
-        set remaining = strings::substr(names pos nlen - pos)
-        set nl = strings::index(remaining "\n")
-        set end = 0 :i64 mut
-        if nl < 0 { set end = nlen } else { set end = pos + nl }
-        set name_line = strings::substr(names pos end - pos)
-        set dep_name = util::trim(name_line)
-        set pos = end + 1
-        if dep_name != "" {
-            set dname = dep_name :str mut
-            set version = deps::get_dep_field(dname "version")
-            set dname2 = dep_name :str mut
-            set path = deps::get_dep_field(dname2 "path")
-            set dname3 = dep_name :str mut
-            set abi = deps::get_dep_field(dname3 "abi")
-            set dname4 = dep_name :str mut
-            set registry = deps::get_dep_field(dname4 "registry") :str mut
-            if registry == "" { set registry = "local" }
+                    set entry = "[[package]]\n" :str mut
+                    set entry = entry + "name     = \"" + dep_name + "\"\n"
+                    if version != "" { set entry = entry + "version  = \"" + version + "\"\n" }
+                    if path != "" { set entry = entry + "path     = \"" + path + "\"\n" }
+                    if registry != "" { set entry = entry + "registry = \"" + registry + "\"\n" }
+                    if abi != "" { set entry = entry + "abi      = " + abi + "\n" }
+                    set content = content + entry
+                }
+                if nl < 0 { set running = false }
+            }
 
-            if !first { set content = content + "\n" } else { set first = false }
-
-            set entry = "[[package]]\n" :str mut
-            set entry = entry + "name     = \"" + dep_name + "\"\n"
-            if version != "" { set entry = entry + "version  = \"" + version + "\"\n" }
-            if path != "" { set entry = entry + "path     = \"" + path + "\"\n" }
-            if registry != "" { set entry = entry + "registry = \"" + registry + "\"\n" }
-            if abi != "" { set entry = entry + "abi      = " + abi + "\n" }
-            set content = content + entry
+            use fs_write("owl.lock" content)
+            set ok = true
         }
-        if nl < 0 { set running = false }
     }
-
-    use fs_write("owl.lock" content)
-    return true
+    return ok
 }
 
 pub fn ensure_lockfile: () :bool {
-    if lockfile_exists() {
-        if !lockfile_in_sync() {
+    set ok = false :bool mut
+    if use! lockfile::lockfile_exists() {
+        if use! lockfile::lockfile_in_sync() {
+            set ok = true
+        } else {
             use dasu("  owl.lock is out of sync with owl.toml - run owl install to update")
-            return false
         }
-        return true
+    } else {
+        use dasu("  owl.lock not found - generating from owl.toml ...")
+        set ok = use! lockfile::generate_lockfile()
     }
-
-    set dep_count = deps::count_deps()
-    if dep_count == 0 {
-        return generate_lockfile()
-    }
-
-    use dasu("  owl.lock not found - generating from owl.toml ...")
-    return generate_lockfile()
+    return ok
 }

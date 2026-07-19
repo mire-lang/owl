@@ -10,17 +10,17 @@ fn fib: (n :i64) :i64 {
 pub fn main: () {
     use dasu("--- stress ---")
 
-    set start = time.unix_ms() :i64
+    set start = time.unix.ms() :i64
     set result = fib(35)
-    set elapsed = time.unix_ms() - start :i64
+    set elapsed = time.unix.ms() - start :i64
     testlib.assert_eq(9227465 result)
-    use dasu("  fib(35) in " + strings.from_i64(elapsed) + "ms: ok")
+    use dasu("  fib(35) in " + strings.from.i64(elapsed) + "ms: ok")
 
-    set start2 = time.unix_ms() :i64
+    set start2 = time.unix.ms() :i64
     set result2 = fib(40)
-    set elapsed2 = time.unix_ms() - start2 :i64
+    set elapsed2 = time.unix.ms() - start2 :i64
     testlib.assert_eq(102334155 result2)
-    use dasu("  fib(40) in " + strings.from_i64(elapsed2) + "ms: ok")
+    use dasu("  fib(40) in " + strings.from.i64(elapsed2) + "ms: ok")
 
     set sum = 0 :i64 mut
     set i = 0 :i64 mut

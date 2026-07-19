@@ -1,128 +1,137 @@
-module export
-load util
-load crypto
-load args
+load! /code/util
+load! /code/crypto
+load! /code/args
 
-pub fn cmd_export: (args :vec[str]) {
-    if !util::has_project() {
+pub fn cmd_export: (args :&vec[str]) {
+    set proceed = true :bool mut
+    if !use! util::has_project() {
         use dasu("error: no owl.toml found")
-        return
+        set proceed = false
     }
 
-    set name = util::toml_get("owl.toml" "project" "name")
-    set ver = util::toml_get("owl.toml" "project" "version")
+    if proceed {
+        set name = use! util::toml_get("owl.toml" "project" "name")
+        set ver = use! util::toml_get("owl.toml" "project" "version")
 
-    if name == "" || ver == "" {
-        use dasu("error: [project].name and [project].version required in owl.toml")
-        return
-    }
-
-    set sources = util::toml_get("owl.toml" "paths" "sources") :str mut
-    if sources == "" { set sources = "code" }
-
-    set check_only = args::has_flag(args "--check")
-    set dry_run = args::has_flag(args "--dry-run")
-
-    if check_only {
-        use dasu("  checking " + name + " v" + ver + "...")
-        if !fs_exists(sources) {
-            use dasu("  error: sources directory \"" + sources + "\" not found")
-            return
+        if name == "" || ver == "" {
+            use dasu("error: [project].name and [project].version required in owl.toml")
+            set proceed = false
         }
-        set t = util::trim(proc::run("which tar 2>/dev/null || true"))
-        set z = util::trim(proc::run("which zstd 2>/dev/null || true"))
-        set o = util::trim(proc::run("which openssl 2>/dev/null || true"))
-        if t == "" { use dasu("  warning: tar not found") }
-        if z == "" { use dasu("  warning: zstd not found") }
-        if o == "" { use dasu("  warning: openssl not found (signing unavailable)") }
-        use dasu("  check passed")
-        return
-    }
 
-    set archive = name + "-" + ver + ".tar.zst"
-    set sig_file = archive + ".sig"
-    set pub_file = name + "-" + ver + ".pub"
+        if proceed {
+            set sources = use! util::toml_get("owl.toml" "paths" "sources") :str mut
+            if sources == "" { set sources = "code" }
 
-    use dasu("  exporting " + name + " v" + ver + "...")
+            set check_only = use! args::has_flag(args "--check")
+            set dry_run = use! args::has_flag(args "--dry-run")
 
-    set a2 = archive :str
-    set tar_cmd = "tar --zstd -cf \"" + archive + "\" \"" + sources + "\" 2>/dev/null"
-    set code = proc::run(tar_cmd + " && echo 'OK' || echo 'FAIL'")
-    set tar_ok = util::contains(code "OK") :bool mut
-
-    if !tar_ok {
-        set tar_cmd2 = "tar -I zstd -cf \"" + archive + "\" \"" + sources + "\" 2>/dev/null"
-        set code2 = proc::run(tar_cmd2 + " && echo 'OK' || echo 'FAIL'")
-        set tar_ok = util::contains(code2 "OK")
-    }
-
-    if !tar_ok {
-        use dasu("  error: failed to create archive (tar + zstd required)")
-        return
-    }
-
-    set hash = crypto::crypto_sha256(a2)
-    if hash == "" {
-        use dasu("  error: failed to checksum " + archive)
-        return
-    }
-
-    if !dry_run {
-        set keys_dir = util::owl_home_keys()
-        set priv_key = keys_dir + "/id_ed25519"
-        set pub_key = keys_dir + "/id_ed25519.pub"
-
-        if !fs_exists(priv_key) {
-            use util::mkdir_p(keys_dir)
-            use proc::run("openssl genpkey -algorithm ed25519 -out \"" + priv_key + "\" 2>/dev/null || true")
-            use proc::run("openssl pkey -in \"" + priv_key + "\" -pubout -out \"" + pub_key + "\" 2>/dev/null || true")
-            if fs_exists(priv_key) {
-                use proc::run("chmod 600 \"" + priv_key + "\" 2>/dev/null || true")
-                use dasu("  generated key: " + pub_key)
+            if check_only {
+                use dasu("  checking " + name + " v" + ver + "...")
+                if !fs_exists(sources) {
+                    use dasu("  error: sources directory \"" + sources + "\" not found")
+                    set proceed = false
+                }
+                if proceed {
+                    set t = use! util::trim(proc::run("which tar 2>/dev/null || true"))
+                    set z = use! util::trim(proc::run("which zstd 2>/dev/null || true"))
+                    set o = use! util::trim(proc::run("which openssl 2>/dev/null || true"))
+                    if t == "" { use dasu("  warning: tar not found") }
+                    if z == "" { use dasu("  warning: zstd not found") }
+                    if o == "" { use dasu("  warning: openssl not found (signing unavailable)") }
+                    use dasu("  check passed")
+                }
             } else {
-                use dasu("  error: failed to generate signing key (openssl required)")
-                return
+                set archive = name + "-" + ver + ".tar.zst"
+                set sig_file = archive + ".sig"
+                set pub_file = name + "-" + ver + ".pub"
+
+                use dasu("  exporting " + name + " v" + ver + "...")
+
+                set a2 = archive :str
+                set tar_cmd = "tar --zstd -cf \"" + archive + "\" \"" + sources + "\" 2>/dev/null"
+                set code = proc::run(tar_cmd + " && echo 'OK' || echo 'FAIL'")
+                set tar_ok = use! util::contains(code "OK") :bool mut
+
+                if !tar_ok {
+                    set tar_cmd2 = "tar -I zstd -cf \"" + archive + "\" \"" + sources + "\" 2>/dev/null"
+                    set code2 = proc::run(tar_cmd2 + " && echo 'OK' || echo 'FAIL'")
+                    set tar_ok = use! util::contains(code2 "OK")
+                }
+
+                if !tar_ok {
+                    use dasu("  error: failed to create archive (tar + zstd required)")
+                    set proceed = false
+                }
+
+                if proceed {
+                    set hash = use! crypto::crypto_sha256(a2)
+                    if hash == "" {
+                        use dasu("  error: failed to checksum " + archive)
+                        set proceed = false
+                    }
+
+                    if proceed && !dry_run {
+                        set keys_dir = use! util::owl_home_keys()
+                        set priv_key = keys_dir + "/id_ed25519"
+                        set pub_key = keys_dir + "/id_ed25519.pub"
+
+                        if !fs_exists(priv_key) {
+                            use! util::mkdir_p(keys_dir)
+                            use proc::run("openssl genpkey -algorithm ed25519 -out \"" + priv_key + "\" 2>/dev/null || true")
+                            use proc::run("openssl pkey -in \"" + priv_key + "\" -pubout -out \"" + pub_key + "\" 2>/dev/null || true")
+                            if !fs_exists(priv_key) {
+                                use dasu("  error: failed to generate signing key (openssl required)")
+                                set proceed = false
+                            }
+                        }
+
+                        if proceed {
+                            set pubkey_b64 = use! util::trim(proc::run("cat \"" + pub_key + "\" 2>/dev/null | base64 -w0 || true"))
+                            set sig_b64 = use! util::trim(proc::run("openssl pkeyutl -sign -inkey \"" + priv_key + "\" -in \"" + archive + "\" -rawin 2>/dev/null | base64 -w0 || true"))
+
+                            if sig_b64 == "" {
+                                use dasu("  error: failed to sign " + archive)
+                                set proceed = false
+                            }
+
+                            if proceed {
+                                use proc::run("printf '%s' \"" + sig_b64 + "\" | base64 -d > \"" + sig_file + "\" 2>/dev/null || true")
+                                use proc::run("cp \"" + pub_key + "\" \"" + pub_file + "\" 2>/dev/null || true")
+
+                                set publish = "[package]\n" :str mut
+                                set publish = publish + "name = \"" + name + "\"\n"
+                                set publish = publish + "version = \"" + ver + "\"\n"
+                                set publish = publish + "archive = \"" + archive + "\"\n"
+                                set publish = publish + "sha256 = \"" + hash + "\"\n"
+                                if pubkey_b64 != "" {
+                                    set publish = publish + "public-key = \"" + pubkey_b64 + "\"\n"
+                                }
+                                set publish = publish + "signature = \"" + sig_b64 + "\"\n"
+                                use fs_write("publish.toml" publish)
+
+                                use dasu("  created " + archive)
+                                use dasu("  created " + sig_file)
+                                use dasu("  created publish.toml")
+                                use dasu("  done")
+                            }
+                        }
+                    }
+
+                    if proceed && dry_run {
+                        set publish = "[package]\n" :str mut
+                        set publish = publish + "name = \"" + name + "\"\n"
+                        set publish = publish + "version = \"" + ver + "\"\n"
+                        set publish = publish + "archive = \"" + archive + "\"\n"
+                        set publish = publish + "sha256 = \"" + hash + "\"\n"
+                        use fs_write("publish.toml" publish)
+
+                        use dasu("  created " + archive)
+                        use dasu("  created publish.toml")
+                        use dasu("  done")
+                    }
+                }
             }
         }
-
-        set pubkey_b64 = util::trim(proc::run("cat \"" + pub_key + "\" 2>/dev/null | base64 -w0 || true"))
-        set sig_b64 = util::trim(proc::run("openssl pkeyutl -sign -inkey \"" + priv_key + "\" -in \"" + archive + "\" -rawin 2>/dev/null | base64 -w0 || true"))
-
-        if sig_b64 == "" {
-            use dasu("  error: failed to sign " + archive)
-            return
-        }
-
-        use proc::run("printf '%s' \"" + sig_b64 + "\" | base64 -d > \"" + sig_file + "\" 2>/dev/null || true")
-        use proc::run("cp \"" + pub_key + "\" \"" + pub_file + "\" 2>/dev/null || true")
-
-        set publish = "[package]\n" :str mut
-        set publish = publish + "name = \"" + name + "\"\n"
-        set publish = publish + "version = \"" + ver + "\"\n"
-        set publish = publish + "archive = \"" + archive + "\"\n"
-        set publish = publish + "sha256 = \"" + hash + "\"\n"
-        if pubkey_b64 != "" {
-            set publish = publish + "public-key = \"" + pubkey_b64 + "\"\n"
-        }
-        set publish = publish + "signature = \"" + sig_b64 + "\"\n"
-        use fs_write("publish.toml" publish)
-
-        use dasu("  created " + archive)
-        use dasu("  created " + sig_file)
-        use dasu("  created publish.toml")
-        use dasu("  done")
     }
-
-    if dry_run {
-        set publish = "[package]\n" :str mut
-        set publish = publish + "name = \"" + name + "\"\n"
-        set publish = publish + "version = \"" + ver + "\"\n"
-        set publish = publish + "archive = \"" + archive + "\"\n"
-        set publish = publish + "sha256 = \"" + hash + "\"\n"
-        use fs_write("publish.toml" publish)
-
-        use dasu("  created " + archive)
-        use dasu("  created publish.toml")
-        use dasu("  done")
-    }
+    return
 }

@@ -1,7 +1,10 @@
-module util
+
+// NOTE: 9999 is used as "rest of string" length in strings::substr calls
+// throughout the codebase. It works because substr clamps to string bounds.
 
 /! TOML parser (helpers first) !/
-pub fn toml_extract_val: (content :&str, val_start :i64) :str {
+fn toml_extract_val: (content :&str, val_start :i64) :str {
+    set val = "" :str mut
     set after_key = strings::substr(content val_start 9999)
     set nl_pos = strings::index(after_key "\n")
     set raw_val = after_key :str mut
@@ -10,56 +13,61 @@ pub fn toml_extract_val: (content :&str, val_start :i64) :str {
     if strings::startswith(trimmed "\"") && strings::endswith(trimmed "\"") {
         set no_start = strings::replace(trimmed "\"" "")
         if strings::endswith(no_start "\"") {
-            return strings::replace(no_start "\"" "")
+            set val = strings::replace(no_start "\"" "")
+        } else {
+            set val = no_start
         }
-        return no_start
+    } else {
+        set val = trimmed
     }
-    return trimmed
+    return val
 }
 
 pub fn toml_get: (file :str section :str key :str) :str {
-    if !fs_exists(file) { return "" }
-    set content = fs::read(file)
-
-    set section_marker = "[" + section + "]"
-    set section_start = strings::index(content section_marker)
-    if section_start < 0 { return "" }
-
-    set key_with_space = "\n" + key + " ="
-    set key_pos1 = strings::index(content key_with_space)
-    if key_pos1 >= 0 {
-        set val_start = key_pos1 + len(key_with_space)
-        return toml_extract_val(content val_start)
+    set val = "" :str mut
+    if fs_exists(file) {
+        set content = fs::read(file)
+        set section_marker = "[" + section + "]"
+        set section_start = strings::index(content section_marker)
+        if section_start >= 0 {
+            set key_with_space = "\n" + key + " ="
+            set key_pos1 = strings::index(content key_with_space)
+            if key_pos1 >= 0 {
+                set val_start = key_pos1 + len(key_with_space)
+                set val = toml_extract_val(content val_start)
+            } else {
+                set key_no_space = "\n" + key + "="
+                set key_pos2 = strings::index(content key_no_space)
+                if key_pos2 >= 0 {
+                    set val_start = key_pos2 + len(key_no_space)
+                    set val = toml_extract_val(content val_start)
+                }
+            }
+        }
     }
-
-    set key_no_space = "\n" + key + "="
-    set key_pos2 = strings::index(content key_no_space)
-    if key_pos2 >= 0 {
-        set val_start = key_pos2 + len(key_no_space)
-        return toml_extract_val(content val_start)
-    }
-    return ""
+    return val
 }
 
 pub fn toml_get_from_string: (content :str section :str key :str) :str {
+    set val = "" :str mut
     set section_marker = "[" + section + "]"
     set section_start = strings::index(content section_marker)
-    if section_start < 0 { return "" }
-
-    set key_with_space = "\n" + key + " ="
-    set key_pos1 = strings::index(content key_with_space)
-    if key_pos1 >= 0 {
-        set val_start = key_pos1 + len(key_with_space)
-        return toml_extract_val(content val_start)
+    if section_start >= 0 {
+        set key_with_space = "\n" + key + " ="
+        set key_pos1 = strings::index(content key_with_space)
+        if key_pos1 >= 0 {
+            set val_start = key_pos1 + len(key_with_space)
+            set val = toml_extract_val(content val_start)
+        } else {
+            set key_no_space = "\n" + key + "="
+            set key_pos2 = strings::index(content key_no_space)
+            if key_pos2 >= 0 {
+                set val_start = key_pos2 + len(key_no_space)
+                set val = toml_extract_val(content val_start)
+            }
+        }
     }
-
-    set key_no_space = "\n" + key + "="
-    set key_pos2 = strings::index(content key_no_space)
-    if key_pos2 >= 0 {
-        set val_start = key_pos2 + len(key_no_space)
-        return toml_extract_val(content val_start)
-    }
-    return ""
+    return val
 }
 
 /! Filesystem operations !/
@@ -92,77 +100,89 @@ pub fn json_quote: (s :str) :str {
 }
 
 pub fn json_get_str: (content :&str key :str) :str {
+    set val = "" :str mut
     set search = "\"" + key + "\": \""
     set pos = strings::index(content search)
-    if pos < 0 { return "" }
-    set start = pos + strings::len(search)
-    set after = strings::substr(content start strings::len(content))
-    set end = strings::index(after "\"")
-    if end < 0 { return "" }
-    return strings::substr(after 0 end)
+    if pos >= 0 {
+        set start = pos + strings::len(search)
+        set after = strings::substr(content start strings::len(content))
+        set end = strings::index(after "\"")
+        if end >= 0 {
+            set val = strings::substr(after 0 end)
+        }
+    }
+    return val
 }
 
 pub fn json_get_int_str: (content :&str key :str) :str {
+    set val = "" :str mut
     set search = "\"" + key + "\": "
     set pos = strings::index(content search)
-    if pos < 0 { return "" }
-    set start = pos + strings::len(search)
-    set after = strings::substr(content start strings::len(content))
-    set end = strings::index(after ",") :i64 mut
-    if end < 0 { set end = strings::index(after "\n") }
-    if end < 0 { set end = strings::index(after "}") }
-    if end < 0 { return strings::trim(after) }
-    return strings::trim(strings::substr(after 0 end))
+    if pos >= 0 {
+        set start = pos + strings::len(search)
+        set after = strings::substr(content start strings::len(content))
+        set end = strings::index(after ",") :i64 mut
+        if end < 0 { set end = strings::index(after "\n") }
+        if end < 0 { set end = strings::index(after "}") }
+        if end >= 0 {
+            set val = strings::trim(strings::substr(after 0 end))
+        } else {
+            set val = strings::trim(after)
+        }
+    }
+    return val
 }
 
 /! Paths and environment !/
 pub fn owl_home: () :str {
+    set path = "" :str mut
     set home = env::get("HOME")
-    if home == "" { return "/tmp/.owl" }
-    return home + "/.owl"
+    if home == "" {
+        set path = "/tmp/.owl"
+    } else {
+        set path = home + "/.owl"
+    }
+    return path
 }
 
 pub fn owl_home_registries: () :str {
-    return owl_home() + "/registries"
+    return use! util::owl_home() + "/registries"
 }
 
 pub fn owl_home_lib: () :str {
-    return owl_home() + "/lib"
+    return use! util::owl_home() + "/lib"
 }
 
 pub fn owl_home_modules: () :str {
-    return owl_home() + "/modules"
+    return use! util::owl_home() + "/modules"
 }
 
 pub fn owl_home_cache_tarballs: () :str {
-    return owl_home() + "/cache/tarballs"
+    return use! util::owl_home() + "/cache/tarballs"
 }
 
 pub fn owl_home_cache_resolution: () :str {
-    return owl_home() + "/cache/resolution.toml"
+    return use! util::owl_home() + "/cache/resolution.toml"
 }
 
 pub fn owl_home_keys: () :str {
-    return owl_home() + "/keys"
-}
-
-pub fn ensure_owl_home: () {
-    use mkdir_p(owl_home_registries())
-    use mkdir_p(owl_home_lib())
-    use mkdir_p(owl_home_cache_tarballs())
-    use mkdir_p(owl_home_keys())
-    use mkdir_p(owl_home() + "/cache")
+    return use! util::owl_home() + "/keys"
 }
 
 /! Version and compiler info !/
 pub fn owl_version: () :str {
-    return "0.26.0"
+    return "0.27.0"
 }
 
 pub fn compiler_version: () :str {
+    set ver = "" :str mut
     set v = strings::trim(proc::run("mire --version"))
-    if v != "" { return v }
-    return "Avenys (unknown)"
+    if v != "" {
+        set ver = v
+    } else {
+        set ver = "Avenys (unknown)"
+    }
+    return ver
 }
 
 pub fn abi_version: () :str {
@@ -170,11 +190,19 @@ pub fn abi_version: () :str {
 }
 
 pub fn language_version: () :str {
-    set v = compiler_version()
-    if v == "" { return "mire" }
-    set sp = strings::index(v "v")
-    if sp >= 0 { return "mire " + strings::substr(v sp + 1 len(v) - sp - 1) }
-    return v
+    set ver = "" :str mut
+    set v = use! util::compiler_version()
+    if v == "" {
+        set ver = "mire"
+    } else {
+        set sp = strings::index(v "v")
+        if sp >= 0 {
+            set ver = "mire " + strings::substr(v sp + 1 len(v) - sp - 1)
+        } else {
+            set ver = v
+        }
+    }
+    return ver
 }
 
 /! Project config !/
@@ -183,27 +211,31 @@ pub fn has_project: () :bool {
 }
 
 pub fn compiler_cmd: () :str {
-    if has_project() {
-        set cmd = toml_get("owl.toml" "build" "compiler")
-        if cmd != "" { return cmd }
+    set cmd = "" :str mut
+    if use! util::has_project() {
+        set c = use! util::toml_get("owl.toml" "build" "compiler")
+        if c != "" { set cmd = c }
     }
-    return "mire"
+    if cmd == "" { set cmd = "mire" }
+    return cmd
 }
 
 pub fn config_required: (section :str key :str) :str {
-    if has_project() {
+    set val = "" :str mut
+    if use! util::has_project() {
         set s = section
         set k = key
-        set val = toml_get("owl.toml" s k)
-        if val == "" {
-            use error_line("OWL0003" "missing [" + section + "]." + key + " in owl.toml")
+        set v = use! util::toml_get("owl.toml" s k)
+        if v != "" {
+            set val = v
+        } else {
+            use! util::error_line("OWL0003" "missing [" + section + "]." + key + " in owl.toml")
             use dasu("")
             use dasu("  Run 'owl checkup --fix' to regenerate owl.toml with defaults")
             proc_exit(1)
         }
-        return val
     }
-    return ""
+    return val
 }
 
 /! Kioto wrappers !/
