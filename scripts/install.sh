@@ -58,15 +58,15 @@ cleanup() {
 
 setup_owl_dirs() {
   local owl_home="$HOME/.owl"
-  mkdir -p "$owl_home/modules" "$owl_home/tmp"
+  mkdir -p "$owl_home/libs" "$owl_home/tmp"
 
   if [[ ! -f "$owl_home/config.toml" ]]; then
     cat > "$owl_home/config.toml" << 'CONFIG'
 [owl]
 version = "1.0.0"
 
-[modules]
-path = "$HOME/.owl/modules"
+[libs]
+path = "$HOME/.owl/libs"
 
 [download]
 timeout = 30

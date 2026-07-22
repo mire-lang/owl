@@ -153,8 +153,8 @@ pub fn owl_home_lib: () :str {
     return use! util::owl_home() + "/lib"
 }
 
-pub fn owl_home_modules: () :str {
-    return use! util::owl_home() + "/modules"
+pub fn owl_home_libs: () :str {
+    return use! util::owl_home() + "/libs"
 }
 
 pub fn owl_home_cache_tarballs: () :str {
@@ -252,6 +252,14 @@ pub fn endswith: (s :&str, suffix :&str) :bool { return strings::endswith(s suff
 pub fn substr: (s :&str, start :i64, len :i64) :str { return strings::substr(s start len) }
 pub fn replace: (s :&str, old :&str, new :&str) :str { return strings::replace(s old new) }
 pub fn list_get: (list :&vec[str], index :i64) :str { return lists::get::str(list index) }
+
+/! Returns true if any .mire under code/ or tests/ contains a
+   `load <dep>` statement. Used by `owl deps --prune`.
+!/
+pub fn grep_load: (dep :str) :bool {
+    set out = proc::run("grep -rl \"load " + dep + "\" code tests 2>/dev/null")
+    return use! util::trim(out) != ""
+}
 
 pub fn string_to_i64: (s :str) :i64 { return rt_string_to_i64(s) }
 pub fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }

@@ -103,9 +103,9 @@ pub fn cmd_load_dep: (args :&vec[str]) {
                         }
                     } else {
                         set owl_home = use! util::owl_home()
-                        set mp = owl_home + "/modules/" + name_arg + "/owl.toml"
+                        set mp = owl_home + "/libs/" + name_arg + "/owl.toml"
                         if !fs_exists(mp) {
-                            set err_msg = "error: '" + name_arg + "' not found in " + owl_home + "/modules/"
+                            set err_msg = "error: '" + name_arg + "' not found in " + owl_home + "/libs/"
                             use dasu(err_msg)
                             use dasu("  has the package been installed?")
                             set proceed = false
@@ -114,7 +114,7 @@ pub fn cmd_load_dep: (args :&vec[str]) {
                         if proceed {
                             set version = use! util::toml_get(mp "project" "version") :str mut
                             if version == "" { set version = "0.1.0" }
-                            set real_path = owl_home + "/modules/" + name_arg
+                            set real_path = owl_home + "/libs/" + name_arg
                             set dep_line = name_arg + " = { path = \"" + real_path + "\", version = \"" + version + "\" }"
                             set new_c = before + "\n" + dep_line + after
                             use fs_write("owl.toml" new_c)

@@ -193,3 +193,132 @@ pub fn get_dep_field_from: (toml_file :str dep_name :str field :str) :str {
     }
     return use! deps::extract_field(raw field)
 }
+
+/! Scans the first level of ~/owl/libs and returns one TOML
+   dependency line per installed library, using its latest local version.
+   `mire` is excluded because it is injected directly into
+   `[dependencies]` by `owl new`.
+!/
+pub fn gather_latest_libs: () :str {
+    set lib_dir = use! util::owl_home_libs()
+    if !fs_exists(lib_dir) { return "" }
+    set entries = fs_list(lib_dir)
+    set out = "" :str mut
+    set i = 0 :i64 mut
+    set n = len(entries)
+    while i < n {
+        set name = rt_vec_get_str(entries i)
+        if name != "mire" {
+            set toml = lib_dir + "/" + name + "/owl.toml"
+            if fs_exists(toml) {
+                set ver = use! util::toml_get(toml "project" "version") :str mut
+                if ver == "" { set ver = "0.1.0" }
+                set line = name + " = { path = \"" + lib_dir + "/" + name + "\", version = \"" + ver + "\" }"
+                if out == "" { set out = line } else { set out = out + "\n" + line }
+            }
+        }
+        set i += 1
+    }
+    return out
+}
+
+/! Prunes `[dependencies]` to only the entries actually used by the
+   project (detected via `load <name>` in code/ and tests/), then
+   regenerates owl.lock from the surviving set. This avoids the
+   lockfile filling up with false-positive entries from auto-deps.
+   Returns true on success.
+!/
+pub fn prune_unused: () :bool {
+    if !use! util::has_project() { return false }
+    set used = use! deps::used_dep_names()
+    set section = use! deps::deps_section()
+    set names = use! deps::get_dep_names()
+    if names == "" { return use! lockfile::generate_lockfile() }
+    set pos = 0 :i64 mut
+    set nlen = len(names)
+    set kept = "" :str mut
+    set first = true :bool mut
+    while pos < nlen {
+        set remaining = strings::substr(names pos nlen - pos)
+        set nl = strings::index(remaining "\n")
+        set end = 0 :i64 mut
+        if nl < 0 { set end = nlen } else { set end = pos + nl }
+        set name_line = strings::substr(names pos end - pos)
+        set dep_name = use! util::trim(name_line)
+        set pos = end + 1
+        if dep_name != "" {
+            set dn = dep_name
+            if use! deps::list_contains(used dn) {
+                set dnr = dep_name
+                set raw = use! deps::find_dep_raw(dnr)
+                if !first { set kept = kept + "\n" } else { set first = false }
+                set kept = kept + dep_name + " = " + raw
+            }
+        }
+    }
+    set content = fs::read("owl.toml")
+    set marker = "[dependencies]"
+    set sec_pos = strings::index(content marker)
+    if sec_pos < 0 { return false }
+    set insert_pos = sec_pos + len(marker)
+    set before = strings::substr(content 0 insert_pos)
+    set rem = len(content) - insert_pos
+    set after = strings::substr(content insert_pos rem) :str mut
+    /! Strip any trailing [tool.owl.auto-deps] so we only keep deps. !/
+    set next_sec = strings::index(after "\n[")
+    if next_sec < 0 { set after = "" } else { set after = strings::substr(after next_sec len(after) - next_sec) }
+    set new_c = before + "\n" + kept + after
+    use fs_write("owl.toml" new_c)
+    return use! lockfile::generate_lockfile()
+}
+
+/! Returns newline-separated names of dependencies referenced by
+   `load <name>` in the project's source and test directories.
+!/
+pub fn used_dep_names: () :str {
+    set found = "" :str mut
+    set found_set = "" :str mut
+    set names = use! deps::get_dep_names()
+    if names != "" {
+        set pos = 0 :i64 mut
+        set nlen = len(names)
+        while pos < nlen {
+            set rem = strings::substr(names pos nlen - pos)
+            set nl = strings::index(rem "\n")
+            set end = 0 :i64 mut
+            if nl < 0 { set end = nlen } else { set end = pos + nl }
+            set name_line = strings::substr(names pos end - pos)
+            set dep = use! util::trim(name_line)
+            set pos = end + 1
+            if dep != "" {
+                set d1 = dep
+                if use! util::grep_load(d1) {
+                    set d2 = dep
+                    if !use! deps::list_contains(found_set d2) {
+                        set d3 = dep
+                        if found == "" { set found = d3 } else { set found = found + "\n" + d3 }
+                        set d4 = dep
+                        if found_set == "" { set found_set = d4 } else { set found_set = found_set + "\n" + d4 }
+                    }
+                }
+            }
+        }
+    }
+    return found
+}
+
+pub fn list_contains: (list :&str, item :&str) :bool {
+    if list == "" { return false }
+    set pos = 0 :i64 mut
+    set nlen = len(list)
+    while pos < nlen {
+        set rem = strings::substr(list pos nlen - pos)
+        set nl = strings::index(rem "\n")
+        set end = 0 :i64 mut
+        if nl < 0 { set end = nlen } else { set end = pos + nl }
+        set line = strings::substr(list pos end - pos)
+        if use! util::trim(line) == *item { return true }
+        set pos = end + 1
+    }
+    return false
+}
