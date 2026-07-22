@@ -144,6 +144,15 @@ pub fn main: () {
         return
     }
     if cmd == "install" || cmd == "-S" {
+        set i_prune = use! args::has_flag(args "--prune")
+        if i_prune {
+            if use! deps::prune_unused() {
+                use dasu("pruned unused dependencies and regenerated owl.lock")
+            } else {
+                use dasu("no unused dependencies to prune")
+            }
+            return
+        }
         set i_has_l = use! args::has_flag(args "-l") || use! args::has_flag(args "--list")
         set i_has_t = use! args::has_flag(args "-t") || use! args::has_flag(args "--test")
         set i_no_verify = use! args::has_flag(args "--no-verify")
@@ -167,6 +176,19 @@ pub fn main: () {
     }
     if cmd == "gc" {
         use! gc::cmd_gc(args)
+        return
+    }
+    if cmd == "deps" {
+        set d_prune = use! args::has_flag(args "--prune") || use! args::has_flag(args "-p")
+        if d_prune {
+            if use! deps::prune_unused() {
+                use dasu("pruned unused dependencies and regenerated owl.lock")
+            } else {
+                use dasu("no unused dependencies to prune")
+            }
+        } else {
+            use dasu("usage: owl deps --prune")
+        }
         return
     }
     if cmd == "tree" {

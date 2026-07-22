@@ -184,7 +184,7 @@ pub fn cmd_clean: (args :&vec[str]) {
 
     if clean_global {
         use! util::rm_RF(use! util::owl_home() + "/cache")
-        use! util::rm_RF(use! util::owl_home() + "/modules")
+        use! util::rm_RF(use! util::owl_home() + "/libs")
         use dasu("cleaned global caches")
         return
     }

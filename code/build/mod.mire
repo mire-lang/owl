@@ -1,5 +1,6 @@
 load! /code/util
 load! /code/lockfile
+load! /code/deps
 
 pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
     set mire = use! util::compiler_cmd()
@@ -215,7 +216,16 @@ pub fn cmd_new: (name :str) {
         use! util::mkdir_p(name + "/bin")
         use! util::mkdir_p(name + "/tests")
         use! util::mkdir_p(name + "/docs")
-        use fs_write(name + "/owl.toml" "[project]\nname = \"" + n + "\"\nversion = \"0.1.0\"\ndescription = \"A Mire project\"\nentry = \"code/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\n\n[paths]\nsources = \"code\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n\n[dependencies]\n")
+
+        set mire_path = use! util::owl_home_libs() + "/mire"
+        set auto = use! deps::gather_latest_libs()
+        set deps_section = "[dependencies]\nmire = { path = \"" + mire_path + "\", version = \"0.1.0\" }\n"
+        set auto_section = "" :str mut
+        if auto != "" {
+            set auto_section = "\n[tool.owl.auto-deps]\n" + auto + "\n"
+        }
+        set toml = "[project]\nname = \"" + n + "\"\nversion = \"0.1.0\"\ndescription = \"A Mire project\"\nentry = \"code/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\n\n[paths]\nsources = \"code\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n\n" + deps_section + auto_section
+        use fs_write(name + "/owl.toml" toml)
         use fs_write(name + "/code/main.mire" "pub fn main: () {\n    use dasu(\"ok\")\n}\n")
         use fs_write(name + "/tests/smoke.mire" "@[test]\npub fn test_smoke: () :bool {\n    return true\n}\n")
         use dasu("Project created: " + name)

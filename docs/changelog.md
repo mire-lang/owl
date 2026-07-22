@@ -1,5 +1,25 @@
 # Owl Changelog
 
+## [0.28.0] - 2026-07-22
+
+### Changed
+
+- **Cache path rename `modules` → `libs`:** `util::owl_home_modules()`
+ renamed to `util::owl_home_libs()` and now points at `~/.owl/libs/`
+ (previously `~/.owl/modules/`). All references in `code/gc`, `code/info`,
+ `code/install`, `code/dload` and the docs updated accordingly.
+- **`owl deps --prune` / `owl install --prune`:** New capability to prune
+ unused dependencies. Scans `code/` and `tests/` for `load <dep>` usage via
+ the new `util::grep_load()`, removes orphans from `owl.toml [dependencies]`,
+ and regenerates `owl.lock`. Implemented in `code/deps/mod.mire`
+ (`prune_unused()`); exposed both as `owl deps --prune` (`-p`) and
+ `owl install --prune`.
+
+### Added
+
+- `util::grep_load(dep)` — returns true if any `.mire` under `code/` or
+ `tests/` contains a `load <dep>` statement.
+
 ## [0.27.0] - 2026-07-19
 
 ### Changed
@@ -145,7 +165,7 @@
 - **`owl gc`** — garbage collect: scans `~/.owl/lib/`, removes orphaned versions not referenced in any `owl.lock`
 - **`owl tree [--all]`** — dependency tree: flat by default, `--all` shows recursive
 - **`owl profile [--json]`** — build metrics: binary size, compiler, last build, build count
-- **`owl clean --global`** — cleans `~/.owl/cache/` and `~/.owl/modules/`
+- **`owl clean --global`** — cleans `~/.owl/cache/` and `~/.owl/libs/`
 - `deps::get_dep_names_from(toml_file)` — get dependency names from any owl.toml
 - `deps::get_dep_field_from(toml_file, dep_name, field)` — get a specific dep field from any owl.toml
 
@@ -296,7 +316,7 @@
 
 ### `owl import` / `owl -I`
 
-- `owl import <name>`: imports from `~/.owl/modules/<name>` cache
+- `owl import <name>`: imports from `~/.owl/libs/<name>` cache
 - `owl -I <name>`: same as `owl import`
 - `owl import <name> --path <path>`: imports local path dependency
 - `owl -I <name> --path <path>`: same

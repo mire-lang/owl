@@ -234,11 +234,11 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
     }
 
     if ec == 0 {
-        set meta_path = use! util::owl_home_modules() + "/" + pkg_name + "/meta.toml"
-        use! util::mkdir_p(use! util::owl_home_modules() + "/" + pkg_name)
+        set meta_path = use! util::owl_home_libs() + "/" + pkg_name + "/meta.toml"
+        use! util::mkdir_p(use! util::owl_home_libs() + "/" + pkg_name)
 
         use dasu("  extracting...")
-        use proc::run("tar -xzf \"" + tarball_file + "\" -C \"" + use! util::owl_home_modules() + "/" + pkg_name + "\" 2>/dev/null || true")
+        use proc::run("tar -xzf \"" + tarball_file + "\" -C \"" + use! util::owl_home_libs() + "/" + pkg_name + "\" 2>/dev/null || true")
 
         if !fs_exists(meta_path) {
             use dasu("  writing metadata...")
@@ -248,10 +248,10 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
             set meta = meta + "compiler = \"" + use! util::compiler_cmd() + "\"\n"
             set meta = meta + "abi = " + use! util::abi_version() + "\n"
             set meta = meta + "language = \"" + use! util::language_version() + "\"\n"
-            use fs_write(use! util::owl_home_modules() + "/" + pkg_name + "/meta.toml" meta)
+            use fs_write(use! util::owl_home_libs() + "/" + pkg_name + "/meta.toml" meta)
         }
 
-        use! util::fs_make_readonly(use! util::owl_home_modules() + "/" + pkg_name)
+        use! util::fs_make_readonly(use! util::owl_home_libs() + "/" + pkg_name)
         use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
         use dasu("  installed " + pkg_name + " v" + pkg_ver)
     }
