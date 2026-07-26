@@ -2,7 +2,7 @@
 // NOTE: 9999 is used as "rest of string" length in strings::substr calls
 // throughout the codebase. It works because substr clamps to string bounds.
 
-/! TOML parser (helpers first) !/
+// TOML parser (helpers first)
 fn toml_extract_val: (content :&str, val_start :i64) :str {
     set val = "" :str mut
     set after_key = strings::substr(content val_start 9999)
@@ -150,11 +150,15 @@ pub fn owl_home_registries: () :str {
 }
 
 pub fn owl_home_lib: () :str {
-    return use! util::owl_home() + "/lib"
+    return use! util::owl_home_libs()
 }
 
 pub fn owl_home_libs: () :str {
     return use! util::owl_home() + "/libs"
+}
+
+pub fn owl_home_libs_display: () :str {
+    return "~/.owl/libs"
 }
 
 pub fn owl_home_cache_tarballs: () :str {
@@ -171,7 +175,7 @@ pub fn owl_home_keys: () :str {
 
 /! Version and compiler info !/
 pub fn owl_version: () :str {
-    return "0.27.0"
+    return "0.29.0"
 }
 
 pub fn compiler_version: () :str {
@@ -259,6 +263,15 @@ pub fn list_get: (list :&vec[str], index :i64) :str { return lists::get::str(lis
 pub fn grep_load: (dep :str) :bool {
     set out = proc::run("grep -rl \"load " + dep + "\" code tests 2>/dev/null")
     return use! util::trim(out) != ""
+}
+
+/! Scans code/ and tests/ for `load <name>` statements and returns
+   a newline-separated list of unique package names found.
+   Only top-level names are returned (first segment before ::).
+!/
+pub fn scan_load_packages: () :str {
+    set out = proc::run("grep -roh 'load [a-zA-Z][a-zA-Z0-9_]*' code tests 2>/dev/null | sed 's/load //' | sort -u")
+    return use! util::trim(out)
 }
 
 pub fn string_to_i64: (s :str) :i64 { return rt_string_to_i64(s) }
