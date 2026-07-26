@@ -159,9 +159,10 @@ pub fn main: () {
         set i_force = use! args::has_flag(args "--force")
         set i_target = use! args::get_flag_value(args "--target")
         set i_yes = use! args::has_flag(args "-y") || use! args::has_flag(args "--yes")
+        set i_lock = use! args::has_flag(args "--lock")
         set i_name = use! args::get_positional(args 0)
         set i_ver = use! args::get_positional(args 1)
-        set ec = use! install::cmd_install(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver) :u8
+        set ec = use! install::cmd_install(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver i_lock) :u8
         set ec_i64 = ec :i64
         if ec_i64 != 0 { proc_exit(ec_i64) }
         return
