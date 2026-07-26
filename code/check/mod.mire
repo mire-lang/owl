@@ -2,6 +2,7 @@ load! /code/util
 load! /code/deps
 load! /code/lockfile
 
+/! Regenerate owl.toml with defaults for specified fields !/
 pub fn regenerate_owl_toml: (fields :str) {
     if !use! util::has_project() {
         use dasu("No owl.toml found in the current directory")
@@ -34,21 +35,82 @@ pub fn regenerate_owl_toml: (fields :str) {
     }
 }
 
+/! Print checkup help !/
+pub fn cmd_checkup_help: () {
+    use dasu("Usage: owl checkup [--fix <field> ...] [--cache] [--deps] [--loads]")
+    use dasu("")
+    use dasu("Run project diagnostics and repair.")
+    use dasu("")
+    use dasu("Diagnostic flags:")
+    use dasu("  --cache        validate build cache integrity")
+    use dasu("  --deps         validate dependencies can be loaded")
+    use dasu("  --loads        validate load statements resolve")
+    use dasu("  -h, --help     show this help")
+    use dasu("")
+    use dasu("Repair flags:")
+    use dasu("  --fix <field>  repair project fields:")
+    use dasu("                 name, version, description, entry, profile,")
+    use dasu("                 opt-level, compiler, output, cache, sources, tests,")
+    use dasu("                 loads, deps")
+    use dasu("")
+    use dasu("Without diagnostic flags, runs all checks.")
+    use dasu("")
+    use dasu("Examples:")
+    use dasu("  owl checkup                    full project diagnostic")
+    use dasu("  owl checkup --cache            check cache only")
+    use dasu("  owl checkup --deps             check dependencies only")
+    use dasu("  owl checkup --fix loads        scan sources and inject missing deps")
+    use dasu("  owl checkup --fix deps         resolve missing dependency paths")
+    use dasu("  owl checkup --fix cache        clean build cache")
+}
+
+/! Main checkup command !/
 pub fn cmd_checkup: (args :&vec[str]) {
+    set n = rt_vec_len(args)
+
+    set i = 1 :i64 mut
+    while i < n {
+        set a = rt_vec_get_str(args i)
+        if a == "--help" || a == "-h" {
+            use! check::cmd_checkup_help()
+            return
+        }
+        set i += 1
+    }
+
     set do_fix = false :bool mut
     set fix_fields = "" :str mut
-    set n = rt_vec_len(args)
+    set check_cache = false :bool mut
+    set check_deps = false :bool mut
+    set check_loads = false :bool mut
+    set check_all = true :bool mut
+
     set i = 2 :i64 mut
     while i < n {
         set a = rt_vec_get_str(args i)
         if a == "--fix" {
             set do_fix = true
         } else {
-            if do_fix {
-                if fix_fields == "" {
-                    set fix_fields = a
+            if a == "--cache" {
+                set check_cache = true
+                set check_all = false
+            } else {
+                if a == "--deps" {
+                    set check_deps = true
+                    set check_all = false
                 } else {
-                    set fix_fields = fix_fields + " " + a
+                    if a == "--loads" {
+                        set check_loads = true
+                        set check_all = false
+                    } else {
+                        if do_fix {
+                            if fix_fields == "" {
+                                set fix_fields = a
+                            } else {
+                                set fix_fields = fix_fields + " " + a
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -60,138 +122,39 @@ pub fn cmd_checkup: (args :&vec[str]) {
         use dasu("  [HINT] usage: owl checkup --fix <field> [<field> ...]")
         use dasu("         fields: name, version, description, entry, profile,")
         use dasu("                 opt-level, compiler, output, cache, sources, tests,")
-        use dasu("                 loads")
+        use dasu("                 loads, deps")
         use dasu("         example: owl checkup --fix name version entry profile")
         set do_fix = false
     }
 
-    set all_ok = true :bool mut
-
-    set compiler_out = use! util::trim(proc::run("mire --version 2>&1 || true"))
-    if compiler_out == "" {
-        use dasu("  [FAIL] mire: not found")
-        use dasu("         install mire (Avenys) to compile projects")
-        set all_ok = false
-    } else {
-        set lines = use! util::split(compiler_out "\n")
-        set first = use! util::list_get(lines 0)
-        use dasu("  [OK]   mire: " + first)
+    if check_all {
+        set check_cache = true
+        set check_deps = true
+        set check_loads = true
     }
 
+    set all_ok = true :bool mut
+
     use dasu("")
+    if !use! check::checkup_compiler() { set all_ok = false }
+
     if use! util::has_project() {
-        set toml_valid = true :bool mut
-
-        set name = use! util::toml_get("owl.toml" "project" "name")
-        if name == "" {
-            use dasu("  [FAIL] [project].name: missing")
-            set toml_valid = false
-        } else {
-            use dasu("  [OK]   [project].name: " + name)
-        }
-
-        set ver = use! util::toml_get("owl.toml" "project" "version")
-        if ver == "" {
-            use dasu("  [FAIL] [project].version: missing")
-            set toml_valid = false
-        } else {
-            use dasu("  [OK]   [project].version: " + ver)
-        }
-
-        set desc = use! util::toml_get("owl.toml" "project" "description")
-        if desc == "" {
-            use dasu("  [FAIL] [project].description: missing")
-            set toml_valid = false
-        } else {
-            use dasu("  [OK]   [project].description: " + desc)
-        }
-
-        set entry = use! util::toml_get("owl.toml" "project" "entry")
-        if entry == "" {
-            use dasu("  [FAIL] [project].entry: missing")
-            set toml_valid = false
-        } else {
-            if fs_exists(entry) {
-                use dasu("  [OK]   [project].entry: " + entry + "  ->  exists")
-            } else {
-                use dasu("  [FAIL] [project].entry: " + entry + "  ->  not found")
-                set toml_valid = false
-            }
-        }
-
-        set profile = use! util::toml_get("owl.toml" "build" "profile")
-        if profile == "" {
-            use dasu("  [FAIL] [build].profile: missing")
-            set toml_valid = false
-        } else {
-            use dasu("  [OK]   [build].profile: " + profile)
-        }
-
-        set opt = use! util::toml_get("owl.toml" "build" "opt-level")
-        if opt == "" {
-            use dasu("  [FAIL] [build].opt-level: missing")
-            set toml_valid = false
-        } else {
-            use dasu("  [OK]   [build].opt-level: " + opt)
-        }
-
-        set compiler = use! util::toml_get("owl.toml" "build" "compiler")
-        if compiler == "" {
-            use dasu("  [WARN] [build].compiler: missing (will default to 'mire')")
-        } else {
-            use dasu("  [OK]   [build].compiler: " + compiler)
-        }
-
-        set out_dir = use! util::toml_get("owl.toml" "paths" "output")
-        if out_dir == "" {
-            use dasu("  [FAIL] [paths].output: missing")
-            set toml_valid = false
-        } else {
-            use dasu("  [OK]   [paths].output: " + out_dir)
-        }
-
-        set cache_dir = use! util::toml_get("owl.toml" "paths" "cache")
-        if cache_dir == "" {
-            use dasu("  [FAIL] [paths].cache: missing")
-            set toml_valid = false
-        } else {
-            if fs_exists(cache_dir) {
-                use dasu("  [OK]   [paths].cache: " + cache_dir + "  ->  exists")
-            } else {
-                use dasu("  [WARN] [paths].cache: " + cache_dir + "  ->  will be created on next build")
-            }
-        }
-
-        set sources = use! util::toml_get("owl.toml" "paths" "sources")
-        if sources == "" {
-            use dasu("  [FAIL] [paths].sources: missing")
-            set toml_valid = false
-        } else {
-            if fs_exists(sources) {
-                use dasu("  [OK]   [paths].sources: " + sources + "  ->  exists")
-            } else {
-                use dasu("  [WARN] [paths].sources: " + sources + "  ->  will be created on next build")
-            }
-        }
-
-        set tests = use! util::toml_get("owl.toml" "paths" "tests")
-        if tests == "" {
-            use dasu("  [FAIL] [paths].tests: missing")
-            set toml_valid = false
-        } else {
-            if fs_exists(tests) {
-                use dasu("  [OK]   [paths].tests: " + tests + "  ->  exists")
-            } else {
-                use dasu("  [WARN] [paths].tests: " + tests + "  ->  will be created on next build")
-            }
-        }
-
         use dasu("")
-        set dep_count = use! deps::count_deps()
-        if dep_count == 0 {
-            use dasu("  [WARN] [dependencies]: no dependencies configured")
-        } else {
-            use dasu("  [OK]   [dependencies]: " + rt_i64_to_string(dep_count) + " configured")
+        if !use! check::checkup_toml() { set all_ok = false }
+
+        if check_deps {
+            use dasu("")
+            if !use! check::checkup_deps() { set all_ok = false }
+        }
+
+        if check_loads {
+            use dasu("")
+            if !use! check::checkup_loads() { set all_ok = false }
+        }
+
+        if check_cache {
+            use dasu("")
+            if !use! check::checkup_cache() { set all_ok = false }
         }
 
         if do_fix {
@@ -199,14 +162,19 @@ pub fn cmd_checkup: (args :&vec[str]) {
             if use! util::contains(fix_fields "loads") {
                 use! check::fix_loads()
             } else {
-                use! check::regenerate_owl_toml(fix_fields)
+                if use! util::contains(fix_fields "deps") {
+                    use! check::checkup_fix_deps()
+                } else {
+                    if use! util::contains(fix_fields "cache") {
+                        use! check::checkup_fix_cache()
+                    } else {
+                        use! check::regenerate_owl_toml(fix_fields)
+                    }
+                }
             }
         }
-
-        if !toml_valid {
-            set all_ok = false
-        }
     } else {
+        use dasu("")
         use dasu("  [FAIL] project: no owl.toml found")
         set all_ok = false
     }
@@ -216,12 +184,416 @@ pub fn cmd_checkup: (args :&vec[str]) {
         use dasu("  [OK]   all checks passed")
     } else {
         if !do_fix {
-            use dasu("  [HINT] run 'owl checkup --fix <field> [<field> ...]' to repair specific fields")
-            use dasu("         see 'owl checkup --help' or check the docs for available fields")
+            use dasu("  [HINT] run 'owl checkup --fix <field>' to repair")
+            use dasu("         see 'owl checkup --help' for available options")
         }
     }
 }
 
+/! Check compiler installation !/
+fn checkup_compiler: () :bool {
+    set ok = true :bool mut
+    set compiler_out = use! util::trim(proc::run("mire --version 2>&1 || true"))
+    if compiler_out == "" {
+        use dasu("  [FAIL] compiler: mire not found")
+        use dasu("         install mire (Avenys) to compile projects")
+        set ok = false
+    } else {
+        set lines = use! util::split(compiler_out "\n")
+        set first = use! util::list_get(lines 0)
+        use dasu("  [OK]   compiler: " + first)
+    }
+    return ok
+}
+
+/! Validate owl.toml fields !/
+fn checkup_toml: () :bool {
+    set ok = true :bool mut
+
+    set name = use! util::toml_get("owl.toml" "project" "name")
+    if name == "" {
+        use dasu("  [FAIL] [project].name: missing")
+        set ok = false
+    } else {
+        use dasu("  [OK]   [project].name: " + name)
+    }
+
+    set ver = use! util::toml_get("owl.toml" "project" "version")
+    if ver == "" {
+        use dasu("  [FAIL] [project].version: missing")
+        set ok = false
+    } else {
+        use dasu("  [OK]   [project].version: " + ver)
+    }
+
+    set desc = use! util::toml_get("owl.toml" "project" "description")
+    if desc == "" {
+        use dasu("  [WARN] [project].description: missing")
+    } else {
+        use dasu("  [OK]   [project].description: " + desc)
+    }
+
+    set entry = use! util::toml_get("owl.toml" "project" "entry")
+    if entry == "" {
+        use dasu("  [FAIL] [project].entry: missing")
+        set ok = false
+    } else {
+        if fs_exists(entry) {
+            use dasu("  [OK]   [project].entry: " + entry)
+        } else {
+            use dasu("  [FAIL] [project].entry: " + entry + " (not found)")
+            set ok = false
+        }
+    }
+
+    set profile = use! util::toml_get("owl.toml" "build" "profile")
+    if profile == "" {
+        use dasu("  [FAIL] [build].profile: missing")
+        set ok = false
+    } else {
+        use dasu("  [OK]   [build].profile: " + profile)
+    }
+
+    set opt = use! util::toml_get("owl.toml" "build" "opt-level")
+    if opt == "" {
+        use dasu("  [FAIL] [build].opt-level: missing")
+        set ok = false
+    } else {
+        use dasu("  [OK]   [build].opt-level: " + opt)
+    }
+
+    set compiler = use! util::toml_get("owl.toml" "build" "compiler")
+    if compiler == "" {
+        use dasu("  [WARN] [build].compiler: missing (defaults to 'mire')")
+    } else {
+        use dasu("  [OK]   [build].compiler: " + compiler)
+    }
+
+    set out_dir = use! util::toml_get("owl.toml" "paths" "output")
+    if out_dir == "" {
+        use dasu("  [FAIL] [paths].output: missing")
+        set ok = false
+    } else {
+        use dasu("  [OK]   [paths].output: " + out_dir)
+    }
+
+    set cache_dir = use! util::toml_get("owl.toml" "paths" "cache")
+    if cache_dir == "" {
+        use dasu("  [FAIL] [paths].cache: missing")
+        set ok = false
+    } else {
+        use dasu("  [OK]   [paths].cache: " + cache_dir)
+    }
+
+    set sources = use! util::toml_get("owl.toml" "paths" "sources")
+    if sources == "" {
+        use dasu("  [FAIL] [paths].sources: missing")
+        set ok = false
+    } else {
+        if fs_exists(sources) {
+            use dasu("  [OK]   [paths].sources: " + sources)
+        } else {
+            use dasu("  [WARN] [paths].sources: " + sources + " (not found)")
+        }
+    }
+
+    set tests = use! util::toml_get("owl.toml" "paths" "tests")
+    if tests == "" {
+        use dasu("  [FAIL] [paths].tests: missing")
+        set ok = false
+    } else {
+        if fs_exists(tests) {
+            use dasu("  [OK]   [paths].tests: " + tests)
+        } else {
+            use dasu("  [WARN] [paths].tests: " + tests + " (not found)")
+        }
+    }
+
+    return ok
+}
+
+/! Validate dependencies can be loaded !/
+fn checkup_deps: () :bool {
+    set ok = true :bool mut
+    set dep_count = use! deps::count_deps()
+
+    if dep_count == 0 {
+        use dasu("  [WARN] deps: no dependencies configured")
+        return true
+    }
+
+    use dasu("  deps: checking " + use! util::i64_to_string(dep_count) + " packages ...")
+
+    set names = use! deps::get_dep_names()
+    set names_len = len(names)
+    set pos = 0 :i64 mut
+    set checked = 0 :i64 mut
+    set loadable = 0 :i64 mut
+
+    while pos < names_len {
+        set rem = strings::substr(names pos names_len - pos)
+        set nl = strings::index(rem "\n")
+        set end = 0 :i64 mut
+        if nl < 0 { set end = names_len } else { set end = pos + nl }
+        set line = strings::substr(names pos end - pos)
+        set pkg = use! util::trim(line)
+        set pos = end + 1
+
+        if pkg != "" {
+            set checked += 1
+            set pkg2 = pkg
+            set dep_path = use! deps::get_dep_field(pkg2 "path")
+            if dep_path == "" {
+                use dasu("  [FAIL] deps/" + pkg + ": no path configured")
+                set ok = false
+            } else {
+                set dp_check = dep_path :str
+                set dp_msg = dep_path :str
+                set dp_find = dep_path :str
+                if !fs_exists(dp_check) {
+                    use dasu("  [FAIL] deps/" + pkg + ": path not found (" + dp_msg + ")")
+                    set ok = false
+                } else {
+                    set toml_check = dep_path + "/owl.toml"
+                    set toml_msg = toml_check :str
+                    set toml_name = toml_check :str
+                    set toml_ver = toml_check :str
+                    if !fs_exists(toml_check) {
+                        use dasu("  [FAIL] deps/" + pkg + ": no owl.toml at " + dp_msg)
+                        set ok = false
+                    } else {
+                        set pkg_name = use! util::toml_get(toml_name "project" "name")
+                        if pkg_name == "" {
+                            use dasu("  [FAIL] deps/" + pkg + ": owl.toml has no [project].name")
+                            set ok = false
+                        } else {
+                            set mire_files = use! util::trim(proc::run("find '" + dp_find + "' -maxdepth 1 -name '*.mire' 2>/dev/null | wc -l"))
+                            if mire_files == "0" {
+                                use dasu("  [FAIL] deps/" + pkg + ": no .mire files (cannot be loaded)")
+                                set ok = false
+                            } else {
+                                set dep_ver = use! util::toml_get(toml_ver "project" "version")
+                                use dasu("  [OK]   deps/" + pkg + " v" + dep_ver + " -> " + dp_msg)
+                                set loadable += 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if loadable == checked {
+        use dasu("  [OK]   deps: " + use! util::i64_to_string(loadable) + "/" + use! util::i64_to_string(checked) + " packages loadable")
+    } else {
+        use dasu("  [FAIL] deps: " + use! util::i64_to_string(loadable) + "/" + use! util::i64_to_string(checked) + " packages loadable")
+        set ok = false
+    }
+
+    return ok
+}
+
+/! Validate load statements resolve !/
+fn checkup_loads: () :bool {
+    set ok = true :bool mut
+    set scanned = use! util::scan_load_packages()
+
+    if scanned == "" {
+        use dasu("  [OK]   loads: no load statements found in source files")
+        return true
+    }
+
+    set lib_dir = use! util::owl_home_libs()
+    set scanned_len = len(scanned)
+    set pos = 0 :i64 mut
+    set total = 0 :i64 mut
+    set resolved = 0 :i64 mut
+
+    while pos < scanned_len {
+        set rem = strings::substr(scanned pos scanned_len - pos)
+        set nl = strings::index(rem "\n")
+        set end = 0 :i64 mut
+        if nl < 0 { set end = scanned_len } else { set end = pos + nl }
+        set line = strings::substr(scanned pos end - pos)
+        set pkg = use! util::trim(line)
+        set pos = end + 1
+
+        if pkg != "" {
+            set total += 1
+            set pkg_dir = lib_dir + "/" + pkg
+            if fs_exists(pkg_dir) {
+                set toml_path = pkg_dir + "/owl.toml"
+                if fs_exists(toml_path) {
+                    use dasu("  [OK]   loads/" + pkg + " -> " + pkg_dir)
+                    set resolved += 1
+                } else {
+                    use dasu("  [WARN] loads/" + pkg + ": directory exists but no owl.toml")
+                    set ok = false
+                }
+            } else {
+                use dasu("  [FAIL] loads/" + pkg + ": not found in " + use! util::owl_home_libs_display())
+                set ok = false
+            }
+        }
+    }
+
+    if resolved == total {
+        use dasu("  [OK]   loads: " + use! util::i64_to_string(resolved) + "/" + use! util::i64_to_string(total) + " statements resolve")
+    } else {
+        use dasu("  [FAIL] loads: " + use! util::i64_to_string(resolved) + "/" + use! util::i64_to_string(total) + " statements resolve")
+        set ok = false
+    }
+
+    return ok
+}
+
+/! Validate build cache !/
+fn checkup_cache: () :bool {
+    set ok = true :bool mut
+    set cache_dir = use! util::toml_get("owl.toml" "paths" "cache") :str mut
+    if cache_dir == "" { set cache_dir = "bin/.cache" }
+
+    if !fs_exists(cache_dir) {
+        use dasu("  [WARN] cache: " + cache_dir + " not found (will be created on first build)")
+        return true
+    }
+
+    set file_count = use! util::trim(proc::run("find '" + cache_dir + "' -type f 2>/dev/null | wc -l"))
+
+    if file_count == "0" {
+        use dasu("  [WARN] cache: " + cache_dir + " is empty")
+        return true
+    }
+
+    set empty_count = use! util::trim(proc::run("find '" + cache_dir + "' -type f -empty 2>/dev/null | wc -l"))
+
+    if empty_count != "0" {
+        use dasu("  [FAIL] cache: " + empty_count + " empty/corrupt files found")
+        set ok = false
+    }
+
+    set sources_dir = use! util::toml_get("owl.toml" "paths" "sources") :str mut
+    if sources_dir == "" { set sources_dir = "code" }
+
+    if fs_exists(sources_dir) {
+        set stale_count = use! util::trim(proc::run("find '" + sources_dir + "' -name '*.mire' -newer '" + cache_dir + "' 2>/dev/null | wc -l"))
+
+        if stale_count != "0" {
+            use dasu("  [WARN] cache: stale (" + stale_count + " source files modified after cache)")
+            set ok = false
+        } else {
+            set size_out = use! util::trim(proc::run("du -sh '" + cache_dir + "' 2>/dev/null | cut -f1")) :str mut
+            if size_out == "" { set size_out = "?" }
+            use dasu("  [OK]   cache: " + file_count + " files (" + size_out + "), up to date")
+        }
+    } else {
+        use dasu("  [OK]   cache: " + file_count + " files")
+    }
+
+    return ok
+}
+
+/! Fix missing dependencies by resolving from libs !/
+fn checkup_fix_deps: () {
+    if !use! util::has_project() {
+        use dasu("  [FAIL] no owl.toml found")
+        return
+    }
+
+    set lib_dir = use! util::owl_home_libs()
+    set lib_display = use! util::owl_home_libs_display()
+    set dep_count = use! deps::count_deps()
+
+    if dep_count == 0 {
+        use dasu("  [OK]   no dependencies to fix")
+        return
+    }
+
+    set names = use! deps::get_dep_names()
+    set names_len = len(names)
+    set pos = 0 :i64 mut
+    set fixed = 0 :i64 mut
+
+    while pos < names_len {
+        set rem = strings::substr(names pos names_len - pos)
+        set nl = strings::index(rem "\n")
+        set end = 0 :i64 mut
+        if nl < 0 { set end = names_len } else { set end = pos + nl }
+        set line = strings::substr(names pos end - pos)
+        set pkg = use! util::trim(line)
+        set pos = end + 1
+
+        if pkg != "" {
+            set pkg2 = pkg
+            set dep_path = use! deps::get_dep_field(pkg2 "path")
+            if dep_path == "" || !fs_exists(dep_path) {
+                set lib_path = lib_dir + "/" + pkg
+                if fs_exists(lib_path) {
+                    set toml_path = lib_path + "/owl.toml"
+                    if fs_exists(toml_path) {
+                        set c = fs::read("owl.toml")
+                        set dep_search = pkg + " = {"
+                        set dep_pos = strings::index(c dep_search)
+                        if dep_pos >= 0 {
+                            set after_dep = strings::substr(c dep_pos 9999)
+                            set line_end = strings::index(after_dep "\n") :i64 mut
+                            if line_end < 0 { set line_end = len(after_dep) }
+                            set full_line = strings::substr(after_dep 0 line_end)
+
+                            set path_search = "path = \""
+                            set path_idx = strings::index(full_line path_search)
+                            if path_idx >= 0 {
+                                set path_start = path_idx + len(path_search)
+                                set after_path = strings::substr(full_line path_start 9999)
+                                set path_end = strings::index(after_path "\"")
+                                if path_end >= 0 {
+                                    set old_path = strings::substr(after_path 0 path_end)
+                                    set new_path = lib_display + "/" + pkg
+                                    set before_path = strings::substr(full_line 0 path_start)
+                                    set after_path_part = strings::substr(full_line path_start + path_end 9999)
+                                    set new_line = before_path + new_path + after_path_part
+
+                                    set before = strings::substr(c 0 dep_pos)
+                                    set after = strings::substr(c dep_pos + line_end 9999)
+                                    set new_c = before + new_line + after
+                                    use fs_write("owl.toml" new_c)
+                                    use dasu("  [FIX]  deps/" + pkg + ": path " + old_path + " -> " + new_path)
+                                    set fixed += 1
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    use dasu("  [SKIP] deps/" + pkg + ": not found in " + lib_display)
+                }
+            }
+        }
+    }
+
+    if fixed > 0 {
+        use dasu("")
+        use dasu("  regenerating lockfile ...")
+        use! lockfile::generate_lockfile()
+    } else {
+        use dasu("  [OK]   all dependency paths are valid")
+    }
+}
+
+/! Clean build cache !/
+fn checkup_fix_cache: () {
+    set cache_dir = use! util::toml_get("owl.toml" "paths" "cache") :str mut
+    if cache_dir == "" { set cache_dir = "bin/.cache" }
+
+    if fs_exists(cache_dir) {
+        use dasu("  [FIX]  cleaning cache: " + cache_dir)
+        use! util::rm_RF(cache_dir)
+        use dasu("  [OK]   cache cleaned")
+    } else {
+        use dasu("  [OK]   no cache to clean")
+    }
+}
+
+/! Dependency validation command (owl check) !/
 pub fn cmd_check: (args :&vec[str]) {
     if !use! util::has_project() {
         use dasu("  [FAIL]  no owl.toml found")

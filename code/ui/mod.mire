@@ -22,7 +22,7 @@ pub fn print_help: () {
     use dasu("  new    -N  <Name>     create new project")
     use dasu("  clean  -C  [--bin] [--cache] [--all|-A] [--global]")
     use dasu("  info   -Q            show project and environment info")
-    use dasu("  checkup              validate and repair owl.toml")
+    use dasu("  checkup              project diagnostics and repair")
     use dasu("  tree   [--all]       show dependency tree")
     use dasu("  profile [--json]     build metrics")
     use dasu("")
