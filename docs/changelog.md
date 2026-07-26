@@ -1,5 +1,28 @@
 # Owl Changelog
 
+## [0.29.0] - 2026-07-26
+
+### Added
+
+- **`owl install --lock`:** Install all packages from `owl.lock`. Reads each
+  `[[package]]` entry, skips local registry packages, downloads and installs
+  missing packages from their configured registries.
+- **`lockfile_validate()`:** Checks each lockfile entry's path exists, reports
+  valid/total count. Integrated into `owl checkup`.
+- **`lockfile_get_field()`:** Extract a specific field from a lockfile package
+  entry by name.
+- **Registry resolution in lockfile generation:** When a dependency has no
+  explicit `registry` field, `generate_lockfile()` now scans configured
+  registries to find which one contains the package, instead of defaulting
+  to `"local"`.
+- **Compiler/language metadata in lockfile:** `generate_lockfile()` now includes
+  `compiler` and `language` fields from `meta.toml` when available.
+
+### Changed
+
+- **`owl checkup` now validates lockfile:** The deps check section includes
+  `lockfile_validate()` to verify all lockfile entries are valid.
+
 ## [0.28.0] - 2026-07-22
 
 ### Changed

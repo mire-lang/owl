@@ -16,7 +16,7 @@ pub fn main: () {
     set check_cmd = "cd " + proj_dir + " && ~/.local/bin/owl check 2>&1"
     set check_out = proc::run(check_cmd)
 
-    set has_pass = strings.contains(check_out "PASS")
+    set has_pass = strings.contains(check_out "[OK]")
     if has_pass {
         use dasu("  owl check on valid project: ok")
     } else {
