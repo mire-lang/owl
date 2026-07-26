@@ -1,9 +1,14 @@
 load! /code/util
 load! /code/crypto
 load! /code/semver
+load! /code/lockfile
 
-pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_val :str yes :bool name :str ver :str) :u8 {
+pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_val :str yes :bool name :str ver :str has_lock :bool) :u8 {
     set ec = 0 :u8 mut
+    if has_lock {
+        use! lockfile::lockfile_install_all()
+        return ec
+    }
     if has_l {
         use! install::cmd_list_packages()
     } else {
@@ -11,9 +16,10 @@ pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_
         if is_empty {
             if has_t { use dasu("Usage: owl install -t <name>") } else {
                 if target_val == "d" || target_val == "r" { use! install::cmd_target_install(target_val "") } else {
-                    use dasu("Usage: owl install [-l] [-t] [--target=d|r] <name> [version]")
+                    use dasu("Usage: owl install [-l] [-t] [--lock] [--target=d|r] <name> [version]")
                     use dasu("  -l, --list   List packages from all registries")
                     use dasu("  -t, --test   Test install")
+                    use dasu("  --lock       Install all packages from owl.lock")
                     use dasu("  --target=d|r Install compiled binary to owl cache")
                 }
             }

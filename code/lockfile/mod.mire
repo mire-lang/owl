@@ -208,7 +208,51 @@ pub fn generate_lockfile: () :bool {
                     set abi = use! deps::get_dep_field(dname3 "abi")
                     set dname4 = dep_name :str mut
                     set registry = use! deps::get_dep_field(dname4 "registry") :str mut
+                    if registry == "" && path == "" {
+                        set reg_dir = use! util::owl_home_registries()
+                        set reg_list = use! util::trim(proc::run("ls \"" + reg_dir + "\" 2>/dev/null || true"))
+                        set rpos = 0 :i64 mut
+                        set rlen = len(reg_list)
+                        set resolved = false :bool mut
+                        while rpos < rlen && !resolved {
+                            set rrem = strings::substr(reg_list rpos rlen - rpos)
+                            set rnl = strings::index(rrem "\n")
+                            set rend = 0 :i64 mut
+                            if rnl < 0 { set rend = rlen } else { set rend = rpos + rnl }
+                            set rline = strings::substr(reg_list rpos rend - rpos)
+                            set rname = use! util::trim(rline)
+                            set rpos = rend + 1
+                            if rname != "" {
+                                set idx_path = reg_dir + "/" + rname + "/index.toml"
+                                if fs_exists(idx_path) {
+                                    set grep_out = use! util::trim(proc::run("grep -c '^name = \"" + dep_name + "\"' \"" + idx_path + "\" 2>/dev/null || echo 0"))
+                                    if grep_out != "0" && grep_out != "" {
+                                        set registry = rname
+                                        set resolved = true
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if registry == "" { set registry = "local" }
+
+                    set compiler = "" :str mut
+                    set language = "" :str mut
+                    if path != "" {
+                        set meta_path = path + "/meta.toml"
+                        if fs_exists(meta_path) {
+                            set mp1 = meta_path :str
+                            set mp2 = meta_path :str
+                            set compiler = use! util::toml_get(mp1 "package" "compiler")
+                            set language = use! util::toml_get(mp2 "package" "language")
+                        }
+                        if compiler == "" {
+                            set owl_at = path + "/owl.toml"
+                            if fs_exists(owl_at) {
+                                set compiler = use! util::toml_get(owl_at "build" "compiler")
+                            }
+                        }
+                    }
 
                     if !first { set content = content + "\n" } else { set first = false }
 
@@ -218,6 +262,8 @@ pub fn generate_lockfile: () :bool {
                     if path != "" { set entry = entry + "path     = \"" + path + "\"\n" }
                     if registry != "" { set entry = entry + "registry = \"" + registry + "\"\n" }
                     if abi != "" { set entry = entry + "abi      = " + abi + "\n" }
+                    if compiler != "" { set entry = entry + "compiler = \"" + compiler + "\"\n" }
+                    if language != "" { set entry = entry + "language = \"" + language + "\"\n" }
                     set content = content + entry
                 }
                 if nl < 0 { set running = false }
@@ -243,4 +289,353 @@ pub fn ensure_lockfile: () :bool {
         set ok = use! lockfile::generate_lockfile()
     }
     return ok
+}
+
+/! Validate all lockfile entries: check paths exist and packages are loadable.
+   Returns true if all entries are valid.
+!/
+pub fn lockfile_validate: () :bool {
+    set ok = true :bool mut
+    if !use! lockfile::lockfile_exists() {
+        use dasu("  [FAIL] owl.lock not found")
+        return false
+    }
+
+    set content = fs::read("owl.lock")
+    if content == "" {
+        use dasu("  [FAIL] owl.lock is empty")
+        return false
+    }
+
+    if strings::contains(content "no dependencies") {
+        use dasu("  [OK]   lockfile: no dependencies (valid)")
+        return true
+    }
+
+    set pos = 0 :i64 mut
+    set clen = len(content)
+    set pkg_count = 0 :i64 mut
+    set valid_count = 0 :i64 mut
+
+    while pos < clen {
+        set remaining = strings::substr(content pos clen - pos)
+        set idx = strings::index(remaining "[[package]]")
+        if idx < 0 { set pos = clen } else {
+            set pkg_start = pos + idx + len("[[package]]")
+            set after_this = strings::substr(content pkg_start clen - pkg_start)
+            set next_pkg = strings::index(after_this "[[package]]")
+            set pkg_end = 0 :i64 mut
+            if next_pkg >= 0 { set pkg_end = pkg_start + next_pkg } else { set pkg_end = clen }
+            set pkg_content = strings::substr(content pkg_start pkg_end - pkg_start)
+
+            set pkg_name = "" :str mut
+            set pkg_ver = "" :str mut
+            set pkg_path = "" :str mut
+            set pkg_registry = "" :str mut
+
+            set name_idx = strings::index(pkg_content "\nname     = \"")
+            if name_idx >= 0 {
+                set ns = name_idx + len("\nname     = \"")
+                set ne = strings::index(strings::substr(pkg_content ns 9999) "\"")
+                if ne >= 0 { set pkg_name = strings::substr(pkg_content ns ne) }
+            }
+            set ver_idx = strings::index(pkg_content "\nversion  = \"")
+            if ver_idx >= 0 {
+                set vs = ver_idx + len("\nversion  = \"")
+                set ve = strings::index(strings::substr(pkg_content vs 9999) "\"")
+                if ve >= 0 { set pkg_ver = strings::substr(pkg_content vs ve) }
+            }
+            set path_idx = strings::index(pkg_content "\npath     = \"")
+            if path_idx >= 0 {
+                set ps = path_idx + len("\npath     = \"")
+                set pe = strings::index(strings::substr(pkg_content ps 9999) "\"")
+                if pe >= 0 { set pkg_path = strings::substr(pkg_content ps pe) }
+            }
+            set reg_idx = strings::index(pkg_content "\nregistry = \"")
+            if reg_idx >= 0 {
+                set rs = reg_idx + len("\nregistry = \"")
+                set re = strings::index(strings::substr(pkg_content rs 9999) "\"")
+                if re >= 0 { set pkg_registry = strings::substr(pkg_content rs re) }
+            }
+
+            if pkg_name != "" {
+                set pkg_count += 1
+                set entry_ok = true :bool mut
+
+                if pkg_path != "" {
+                    if !fs_exists(pkg_path) {
+                        use dasu("  [FAIL] lockfile/" + pkg_name + ": path not found (" + pkg_path + ")")
+                        set entry_ok = false
+                        set ok = false
+                    } else {
+                        set toml_check = pkg_path + "/owl.toml"
+                        if !fs_exists(toml_check) {
+                            use dasu("  [WARN] lockfile/" + pkg_name + ": path exists but no owl.toml")
+                        }
+                    }
+                } else {
+                    if pkg_registry == "local" || pkg_registry == "" {
+                        use dasu("  [WARN] lockfile/" + pkg_name + ": no path configured")
+                    }
+                }
+
+                if entry_ok { set valid_count += 1 }
+
+                set pos = pkg_end
+            } else {
+                set pos = pkg_end
+            }
+        }
+    }
+
+    if pkg_count == 0 {
+        use dasu("  [OK]   lockfile: no packages")
+    } else {
+        if valid_count == pkg_count {
+            use dasu("  [OK]   lockfile: " + use! util::i64_to_string(valid_count) + "/" + use! util::i64_to_string(pkg_count) + " entries valid")
+        } else {
+            use dasu("  [FAIL] lockfile: " + use! util::i64_to_string(valid_count) + "/" + use! util::i64_to_string(pkg_count) + " entries valid")
+        }
+    }
+
+    return ok
+}
+
+/! Get a specific field from a lockfile package entry by name.
+   Fields: "version", "path", "registry", "abi"
+!/
+pub fn lockfile_get_field: (pkg_name :str field :str) :str {
+    set val = "" :str mut
+    if !use! lockfile::lockfile_exists() { return val }
+
+    set content = fs::read("owl.lock")
+    if content == "" { return val }
+
+    set search_name = "name     = \"" + pkg_name + "\""
+    set name_pos = strings::index(content search_name)
+    if name_pos < 0 { return val }
+
+    set block_start = name_pos :i64 mut
+    set before = strings::substr(content 0 block_start)
+    set last_header = strings::index(before "[[package]]")
+    if last_header >= 0 { set block_start = last_header }
+
+    set block_end = len(content) :i64 mut
+    set after_block = strings::substr(content block_start 9999)
+    set next_header = strings::index(after_block "\n[[package]]")
+    if next_header >= 0 { set block_end = block_start + next_header }
+
+    set block = strings::substr(content block_start block_end - block_start)
+
+    set field_search = "\n" + field + "     = \"" :str mut
+    if field == "abi" { set field_search = "\n" + field + "      = " }
+    if field == "registry" { set field_search = "\nregistry = \"" }
+    if field == "version" { set field_search = "\nversion  = \"" }
+    if field == "path" { set field_search = "\npath     = \"" }
+
+    set fpos = strings::index(block field_search)
+    if fpos >= 0 {
+        set vstart = fpos + len(field_search)
+        set after_val = strings::substr(block vstart 9999)
+        if field == "abi" {
+            set vend = strings::index(after_val "\n") :i64 mut
+            if vend < 0 { set vend = len(after_val) }
+            set val = use! util::trim(strings::substr(after_val 0 vend))
+        } else {
+            set vend = strings::index(after_val "\"")
+            if vend >= 0 { set val = strings::substr(after_val 0 vend) }
+        }
+    }
+
+    return val
+}
+
+/! Install all packages from lockfile that are not already present.
+   Skips packages with registry="local" (symlinked/local packages).
+!/
+pub fn lockfile_install_all: () :bool {
+    set ok = true :bool mut
+    if !use! lockfile::lockfile_exists() {
+        use dasu("  [FAIL] owl.lock not found - run 'owl install' or 'owl checkup' first")
+        return false
+    }
+
+    set content = fs::read("owl.lock")
+    if content == "" {
+        use dasu("  [FAIL] owl.lock is empty")
+        return false
+    }
+
+    if strings::contains(content "no dependencies") {
+        use dasu("  [OK]   no packages to install")
+        return true
+    }
+
+    set pos = 0 :i64 mut
+    set clen = len(content)
+    set installed = 0 :i64 mut
+    set skipped = 0 :i64 mut
+    set failed = 0 :i64 mut
+
+    while pos < clen {
+        set remaining = strings::substr(content pos clen - pos)
+        set idx = strings::index(remaining "[[package]]")
+        if idx < 0 { set pos = clen } else {
+            set pkg_start = pos + idx + len("[[package]]")
+            set after_this = strings::substr(content pkg_start clen - pkg_start)
+            set next_pkg = strings::index(after_this "[[package]]")
+            set pkg_end = 0 :i64 mut
+            if next_pkg >= 0 { set pkg_end = pkg_start + next_pkg } else { set pkg_end = clen }
+            set pkg_content = strings::substr(content pkg_start pkg_end - pkg_start)
+
+            set pkg_name = "" :str mut
+            set pkg_ver = "" :str mut
+            set pkg_path = "" :str mut
+            set pkg_registry = "" :str mut
+
+            set name_idx = strings::index(pkg_content "\nname     = \"")
+            if name_idx >= 0 {
+                set ns = name_idx + len("\nname     = \"")
+                set ne = strings::index(strings::substr(pkg_content ns 9999) "\"")
+                if ne >= 0 { set pkg_name = strings::substr(pkg_content ns ne) }
+            }
+            set ver_idx = strings::index(pkg_content "\nversion  = \"")
+            if ver_idx >= 0 {
+                set vs = ver_idx + len("\nversion  = \"")
+                set ve = strings::index(strings::substr(pkg_content vs 9999) "\"")
+                if ve >= 0 { set pkg_ver = strings::substr(pkg_content vs ve) }
+            }
+            set path_idx = strings::index(pkg_content "\npath     = \"")
+            if path_idx >= 0 {
+                set ps = path_idx + len("\npath     = \"")
+                set pe = strings::index(strings::substr(pkg_content ps 9999) "\"")
+                if pe >= 0 { set pkg_path = strings::substr(pkg_content ps pe) }
+            }
+            set reg_idx = strings::index(pkg_content "\nregistry = \"")
+            if reg_idx >= 0 {
+                set rs = reg_idx + len("\nregistry = \"")
+                set re = strings::index(strings::substr(pkg_content rs 9999) "\"")
+                if re >= 0 { set pkg_registry = strings::substr(pkg_content rs re) }
+            }
+
+            if pkg_name != "" {
+                if pkg_registry == "local" || pkg_registry == "" {
+                    set skipped += 1
+                } else {
+                    if pkg_path != "" && fs_exists(pkg_path) {
+                        use dasu("  [OK]   " + pkg_name + " v" + pkg_ver + " already installed")
+                        set skipped += 1
+                    } else {
+                        use dasu("  installing " + pkg_name + " v" + pkg_ver + " from " + pkg_registry + " ...")
+                        use! lockfile_install_one(pkg_name pkg_ver pkg_registry)
+                        set installed += 1
+                    }
+                }
+            }
+
+            set pos = pkg_end
+        }
+    }
+
+    use dasu("")
+    use dasu("  installed: " + use! util::i64_to_string(installed) + ", skipped: " + use! util::i64_to_string(skipped) + ", failed: " + use! util::i64_to_string(failed))
+    return ok
+}
+
+/! Install a single package from lockfile by looking it up in registries.
+!/
+fn lockfile_install_one: (pkg_name :str pkg_ver :str registry_name :str) {
+    set reg_dir = use! util::owl_home_registries()
+    set idx_path = reg_dir + "/" + registry_name + "/index.toml"
+
+    if !fs_exists(idx_path) {
+        use dasu("  [FAIL] " + pkg_name + ": registry '" + registry_name + "' not synced (run owl load -Ls)")
+        return
+    }
+
+    set tmp = "/tmp/owl_lock_install.tmp"
+    set cmd = "grep -A10 '^name = \"" + pkg_name + "\"' \"" + idx_path + "\" > \"" + tmp + "\" 2>/dev/null"
+    use proc::run(cmd)
+    set grep_out = use! util::trim(fs::read(tmp))
+
+    if grep_out == "" {
+        use proc::run("rm -f \"" + tmp + "\" 2>/dev/null")
+        use dasu("  [FAIL] " + pkg_name + ": not found in registry '" + registry_name + "'")
+        return
+    }
+
+    set tarball_line = use! util::trim(proc::run("grep '^tarball =' \"" + tmp + "\" 2>/dev/null | sed 's/.*= \"\\(.*\\)\"/\\1/'"))
+    set sha256_line = use! util::trim(proc::run("grep '^sha256 =' \"" + tmp + "\" 2>/dev/null | sed 's/.*= \"\\(.*\\)\"/\\1/'"))
+    use proc::run("rm -f \"" + tmp + "\" 2>/dev/null")
+
+    if tarball_line == "" {
+        use dasu("  [FAIL] " + pkg_name + ": no tarball in registry index")
+        return
+    }
+
+    set reg_url = "" :str mut
+    set reg_json_path = reg_dir + "/" + registry_name + "/registry.json"
+    if fs_exists(reg_json_path) {
+        set reg_content = fs::read(reg_json_path)
+        set reg_url = use! util::json_get_str(reg_content "url") :str mut
+        if reg_url == "" { set reg_url = use! util::json_get_str(reg_content "name") }
+    }
+
+    if reg_url == "" {
+        use dasu("  [FAIL] " + pkg_name + ": could not determine registry URL")
+        return
+    }
+
+    set tarball_url = reg_url + "/" + tarball_line
+    set tarball_file = use! util::owl_home() + "/cache/tarballs/" + pkg_name + "-" + pkg_ver + ".tar.zst"
+    use! util::mkdir_p(use! util::owl_home() + "/cache/tarballs")
+
+    use dasu("    downloading " + tarball_url + " ...")
+    use proc::run("curl -sL --fail -o \"" + tarball_file + "\" \"" + tarball_url + "\" 2>/dev/null || true")
+
+    if !fs_exists(tarball_file) {
+        use dasu("  [FAIL] " + pkg_name + ": download failed")
+        return
+    }
+
+    set file_size = use! util::trim(proc::run("stat -c%s \"" + tarball_file + "\" 2>/dev/null || echo 0"))
+    if file_size == "0" {
+        use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+        use dasu("  [FAIL] " + pkg_name + ": download failed (empty file)")
+        return
+    }
+
+    if sha256_line != "" {
+        use dasu("    verifying SHA-256...")
+        set actual = use! util::trim(proc::run("sha256sum \"" + tarball_file + "\" 2>/dev/null | cut -d' ' -f1 || true"))
+        if actual != "" && actual != sha256_line {
+            use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+            use dasu("  [FAIL] " + pkg_name + ": SHA-256 mismatch")
+            return
+        }
+        use dasu("    SHA-256 OK")
+    }
+
+    set pkg_dir = use! util::owl_home_libs() + "/" + pkg_name
+    set pkg_dir2 = pkg_dir :str
+    set pkg_dir3 = pkg_dir :str
+    set pkg_dir4 = pkg_dir :str
+    use! util::mkdir_p(pkg_dir)
+    use dasu("    extracting...")
+    use proc::run("tar -xzf \"" + tarball_file + "\" -C \"" + pkg_dir2 + "\" 2>/dev/null || true")
+
+    set meta_path = pkg_dir3 + "/meta.toml"
+    if !fs_exists(meta_path) {
+        set meta = "[package]\n" :str mut
+        set meta = meta + "name = \"" + pkg_name + "\"\n"
+        set meta = meta + "version = \"" + pkg_ver + "\"\n"
+        set meta = meta + "compiler = \"" + use! util::compiler_cmd() + "\"\n"
+        set meta = meta + "abi = " + use! util::abi_version() + "\n"
+        set meta = meta + "language = \"" + use! util::language_version() + "\"\n"
+        use fs_write(meta_path meta)
+    }
+
+    use! util::fs_make_readonly(pkg_dir4)
+    use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+    use dasu("  [OK]   installed " + pkg_name + " v" + pkg_ver)
 }

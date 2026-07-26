@@ -152,6 +152,11 @@ pub fn cmd_checkup: (args :&vec[str]) {
             if !use! check::checkup_loads() { set all_ok = false }
         }
 
+        if check_deps {
+            use dasu("")
+            if !use! lockfile::lockfile_validate() { set all_ok = false }
+        }
+
         if check_cache {
             use dasu("")
             if !use! check::checkup_cache() { set all_ok = false }
