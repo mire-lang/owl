@@ -201,6 +201,7 @@ pub fn get_dep_field_from: (toml_file :str dep_name :str field :str) :str {
 !/
 pub fn gather_latest_libs: () :str {
     set lib_dir = use! util::owl_home_libs()
+    set lib_display = use! util::owl_home_libs_display()
     if !fs_exists(lib_dir) { return "" }
     set entries = fs_list(lib_dir)
     set out = "" :str mut
@@ -213,7 +214,7 @@ pub fn gather_latest_libs: () :str {
             if fs_exists(toml) {
                 set ver = use! util::toml_get(toml "project" "version") :str mut
                 if ver == "" { set ver = "0.1.0" }
-                set line = name + " = { path = \"" + lib_dir + "/" + name + "\", version = \"" + ver + "\" }"
+                set line = name + " = { path = \"" + lib_display + "/" + name + "\", version = \"" + ver + "\" }"
                 if out == "" { set out = line } else { set out = out + "\n" + line }
             }
         }

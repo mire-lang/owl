@@ -100,6 +100,7 @@ pub fn cmd_registry_add: (url :str) {
                         }
 
                         use dasu("  [OK]    registry '" + name + "' added")
+                        use! util::fs_make_readonly(use! util::owl_home_registries() + "/" + name)
                     }
                 }
             }
@@ -183,7 +184,7 @@ pub fn cmd_registry_remove: (name :str) {
     return
 }
 
-pub fn cmd_registry_sync_one: (name :str, reg_path :str) {
+pub fn cmd_registry_sync_one: (reg_path :str) {
     set proceed = true :bool mut
     if !fs_exists(reg_path + "/registry.json") {
         use dasu("    [SKIP]  no registry.json")
@@ -268,7 +269,7 @@ pub fn cmd_registry_sync_one: (name :str, reg_path :str) {
                     use proc::run("printf '%s' \"$(date +%s)\" > \"" + reg_path + "/last_sync\" 2>/dev/null || true")
                     use proc::run("rm -rf \"" + tmp + "\" 2>/dev/null")
 
-                    use dasu("    [OK]    " + name + " synced")
+                    use dasu("    [OK]    synced " + reg_path)
                 }
             }
         }
@@ -285,7 +286,7 @@ pub fn cmd_registry_sync: () {
     }
 
     if proceed {
-        set out = use! util::trim(proc::run("ls -1 \"" + reg_dir + "\" 2>/dev/null || true"))
+        set out = use! util::trim(proc::run("ls -1 \"" + use! util::owl_home_registries() + "\" 2>/dev/null || true"))
         if out == "" {
             use dasu("  no registries configured")
             set proceed = false
@@ -294,23 +295,54 @@ pub fn cmd_registry_sync: () {
         if proceed {
             set entries = use! util::split(out "\n")
             set ni = len(entries)
-            set found = 0 :i64 mut
+            set enabled_count = 0 :i64 mut
+            set enabled_list = "" :str mut
             set i = 0 :i64 mut
             while i < ni {
                 set entry = use! util::trim(use! util::list_get(entries i))
                 if entry != "" {
-                    set reg_path = reg_dir + "/" + entry
-                    if fs_exists(reg_path + "/registry.json") && !fs_exists(reg_path + "/.disabled") {
-                        set found += 1
-                        use dasu("  syncing " + entry + "...")
-                        use! registry::cmd_registry_sync_one(entry reg_path)
+                    if fs_exists(use! util::owl_home_registries() + "/" + entry + "/registry.json") && !fs_exists(use! util::owl_home_registries() + "/" + entry + "/.disabled") {
+                        set enabled_count += 1
+                        if enabled_list == "" { set enabled_list = entry } else { set enabled_list = enabled_list + " " + entry }
                     }
                 }
                 set i += 1
             }
 
-            if found == 0 {
+            if enabled_count == 0 {
                 use dasu("  no enabled registries")
+            } else {
+                set do_all = true :bool mut
+                if enabled_count > 1 {
+                    use dasu("  found " + use! util::i64_to_string(enabled_count) + " enabled registries: " + enabled_list)
+                    use dasu("  sync all? (Y/n)")
+                    set answer = use! util::trim(proc::run("read ans < /dev/tty && echo $ans 2>/dev/null || echo y"))
+                    if answer == "n" || answer == "N" {
+                        set do_all = false
+                    }
+                }
+
+                set i = 0 :i64 mut
+                while i < ni {
+                    set entry = use! util::trim(use! util::list_get(entries i))
+                    if entry != "" {
+                        set sync_this = false :bool mut
+                        if do_all {
+                            set sync_this = true
+                        } else {
+                            use dasu("  sync " + entry + "? (Y/n)")
+                            set ans = use! util::trim(proc::run("read a < /dev/tty && echo $a 2>/dev/null || echo y"))
+                            if ans != "n" && ans != "N" { set sync_this = true }
+                        }
+                        if sync_this {
+                            set reg_path = use! util::owl_home_registries() + "/" + entry
+                            if fs_exists(reg_path + "/registry.json") && !fs_exists(reg_path + "/.disabled") {
+                                use! registry::cmd_registry_sync_one(reg_path)
+                            }
+                        }
+                    }
+                    set i += 1
+                }
             }
         }
     }

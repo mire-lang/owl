@@ -1,5 +1,6 @@
 load! /code/util
 load! /code/deps
+load! /code/lockfile
 
 pub fn regenerate_owl_toml: (fields :str) {
     if !use! util::has_project() {
@@ -58,7 +59,8 @@ pub fn cmd_checkup: (args :&vec[str]) {
         use dasu("")
         use dasu("  [HINT] usage: owl checkup --fix <field> [<field> ...]")
         use dasu("         fields: name, version, description, entry, profile,")
-        use dasu("                 opt-level, compiler, output, cache, sources, tests")
+        use dasu("                 opt-level, compiler, output, cache, sources, tests,")
+        use dasu("                 loads")
         use dasu("         example: owl checkup --fix name version entry profile")
         set do_fix = false
     }
@@ -194,7 +196,11 @@ pub fn cmd_checkup: (args :&vec[str]) {
 
         if do_fix {
             use dasu("")
-            use! check::regenerate_owl_toml(fix_fields)
+            if use! util::contains(fix_fields "loads") {
+                use! check::fix_loads()
+            } else {
+                use! check::regenerate_owl_toml(fix_fields)
+            }
         }
 
         if !toml_valid {
@@ -309,5 +315,76 @@ pub fn cmd_check: (args :&vec[str]) {
                 }
             }
         }
+    }
+}
+
+/! Scans .mire files for `load` statements, resolves each from
+   ~/.owl/libs, and injects missing entries into owl.toml.
+   Then regenerates the lockfile.
+!/
+pub fn fix_loads: () {
+    if !use! util::has_project() {
+        use dasu("  [FAIL] no owl.toml found")
+        return
+    }
+
+    set lib_dir = use! util::owl_home_libs()
+    set lib_display = use! util::owl_home_libs_display()
+    set scanned = use! util::scan_load_packages()
+    if scanned == "" {
+        use dasu("  [OK]   no load statements found in source files")
+        return
+    }
+
+    set c = fs::read("owl.toml")
+    set marker = "[dependencies]"
+    set sec_pos = strings::index(c marker)
+    if sec_pos < 0 {
+        use dasu("  [FAIL] [dependencies] section not found in owl.toml")
+        return
+    }
+
+    set injected = 0 :i64 mut
+    set scanned_len = len(scanned)
+    set pos = 0 :i64 mut
+    while pos < scanned_len {
+        set rem = strings::substr(scanned pos scanned_len - pos)
+        set nl = strings::index(rem "\n")
+        set end = 0 :i64 mut
+        if nl < 0 { set end = scanned_len } else { set end = pos + nl }
+        set line = strings::substr(scanned pos end - pos)
+        set pkg = use! util::trim(line)
+        set pos = end + 1
+        if pkg != "" {
+            set pkg2 = pkg
+            if !use! deps::dep_exists(pkg2) {
+                set toml_path = lib_dir + "/" + pkg + "/owl.toml"
+                if fs_exists(toml_path) {
+                    set ver = use! util::toml_get(toml_path "project" "version") :str mut
+                    if ver == "" { set ver = "0.1.0" }
+                    set dep_line = pkg + " = { path = \"" + lib_display + "/" + pkg + "\", version = \"" + ver + "\" }"
+
+                    set c2 = fs::read("owl.toml")
+                    set marker2 = "[dependencies]"
+                    set sec_pos2 = strings::index(c2 marker2)
+                    set insert_pos = sec_pos2 + len(marker2)
+                    set before = strings::substr(c2 0 insert_pos)
+                    set rem2 = len(c2) - insert_pos
+                    set after = strings::substr(c2 insert_pos rem2)
+                    set new_c = before + "\n" + dep_line + after
+                    use fs_write("owl.toml" new_c)
+                    use dasu("  [FIX]  injected '" + pkg + "' v" + ver + " into owl.toml")
+                    set injected += 1
+                } else {
+                    use dasu("  [SKIP] '" + pkg + "' not found in " + lib_display)
+                }
+            }
+        }
+    }
+
+    if injected > 0 {
+        use dasu("")
+        use dasu("  regenerating lockfile ...")
+        use! lockfile::generate_lockfile()
     }
 }

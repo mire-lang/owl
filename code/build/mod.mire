@@ -65,6 +65,7 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
             if is_run { set cmd = cmd + " run " + cli_file } else { set cmd = cmd + " build " + cli_file }
             if cli_profile == "release" { set cmd = cmd + " --release" } else { set cmd = cmd + " --debug" }
             if cli_opt != "" { set cmd = cmd + " -O " + cli_opt }
+            set cmd = cmd + " --lib-dir " + use! util::owl_home_libs_display()
             if extra_flags != "" { set cmd = cmd + extra_flags }
             set out = proc::run(cmd)
             use dasu(out)
@@ -99,6 +100,7 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
                 set build_cmd = build_cmd + " build " + file
                 if profile == "release" { set build_cmd = build_cmd + " --release" } else { set build_cmd = build_cmd + " --debug" }
                 set build_cmd = build_cmd + " -O " + opt
+                set build_cmd = build_cmd + " --lib-dir " + use! util::owl_home_libs_display()
                 if extra_flags != "" { set build_cmd = build_cmd + extra_flags }
                 use dasu("  [" + profile + " -O" + opt + "]")
 
@@ -183,7 +185,7 @@ pub fn cmd_debug: (args :&vec[str]) {
             use! util::error_line("OWL0002" "no file specified and no owl.toml found")
             return
         }
-        set cmd = mire + " debug " + cli_file + extra_flags
+        set cmd = mire + " debug " + cli_file + " --lib-dir " + use! util::owl_home_libs_display() + extra_flags
         set out = proc::run(cmd)
         use dasu(out)
         return
@@ -200,7 +202,7 @@ pub fn cmd_debug: (args :&vec[str]) {
         use! util::error_line("OWL0002" "input not found: " + file)
         return
     }
-    set cmd = mire + " debug " + file + extra_flags
+    set cmd = mire + " debug " + file + " --lib-dir " + use! util::owl_home_libs_display() + extra_flags
     set out = proc::run(cmd)
     use dasu(out)
 }
@@ -217,7 +219,7 @@ pub fn cmd_new: (name :str) {
         use! util::mkdir_p(name + "/tests")
         use! util::mkdir_p(name + "/docs")
 
-        set mire_path = use! util::owl_home_libs() + "/mire"
+        set mire_path = use! util::owl_home_libs_display() + "/mire"
         set auto = use! deps::gather_latest_libs()
         set deps_section = "[dependencies]\nmire = { path = \"" + mire_path + "\", version = \"0.1.0\" }\n"
         set auto_section = "" :str mut
