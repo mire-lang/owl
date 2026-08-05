@@ -21,6 +21,7 @@ load! upgrade
 
 extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
 extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
+extern fn exit: (code :i64) lib "c"
 
 fn expand_short_flags: (args :&vec[str]) :vec[str] {
     set n = rt_vec_len(args)
@@ -65,20 +66,20 @@ fn find_cmd_index: (args :&vec[str]) :i64 {
     return idx
 }
 
-fn collect_test_flags: (args :&vec[str]) :str {
+fn collect_test_args: (args :&vec[str]) :vec[str] {
     set n = rt_vec_len(args)
     set i = 2 :i64 mut
-    set flags = "" :str mut
+    set result = ["test"] :vec[str] mut
     while i < n {
         set a = rt_vec_get_str(args i)
         if use! util::startswith(a "-") {
-            set flags = flags + " " + a
+            set result = vec::push::str(result a)
         } else {
-            set flags = flags + " \"" + a + "\""
+            set result = vec::push::str(result strings::copy(a))
         }
         set i += 1
     }
-    return flags
+    return result
 }
 
 pub fn main: () {
@@ -103,7 +104,8 @@ pub fn main: () {
         return
     }
     if cmd == "-T" || cmd == "test" {
-        set out = proc::run("mire test " + collect_test_flags(args))
+        set test_args = collect_test_args(args)
+        set out = proc::run::output("mire" test_args)
         use dasu(out)
         return
     }
@@ -164,7 +166,7 @@ pub fn main: () {
         set i_ver = use! args::get_positional(args 1)
         set ec = use! install::cmd_install(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver i_lock) :u8
         set ec_i64 = ec :i64
-        if ec_i64 != 0 { proc_exit(ec_i64) }
+        if ec_i64 != 0 { exit(ec_i64) }
         return
     }
     if cmd == "load" || cmd == "-L" {
@@ -202,7 +204,7 @@ pub fn main: () {
     }
     if cmd == "upgrade" {
         set ec = use! upgrade::cmd_upgrade(args) :i64
-        if ec != 0 { proc_exit(ec) }
+        if ec != 0 { exit(ec) }
         return
     }
 

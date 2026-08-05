@@ -6,11 +6,11 @@ pub fn main: () {
     use dasu("--- test: owl new ---")
     testlib.assert_true(true)
 
-    set ts = strings.trim(proc::run("date +%s%N"))
+    set ts = strings.trim(proc::run::shell("date +%s%N"))
     set test_base = "/tmp/owl_tool_test_" + ts
     set proj_dir = test_base + "/myapp"
     set cmd_new = "mkdir -p " + test_base + " && cd " + test_base + " && ~/.local/bin/owl new myapp 2>&1"
-    proc::run(cmd_new)
+    proc::run::shell(cmd_new)
 
     set f1 = proj_dir + "/owl.toml"
     set f2 = proj_dir + "/code/main.mire"
@@ -19,25 +19,25 @@ pub fn main: () {
     set all_exist = true :bool mut
 
     set check1 = "test -f " + f1 + " && echo 'yes' || echo 'no'"
-    if strings.trim(proc::run(check1)) != "yes" {
+    if strings.trim(proc::run::shell(check1)) != "yes" {
         set all_exist = false
         use dasu("  MISSING: " + f1)
     }
 
     set check2 = "test -f " + f2 + " && echo 'yes' || echo 'no'"
-    if strings.trim(proc::run(check2)) != "yes" {
+    if strings.trim(proc::run::shell(check2)) != "yes" {
         set all_exist = false
         use dasu("  MISSING: " + f2)
     }
 
     set check3 = "test -f " + f3 + " && echo 'yes' || echo 'no'"
-    if strings.trim(proc::run(check3)) != "yes" {
+    if strings.trim(proc::run::shell(check3)) != "yes" {
         set all_exist = false
         use dasu("  MISSING: " + f3)
     }
 
     set dir_check = "test -d " + proj_dir + "/code && echo 'yes' || echo 'no'"
-    if strings.trim(proc::run(dir_check)) != "yes" {
+    if strings.trim(proc::run::shell(dir_check)) != "yes" {
         set all_exist = false
         use dasu("  MISSING dir: " + proj_dir + "/code")
     }
@@ -48,6 +48,6 @@ pub fn main: () {
         use dasu("  owl new structure: FAIL")
     }
 
-    proc::run("rm -rf " + test_base)
+    proc::run::shell("rm -rf " + test_base)
     use dasu("test_owl_new complete")
 }

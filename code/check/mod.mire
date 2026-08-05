@@ -30,7 +30,7 @@ pub fn regenerate_owl_toml: (fields :str) {
         set cache = use! util::toml_get("owl.toml" "paths" "cache") :str mut
         if cache == "" && use! util::contains(fields "cache") { set cache = "bin/.cache" }
 
-        use fs_write("owl.toml" "[project]\nname = \"" + n + "\"\nversion = \"" + v + "\"\ndescription = \"" + d + "\"\nentry = \"" + e + "\"\n\n[build]\ncompiler = \"" + comp + "\"\nprofile = \"" + p + "\"\nopt-level = " + o + "\n\n[paths]\nsources = \"" + src + "\"\ntests = \"" + t + "\"\noutput = \"" + out + "\"\ncache = \"" + cache + "\"\n\n[dependencies]\n")
+        use fs::write("owl.toml" "[project]\nname = \"" + n + "\"\nversion = \"" + v + "\"\ndescription = \"" + d + "\"\nentry = \"" + e + "\"\n\n[build]\ncompiler = \"" + comp + "\"\nprofile = \"" + p + "\"\nopt-level = " + o + "\n\n[paths]\nsources = \"" + src + "\"\ntests = \"" + t + "\"\noutput = \"" + out + "\"\ncache = \"" + cache + "\"\n\n[dependencies]\n")
         use dasu("  [FIX]  owl.toml: regenerated with defaults for: " + fields)
     }
 }
@@ -198,7 +198,7 @@ pub fn cmd_checkup: (args :&vec[str]) {
 /! Check compiler installation !/
 fn checkup_compiler: () :bool {
     set ok = true :bool mut
-    set compiler_out = use! util::trim(proc::run("mire --version 2>&1 || true"))
+    set compiler_out = use! util::trim(proc::run::output("mire" ["--version"]))
     if compiler_out == "" {
         use dasu("  [FAIL] compiler: mire not found")
         use dasu("         install mire (Avenys) to compile projects")
@@ -243,7 +243,7 @@ fn checkup_toml: () :bool {
         use dasu("  [FAIL] [project].entry: missing")
         set ok = false
     } else {
-        if fs_exists(entry) {
+        if fs::exists(entry) {
             use dasu("  [OK]   [project].entry: " + entry)
         } else {
             use dasu("  [FAIL] [project].entry: " + entry + " (not found)")
@@ -295,7 +295,7 @@ fn checkup_toml: () :bool {
         use dasu("  [FAIL] [paths].sources: missing")
         set ok = false
     } else {
-        if fs_exists(sources) {
+        if fs::exists(sources) {
             use dasu("  [OK]   [paths].sources: " + sources)
         } else {
             use dasu("  [WARN] [paths].sources: " + sources + " (not found)")
@@ -307,7 +307,7 @@ fn checkup_toml: () :bool {
         use dasu("  [FAIL] [paths].tests: missing")
         set ok = false
     } else {
-        if fs_exists(tests) {
+        if fs::exists(tests) {
             use dasu("  [OK]   [paths].tests: " + tests)
         } else {
             use dasu("  [WARN] [paths].tests: " + tests + " (not found)")
@@ -355,7 +355,7 @@ fn checkup_deps: () :bool {
                 set dp_check = dep_path :str
                 set dp_msg = dep_path :str
                 set dp_find = dep_path :str
-                if !fs_exists(dp_check) {
+                if !fs::exists(dp_check) {
                     use dasu("  [FAIL] deps/" + pkg + ": path not found (" + dp_msg + ")")
                     set ok = false
                 } else {
@@ -363,7 +363,7 @@ fn checkup_deps: () :bool {
                     set toml_msg = toml_check :str
                     set toml_name = toml_check :str
                     set toml_ver = toml_check :str
-                    if !fs_exists(toml_check) {
+                    if !fs::exists(toml_check) {
                         use dasu("  [FAIL] deps/" + pkg + ": no owl.toml at " + dp_msg)
                         set ok = false
                     } else {
@@ -372,8 +372,15 @@ fn checkup_deps: () :bool {
                             use dasu("  [FAIL] deps/" + pkg + ": owl.toml has no [project].name")
                             set ok = false
                         } else {
-                            set mire_files = use! util::trim(proc::run("find '" + dp_find + "' -maxdepth 1 -name '*.mire' 2>/dev/null | wc -l"))
-                            if mire_files == "0" {
+                            set find_args = [] :vec[str] mut
+                            set find_args = vec::push::str(find_args strings::copy(dp_find))
+                            set find_args = vec::push::str(find_args "-maxdepth")
+                            set find_args = vec::push::str(find_args "1")
+                            set find_args = vec::push::str(find_args "-name")
+                            set find_args = vec::push::str(find_args "*.mire")
+                            set mire_files = use! util::trim(proc::run::output("find" find_args))
+                            set mire_count = len(use! util::split(mire_files "\n"))
+                            if mire_count == 0 {
                                 use dasu("  [FAIL] deps/" + pkg + ": no .mire files (cannot be loaded)")
                                 set ok = false
                             } else {
@@ -426,9 +433,9 @@ fn checkup_loads: () :bool {
         if pkg != "" {
             set total += 1
             set pkg_dir = lib_dir + "/" + pkg
-            if fs_exists(pkg_dir) {
+            if fs::exists(pkg_dir) {
                 set toml_path = pkg_dir + "/owl.toml"
-                if fs_exists(toml_path) {
+                if fs::exists(toml_path) {
                     use dasu("  [OK]   loads/" + pkg + " -> " + pkg_dir)
                     set resolved += 1
                 } else {
@@ -458,41 +465,62 @@ fn checkup_cache: () :bool {
     set cache_dir = use! util::toml_get("owl.toml" "paths" "cache") :str mut
     if cache_dir == "" { set cache_dir = "bin/.cache" }
 
-    if !fs_exists(cache_dir) {
+    if !fs::exists(cache_dir) {
         use dasu("  [WARN] cache: " + cache_dir + " not found (will be created on first build)")
         return true
     }
 
-    set file_count = use! util::trim(proc::run("find '" + cache_dir + "' -type f 2>/dev/null | wc -l"))
+    set find_args1 = [] :vec[str] mut
+    set find_args1 = vec::push::str(find_args1 strings::copy(cache_dir))
+    set find_args1 = vec::push::str(find_args1 "-type")
+    set find_args1 = vec::push::str(find_args1 "f")
+    set file_count = len(use! util::split(use! util::trim(proc::run::output("find" find_args1)) "\n"))
 
-    if file_count == "0" {
+    if file_count == 0 {
         use dasu("  [WARN] cache: " + cache_dir + " is empty")
         return true
     }
 
-    set empty_count = use! util::trim(proc::run("find '" + cache_dir + "' -type f -empty 2>/dev/null | wc -l"))
+    set find_args2 = [] :vec[str] mut
+    set find_args2 = vec::push::str(find_args2 strings::copy(cache_dir))
+    set find_args2 = vec::push::str(find_args2 "-type")
+    set find_args2 = vec::push::str(find_args2 "f")
+    set find_args2 = vec::push::str(find_args2 "-empty")
+    set empty_count = len(use! util::split(use! util::trim(proc::run::output("find" find_args2)) "\n"))
 
-    if empty_count != "0" {
-        use dasu("  [FAIL] cache: " + empty_count + " empty/corrupt files found")
+    if empty_count != 0 {
+        use dasu("  [FAIL] cache: " + use! util::i64_to_string(empty_count) + " empty/corrupt files found")
         set ok = false
     }
 
     set sources_dir = use! util::toml_get("owl.toml" "paths" "sources") :str mut
     if sources_dir == "" { set sources_dir = "code" }
 
-    if fs_exists(sources_dir) {
-        set stale_count = use! util::trim(proc::run("find '" + sources_dir + "' -name '*.mire' -newer '" + cache_dir + "' 2>/dev/null | wc -l"))
+    if fs::exists(sources_dir) {
+        set find_args3 = [] :vec[str] mut
+        set find_args3 = vec::push::str(find_args3 strings::copy(sources_dir))
+        set find_args3 = vec::push::str(find_args3 "-name")
+        set find_args3 = vec::push::str(find_args3 "*.mire")
+        set find_args3 = vec::push::str(find_args3 "-newer")
+        set find_args3 = vec::push::str(find_args3 strings::copy(cache_dir))
+        set stale_count = len(use! util::split(use! util::trim(proc::run::output("find" find_args3)) "\n"))
 
-        if stale_count != "0" {
-            use dasu("  [WARN] cache: stale (" + stale_count + " source files modified after cache)")
+        if stale_count != 0 {
+            use dasu("  [WARN] cache: stale (" + use! util::i64_to_string(stale_count) + " source files modified after cache)")
             set ok = false
         } else {
-            set size_out = use! util::trim(proc::run("du -sh '" + cache_dir + "' 2>/dev/null | cut -f1")) :str mut
+            set du_args = [] :vec[str] mut
+            set du_args = vec::push::str(du_args "-sh")
+            set du_args = vec::push::str(du_args strings::copy(cache_dir))
+            set size_out = use! util::trim(proc::run::output("du" du_args)) :str mut
             if size_out == "" { set size_out = "?" }
-            use dasu("  [OK]   cache: " + file_count + " files (" + size_out + "), up to date")
+            set size_val = use! util::split(size_out "\t")
+            set size_display = use! util::list_get(size_val 0) :str mut
+            if size_display == "" { set size_display = "?" }
+            use dasu("  [OK]   cache: " + use! util::i64_to_string(file_count) + " files (" + size_display + "), up to date")
         }
     } else {
-        use dasu("  [OK]   cache: " + file_count + " files")
+        use dasu("  [OK]   cache: " + use! util::i64_to_string(file_count) + " files")
     }
 
     return ok
@@ -531,11 +559,11 @@ fn checkup_fix_deps: () {
         if pkg != "" {
             set pkg2 = pkg
             set dep_path = use! deps::get_dep_field(pkg2 "path")
-            if dep_path == "" || !fs_exists(dep_path) {
+            if dep_path == "" || !fs::exists(dep_path) {
                 set lib_path = lib_dir + "/" + pkg
-                if fs_exists(lib_path) {
+                if fs::exists(lib_path) {
                     set toml_path = lib_path + "/owl.toml"
-                    if fs_exists(toml_path) {
+                    if fs::exists(toml_path) {
                         set c = fs::read("owl.toml")
                         set dep_search = pkg + " = {"
                         set dep_pos = strings::index(c dep_search)
@@ -561,7 +589,7 @@ fn checkup_fix_deps: () {
                                     set before = strings::substr(c 0 dep_pos)
                                     set after = strings::substr(c dep_pos + line_end 9999)
                                     set new_c = before + new_line + after
-                                    use fs_write("owl.toml" new_c)
+                                    use fs::write("owl.toml" new_c)
                                     use dasu("  [FIX]  deps/" + pkg + ": path " + old_path + " -> " + new_path)
                                     set fixed += 1
                                 }
@@ -589,7 +617,7 @@ fn checkup_fix_cache: () {
     set cache_dir = use! util::toml_get("owl.toml" "paths" "cache") :str mut
     if cache_dir == "" { set cache_dir = "bin/.cache" }
 
-    if fs_exists(cache_dir) {
+    if fs::exists(cache_dir) {
         use dasu("  [FIX]  cleaning cache: " + cache_dir)
         use! util::rm_RF(cache_dir)
         use dasu("  [OK]   cache cleaned")
@@ -629,7 +657,7 @@ pub fn cmd_check: (args :&vec[str]) {
                 if path_val == "" {
                     use dasu("  [FAIL]  " + key_display + ": no path specified")
                 } else {
-                    if fs_exists(path_val) {
+                    if fs::exists(path_val) {
                         set msg = "  [OK]    " + key_display :str mut
                         if ver_val != "" {
                             set msg = msg + "  ->  " + path_val + "  (v" + ver_val + ")"
@@ -667,9 +695,9 @@ pub fn cmd_check: (args :&vec[str]) {
                 if key2 != "" {
                     set k_disp = key2 :str
                     set pv = use! deps::get_dep_field(key2 "path")
-                    if pv != "" && fs_exists(pv) {
+                    if pv != "" && fs::exists(pv) {
                         set mt = pv + "/meta.toml"
-                        if fs_exists(mt) {
+                        if fs::exists(mt) {
                             set mt_c = mt :str
                             set mt_a = mt :str
                             set mt_l = mt :str
@@ -736,7 +764,7 @@ pub fn fix_loads: () {
             set pkg2 = pkg
             if !use! deps::dep_exists(pkg2) {
                 set toml_path = lib_dir + "/" + pkg + "/owl.toml"
-                if fs_exists(toml_path) {
+                if fs::exists(toml_path) {
                     set ver = use! util::toml_get(toml_path "project" "version") :str mut
                     if ver == "" { set ver = "0.1.0" }
                     set dep_line = pkg + " = { path = \"" + lib_display + "/" + pkg + "\", version = \"" + ver + "\" }"
@@ -749,7 +777,7 @@ pub fn fix_loads: () {
                     set rem2 = len(c2) - insert_pos
                     set after = strings::substr(c2 insert_pos rem2)
                     set new_c = before + "\n" + dep_line + after
-                    use fs_write("owl.toml" new_c)
+                    use fs::write("owl.toml" new_c)
                     use dasu("  [FIX]  injected '" + pkg + "' v" + ver + " into owl.toml")
                     set injected += 1
                 } else {

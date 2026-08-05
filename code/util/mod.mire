@@ -10,10 +10,10 @@ fn toml_extract_val: (content :&str, val_start :i64) :str {
     set raw_val = after_key :str mut
     if nl_pos >= 0 { set raw_val = strings::substr(after_key 0 nl_pos) }
     set trimmed = strings::trim(raw_val)
-    if strings::startswith(trimmed "\"") && strings::endswith(trimmed "\"") {
-        set no_start = strings::replace(trimmed "\"" "")
-        if strings::endswith(no_start "\"") {
-            set val = strings::replace(no_start "\"" "")
+    if strings::starts::with(trimmed "\"") && strings::ends::with(trimmed "\"") {
+        set no_start = strings::replace::all(trimmed "\"" "")
+        if strings::ends::with(no_start "\"") {
+            set val = strings::replace::all(no_start "\"" "")
         } else {
             set val = no_start
         }
@@ -25,7 +25,7 @@ fn toml_extract_val: (content :&str, val_start :i64) :str {
 
 pub fn toml_get: (file :str section :str key :str) :str {
     set val = "" :str mut
-    if fs_exists(file) {
+    if fs::exists(file) {
         set content = fs::read(file)
         set section_marker = "[" + section + "]"
         set section_start = strings::index(content section_marker)
@@ -72,21 +72,35 @@ pub fn toml_get_from_string: (content :str section :str key :str) :str {
 
 /! Filesystem operations !/
 pub fn mkdir_p: (path :str) {
-    use proc::run("mkdir -p \"" + path + "\"")
+    set args = [] :vec[str] mut
+    set args = vec::push::str(args "-p")
+    set args = vec::push::str(args strings::copy(path))
+    use proc::run::output("mkdir" args)
 }
 
 pub fn rm_RF: (path :str) {
-    use proc::run("rm -rf \"" + path + "\"")
+    set args = [] :vec[str] mut
+    set args = vec::push::str(args "-rf")
+    set args = vec::push::str(args strings::copy(path))
+    use proc::run::output("rm" args)
 }
 
 pub fn fs_make_readonly: (path :str) {
-    if !fs_exists(path) { return }
-    use proc::run("chmod -R a-w \"" + path + "\" 2>/dev/null || true")
+    if !fs::exists(path) { return }
+    set args = [] :vec[str] mut
+    set args = vec::push::str(args "-R")
+    set args = vec::push::str(args "a-w")
+    set args = vec::push::str(args strings::copy(path))
+    use proc::run::output("chmod" args)
 }
 
 pub fn fs_make_writable: (path :str) {
-    if !fs_exists(path) { return }
-    use proc::run("chmod -R u+w \"" + path + "\" 2>/dev/null || true")
+    if !fs::exists(path) { return }
+    set args = [] :vec[str] mut
+    set args = vec::push::str(args "-R")
+    set args = vec::push::str(args "u+w")
+    set args = vec::push::str(args strings::copy(path))
+    use proc::run::output("chmod" args)
 }
 
 /! Error reporting !/
@@ -136,11 +150,11 @@ pub fn json_get_int_str: (content :&str key :str) :str {
 /! Paths and environment !/
 pub fn owl_home: () :str {
     set path = "" :str mut
-    set home = env::get("HOME")
+    set home = env::var("HOME")
     if home == "" {
         set path = "/tmp/.owl"
     } else {
-        set path = home + "/.owl"
+        set path = strings::concat(home "/.owl")
     }
     return path
 }
@@ -175,12 +189,12 @@ pub fn owl_home_keys: () :str {
 
 /! Version and compiler info !/
 pub fn owl_version: () :str {
-    return "0.29.0"
+    return "0.30.0"
 }
 
 pub fn compiler_version: () :str {
     set ver = "" :str mut
-    set v = strings::trim(proc::run("mire --version"))
+    set v = use! util::trim(proc::run::output("mire" ["--version"]))
     if v != "" {
         set ver = v
     } else {
@@ -211,7 +225,7 @@ pub fn language_version: () :str {
 
 /! Project config !/
 pub fn has_project: () :bool {
-    return fs_exists("owl.toml")
+    return fs::exists("owl.toml")
 }
 
 pub fn compiler_cmd: () :str {
@@ -220,8 +234,45 @@ pub fn compiler_cmd: () :str {
         set c = use! util::toml_get("owl.toml" "build" "compiler")
         if c != "" { set cmd = c }
     }
-    if cmd == "" { set cmd = "mire" }
+    if cmd == "" {
+        /! No explicit compiler: resolve a known-good absolute path
+           instead of relying on a bare `mire` found through PATH.
+           A fake `mire` earlier in PATH would otherwise be executed
+           on every build. Prefer the real install locations. !/
+        set home = env::var("HOME")
+        set c1 = strings::concat(home "/.cargo/bin/mire")
+        set c2 = strings::concat(home "/.local/bin/mire")
+        if fs::exists(c1) {
+            set cmd = c1
+        } else {
+            if fs::exists(c2) {
+                set cmd = c2
+            } else {
+                set cmd = "mire"
+            }
+        }
+    } else {
+        /! A configured compiler must be an absolute path. The only
+           bare name accepted is the canonical "mire"; any other bare
+           name is resolved through PATH and is a hijack vector.
+           Note: the use! call is split out of the boolean expression
+           because use! greedily consumes trailing `&&` operands. !/
+        set is_abs = use! util::startswith(cmd "/")
+        if !is_abs && cmd != "mire" {
+            use! util::error_line("OWL0004" "unsafe compiler '" + cmd + "' in owl.toml: use an absolute path or \"mire\"")
+            exit(1)
+        }    }
     return cmd
+}
+
+/! Runs the compiler with argv (no shell). Returns captured output.
+   This is the single choke point through which owl invokes the
+   compiler, so hardening compiler_cmd() covers every build path.
+   argv[0] (the compiler) is supplied by compiler_cmd(); the caller
+   passes only the compiler arguments. !/
+pub fn run_compiler: (args :vec[str]) :str {
+    set mire = use! util::compiler_cmd()
+    return proc::run::output(mire args)
 }
 
 pub fn config_required: (section :str key :str) :str {
@@ -236,7 +287,7 @@ pub fn config_required: (section :str key :str) :str {
             use! util::error_line("OWL0003" "missing [" + section + "]." + key + " in owl.toml")
             use dasu("")
             use dasu("  Run 'owl checkup --fix' to regenerate owl.toml with defaults")
-            proc_exit(1)
+            exit(1)
         }
     }
     return val
@@ -247,21 +298,42 @@ extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
 extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
 extern fn rt_string_to_i64: (value :str) :i64 lib "c"
 extern fn rt_i64_to_string: (value :i64) :str lib "c"
+extern fn exit: (code :i64) lib "c"
 
 pub fn trim: (s :&str) :str { return strings::trim(s) }
 pub fn split: (s :&str, sep :&str) :vec[str] { return strings::split(s sep) }
 pub fn contains: (s :&str, sub :&str) :bool { return rt_strings_contains(s sub) }
-pub fn startswith: (s :&str, prefix :&str) :bool { return strings::startswith(s prefix) }
-pub fn endswith: (s :&str, suffix :&str) :bool { return strings::endswith(s suffix) }
+pub fn startswith: (s :&str, prefix :&str) :bool { return strings::starts::with(s prefix) }
+pub fn endswith: (s :&str, suffix :&str) :bool { return strings::ends::with(s suffix) }
 pub fn substr: (s :&str, start :i64, len :i64) :str { return strings::substr(s start len) }
-pub fn replace: (s :&str, old :&str, new :&str) :str { return strings::replace(s old new) }
-pub fn list_get: (list :&vec[str], index :i64) :str { return lists::get::str(list index) }
+pub fn replace: (s :&str, old :&str, new :&str) :str { return strings::replace::all(s old new) }
+pub fn list_get: (list :&vec[str], index :i64) :str { return vec::get::str(list index) }
+
+/! Returns the hex SHA-256 of a file by running `sha256sum <path>` with an
+   argv vector (path is never interpolated into a shell command line).
+   Returns "" on any failure.
+!/
+pub fn sha256sum_hex: (path :&str) :str {
+    set args = [] :vec[str] mut
+    set args = vec::push::str(args strings::copy(path))
+    set raw = proc::run::output("sha256sum" args)
+    set parts = strings::split(raw " ")
+    set first = use! util::trim(use! util::list_get(parts 0))
+    if len(first) == 64 { return first }
+    return ""
+}
 
 /! Returns true if any .mire under code/ or tests/ contains a
    `load <dep>` statement. Used by `owl deps --prune`.
 !/
 pub fn grep_load: (dep :str) :bool {
-    set out = proc::run("grep -rl \"load " + dep + "\" code tests 2>/dev/null")
+    set pattern = "load " + dep :str
+    set args = [] :vec[str] mut
+    set args = vec::push::str(args "-rl")
+    set args = vec::push::str(args strings::copy(pattern))
+    set args = vec::push::str(args "code")
+    set args = vec::push::str(args "tests")
+    set out = proc::run::output("grep" args)
     return use! util::trim(out) != ""
 }
 
@@ -270,8 +342,29 @@ pub fn grep_load: (dep :str) :bool {
    Only top-level names are returned (first segment before ::).
 !/
 pub fn scan_load_packages: () :str {
-    set out = proc::run("grep -roh 'load [a-zA-Z][a-zA-Z0-9_]*' code tests 2>/dev/null | sed 's/load //' | sort -u")
-    return use! util::trim(out)
+    set grep_args = [] :vec[str] mut
+    set grep_args = vec::push::str(grep_args "-roh")
+    set grep_args = vec::push::str(grep_args "load [a-zA-Z][a-zA-Z0-9_]*")
+    set grep_args = vec::push::str(grep_args "code")
+    set grep_args = vec::push::str(grep_args "tests")
+    set raw = proc::run::output("grep" grep_args)
+    set lines = use! util::split(raw "\n")
+    set n = len(lines)
+    set result = "" :str mut
+    set i = 0 :i64 mut
+    while i < n {
+        set line = use! util::trim(use! util::list_get(lines i))
+        if use! util::startswith(line "load ") {
+                        set pkg = strings::substr(line 5 9999) :str mut
+            if pkg != "" {
+                set dot = strings::index(pkg "::")
+                if dot >= 0 { set pkg = strings::substr(pkg 0 dot) }
+                if result == "" { set result = pkg } else { set result = result + "\n" + pkg }
+            }
+        }
+        set i += 1
+    }
+    return result
 }
 
 pub fn string_to_i64: (s :str) :i64 { return rt_string_to_i64(s) }

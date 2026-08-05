@@ -122,7 +122,7 @@ pub fn count_deps: () :i64 {
 
 pub fn get_dep_names_from: (toml_file :str) :str {
     set result = "" :str mut
-    if fs_exists(toml_file) {
+    if fs::exists(toml_file) {
         set content = fs::read(toml_file)
         set marker = "[dependencies]"
         set sec_start = strings::index(content marker)
@@ -160,7 +160,7 @@ pub fn get_dep_names_from: (toml_file :str) :str {
 
 pub fn get_dep_field_from: (toml_file :str dep_name :str field :str) :str {
     set raw = "" :str mut
-    if fs_exists(toml_file) {
+    if fs::exists(toml_file) {
         set content = fs::read(toml_file)
         set marker = "[dependencies]"
         set sec_start = strings::index(content marker)
@@ -202,16 +202,17 @@ pub fn get_dep_field_from: (toml_file :str dep_name :str field :str) :str {
 pub fn gather_latest_libs: () :str {
     set lib_dir = use! util::owl_home_libs()
     set lib_display = use! util::owl_home_libs_display()
-    if !fs_exists(lib_dir) { return "" }
-    set entries = fs_list(lib_dir)
+    if !fs::exists(lib_dir) { return "" }
+    set raw = proc::run::output("ls" ["-1" lib_dir])
+    set entries = strings::split(raw "\n")
     set out = "" :str mut
     set i = 0 :i64 mut
     set n = len(entries)
     while i < n {
         set name = rt_vec_get_str(entries i)
-        if name != "mire" {
+        if name != "mire" && name != "" {
             set toml = lib_dir + "/" + name + "/owl.toml"
-            if fs_exists(toml) {
+            if fs::exists(toml) {
                 set ver = use! util::toml_get(toml "project" "version") :str mut
                 if ver == "" { set ver = "0.1.0" }
                 set line = name + " = { path = \"" + lib_display + "/" + name + "\", version = \"" + ver + "\" }"
@@ -269,7 +270,7 @@ pub fn prune_unused: () :bool {
     set next_sec = strings::index(after "\n[")
     if next_sec < 0 { set after = "" } else { set after = strings::substr(after next_sec len(after) - next_sec) }
     set new_c = before + "\n" + kept + after
-    use fs_write("owl.toml" new_c)
+    use fs::write("owl.toml" new_c)
     return use! lockfile::generate_lockfile()
 }
 

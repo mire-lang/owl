@@ -6,15 +6,15 @@ pub fn main: () {
     use dasu("--- test: owl check ---")
     testlib.assert_true(true)
 
-    set ts = strings.trim(proc::run("date +%s%N"))
+    set ts = strings.trim(proc::run::shell("date +%s%N"))
     set test_base = "/tmp/owl_check_test_" + ts
     set proj_dir = test_base + "/testcheck"
 
-    proc::run("mkdir -p " + test_base)
-    proc::run("cd " + test_base + " && ~/.local/bin/owl new testcheck 2>&1")
+    proc::run::shell("mkdir -p " + test_base)
+    proc::run::shell("cd " + test_base + " && ~/.local/bin/owl new testcheck 2>&1")
 
     set check_cmd = "cd " + proj_dir + " && ~/.local/bin/owl check 2>&1"
-    set check_out = proc::run(check_cmd)
+    set check_out = proc::run::shell(check_cmd)
 
     set has_pass = strings.contains(check_out "[OK]")
     if has_pass {
@@ -24,6 +24,6 @@ pub fn main: () {
         use dasu(check_out)
     }
 
-    proc::run("rm -rf " + test_base)
+    proc::run::shell("rm -rf " + test_base)
     use dasu("test_owl_check complete")
 }
