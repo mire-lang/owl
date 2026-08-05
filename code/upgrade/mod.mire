@@ -66,7 +66,11 @@ pub fn cmd_upgrade: (args :&vec[str]) :i64 {
     set ln_args = vec::push::str(ln_args tmp_dir + "/../kioto")
     use proc::run::output("ln" ln_args)
 
-    set build_out = use! util::trim(proc::run::shell("cd " + tmp_dir + " && mire build code/main.mire --release 2>&1"))
+    set build_args = [] :vec[str] mut
+    set build_args = vec::push::str(build_args "build")
+    set build_args = vec::push::str(build_args "code/main.mire")
+    set build_args = vec::push::str(build_args "--release")
+    set build_out = use! util::trim(proc::run::output_cwd("mire" build_args strings::copy(tmp_dir) true))
     if !fs::exists(new_bin) {
         use dasu("error: build failed")
         use dasu(build_out)

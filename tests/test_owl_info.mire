@@ -6,18 +6,30 @@ pub fn main: () {
     use dasu("--- test: owl info ---")
     testlib.assert_true(true)
 
-    set ts = strings.trim(proc::run::shell("date +%s%N"))
-    set test_base = "/tmp/owl_info_test_" + ts
-    set proj_dir = test_base + "/testinfo"
+    set da = [] :vec[str] mut
+    set da = vec::push::str(da "+%s%N")
+    set ts = strings::trim(proc::run::output("date" da))
+    set test_base = strings::concat("/tmp/owl_info_test_", ts)
+    set proj_dir = strings::concat(test_base, strings::copy("/testinfo"))
+    set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl"))
 
-    proc::run::shell("mkdir -p " + test_base)
-    proc::run::shell("cd " + test_base + " && ~/.local/bin/owl new testinfo 2>&1")
+    set mk = [] :vec[str] mut
+    set mk = vec::push::str(mk "-p")
+    set mk = vec::push::str(mk strings::copy(test_base))
+    use proc::run::output("mkdir" mk)
 
-    set info_cmd = "cd " + proj_dir + " && ~/.local/bin/owl info 2>&1"
-    set info_out = proc::run::shell(info_cmd)
+    set na = [] :vec[str] mut
+    set na = vec::push::str(na "new")
+    set na = vec::push::str(na "testinfo")
+    set new_out = proc::run::output_cwd(owl_bin na test_base true)
+    use dasu(new_out)
 
-    set has_version = strings.contains(info_out "owl:")
-    set has_compiler = strings.contains(info_out "Compiler:")
+    set ia = [] :vec[str] mut
+    set ia = vec::push::str(ia "info")
+    set info_out = proc::run::output_cwd(owl_bin ia proj_dir true)
+
+    set has_version = strings::contains(info_out "owl:")
+    set has_compiler = strings::contains(info_out "Compiler:")
 
     if has_version && has_compiler {
         use dasu("  owl info shows version and compiler: ok")
@@ -26,10 +38,12 @@ pub fn main: () {
         use dasu(info_out)
     }
 
-    set info_json_cmd = "cd " + proj_dir + " && ~/.local/bin/owl info --json 2>&1"
-    set info_json = proc::run::shell(info_json_cmd)
+    set ij = [] :vec[str] mut
+    set ij = vec::push::str(ij "info")
+    set ij = vec::push::str(ij "--json")
+    set info_json = proc::run::output_cwd(owl_bin ij proj_dir true)
 
-    set json_has_name = strings.contains(info_json "\"name\"")
+    set json_has_name = strings::contains(info_json "\"name\"")
     if json_has_name {
         use dasu("  owl info --json is valid: ok")
     } else {
@@ -37,6 +51,9 @@ pub fn main: () {
         use dasu(info_json)
     }
 
-    proc::run::shell("rm -rf " + test_base)
+    set rm = [] :vec[str] mut
+    set rm = vec::push::str(rm "-rf")
+    set rm = vec::push::str(rm strings::copy(test_base))
+    use proc::run::output("rm" rm)
     use dasu("test_owl_info complete")
 }

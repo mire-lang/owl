@@ -367,7 +367,24 @@ pub fn cmd_target_install: (target_val :str named :str) {
             if !fs::exists(bin_path) {
                 use dasu("  error: no build output at " + bin_path + " -- run owl build first")
             } else {
-                use proc::run::shell("cp \"" + bin_path + "\"/* \"" + use! util::owl_home() + "/bin/\" 2>/dev/null || true")
+                set dest_bin = use! util::owl_home() + "/bin"
+                set ls_args = [] :vec[str] mut
+                set ls_args = vec::push::str(ls_args "-1")
+                set ls_args = vec::push::str(ls_args strings::copy(bin_path))
+                set listing = use! util::trim(proc::run::output("ls" ls_args))
+                set files = use! util::split(listing "\n")
+                set nf = len(files)
+                set j = 0 :i64 mut
+                while j < nf {
+                    set fname = use! util::trim(use! util::list_get(files j))
+                    if fname != "" {
+                        set cp_args = [] :vec[str] mut
+                        set cp_args = vec::push::str(cp_args strings::copy(bin_path + "/" + fname))
+                        set cp_args = vec::push::str(cp_args strings::copy(dest_bin))
+                        use proc::run::output("cp" cp_args)
+                    }
+                    set j += 1
+                }
                 use dasu("  installed build artifacts to owl cache")
             }
         }
