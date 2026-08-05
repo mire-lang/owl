@@ -1,5 +1,38 @@
 # Owl Changelog
 
+## [0.30.0] - 2026-08-05
+
+### Security
+
+- **Subprocess shell-call audit (argv-only):** Every `proc::run::shell` call whose
+  arguments could be derived from untrusted input (registry indices, lockfiles,
+  user flags) was converted to `proc::run::output(cmd, args)` (argv-based, no
+  shell). See `docs/SECURITY.md` for the full inventory. Critical fixes:
+  - `upgrade`: `git clone` of a user-provided `--url` no longer passes through a shell.
+  - `install`/`lockfile`: `curl` downloads of registry-derived tarball/signature URLs are argv-based.
+  - `crypto`/`registry`: pubkey and signature material (network-sourced) is decoded via
+    temp-file + argv `base64 -d -i -o` instead of `printf ... | base64 -d`.
+  - `check`/`semver`/`lockfile`: `grep|sed|wc` pipelines with lockfile-derived package names
+    replaced by argv `grep` + string parsing; `find|wc` replaced by argv `find` + `vec::len`.
+- **Only four shell calls remain**, all documented as acceptable in `docs/SECURITY.md`:
+  `cd ... && mire build` (hardcoded dir), interactive `read < /dev/tty` (×2), and
+  `cp bin_path/*` glob expansion.
+- **New `util::sha256sum_hex(path)`** helper; `crypto_sha256` now delegates to it
+  instead of shell pipelines.
+
+### Fixed
+
+- **`owl test` invoked mire without the `test` subcommand:** after the argv conversion,
+  `collect_test_args` started at argv index 2 and dropped the `test` keyword, so `mire`
+  printed its help screen. The collected argv now starts with `["test", ...]`.
+- **`lockfile_get_field()` mis-resolved package blocks:** it rewound to the *first*
+  `[[package]]` header, so fields for later packages (e.g. `testlib`, `crypto`) were
+  read from the first package's block. The field is now searched within the block that
+  follows the matched `name` line. This was causing a false `owl.lock is out of sync`
+  report that blocked `owl build`.
+- **`testlib/mod.mire` restored** (was accidentally deleted) and migrated off the
+  removed `proc_exit` to the runtime `exit` extern.
+
 ## [0.29.0] - 2026-07-26
 
 ### Added

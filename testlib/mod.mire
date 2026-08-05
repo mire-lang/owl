@@ -1,9 +1,11 @@
 module testlib
 load kioto
 
+extern fn exit: (code :i64) lib "c"
+
 pub fn fail: (msg :str) {
     use dasu("  FAIL: " + msg)
-    use proc_exit(1)
+    use exit(1)
 }
 
 pub fn assert: (cond :bool) {

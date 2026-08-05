@@ -43,8 +43,8 @@ pub fn cmd_tree: (args :&vec[str]) {
 
         if show_all && path != "" {
             set child_toml_raw = path + "/owl.toml" :str
-            set child_toml = strings::replace(child_toml_raw "\"" "")
-            if fs_exists(child_toml) {
+            set child_toml = strings::replace::all(child_toml_raw "\"" "")
+            if fs::exists(child_toml) {
                 set child_toml_copy = child_toml :str
                 set child_deps = use! deps::get_dep_names_from(child_toml)
                 if child_deps != "" {

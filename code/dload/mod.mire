@@ -81,7 +81,7 @@ pub fn cmd_load_dep: (args :&vec[str]) {
 
                 if proceed {
                     set backup_name = "owl.toml.backup"
-                    use fs_write(backup_name c)
+                    use fs::write(backup_name c)
 
                     set insert_pos = sec_pos + len(marker)
                     set before = strings::substr(c 0 insert_pos)
@@ -97,7 +97,7 @@ pub fn cmd_load_dep: (args :&vec[str]) {
                         if proceed {
                             set dep_line = name_arg + " = { path = \"" + path_val + "\" }"
                             set new_c = before + "\n" + dep_line + after
-                            use fs_write("owl.toml" new_c)
+                            use fs::write("owl.toml" new_c)
                             set ok_msg = "loaded '" + name_arg + "' from " + path_val
                             use dasu(ok_msg)
                         }
@@ -105,7 +105,7 @@ pub fn cmd_load_dep: (args :&vec[str]) {
                         set owl_home = use! util::owl_home()
                         set owl_libs = use! util::owl_home_libs_display()
                         set mp = owl_home + "/libs/" + name_arg + "/owl.toml"
-                        if !fs_exists(mp) {
+                        if !fs::exists(mp) {
                             set err_msg = "error: '" + name_arg + "' not found in " + owl_libs + "/"
                             use dasu(err_msg)
                             use dasu("  has the package been installed?")
@@ -118,7 +118,7 @@ pub fn cmd_load_dep: (args :&vec[str]) {
                             set real_path = owl_libs + "/" + name_arg
                             set dep_line = name_arg + " = { path = \"" + real_path + "\", version = \"" + version + "\" }"
                             set new_c = before + "\n" + dep_line + after
-                            use fs_write("owl.toml" new_c)
+                            use fs::write("owl.toml" new_c)
                             set ok_msg = "loaded '" + name_arg + "' v" + version + " from cache"
                             use dasu(ok_msg)
                         }

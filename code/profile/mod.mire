@@ -17,13 +17,17 @@ pub fn cmd_profile: (args :&vec[str]) {
     use dasu("  Output:    " + use! util::toml_get("owl.toml" "paths" "output") + "/" + use! util::toml_get("owl.toml" "build" "profile") + "/main")
 
     set binary_size = "0" :str mut
-    if fs_exists("bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main") {
-        set sz = use! util::trim(proc::run("stat --format=%s \"bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main\" 2>/dev/null || echo 0"))
-        set binary_size = sz
-    }
+     if fs::exists("bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main") {
+         set prof = use! util::toml_get("owl.toml" "build" "profile")
+         set stat_args = [] :vec[str] mut
+         set stat_args = vec::push::str(stat_args "--format=%s")
+         set stat_args = vec::push::str(stat_args strings::copy("bin/" + prof + "/main"))
+         set sz = use! util::trim(proc::run::output("stat" stat_args))
+         set binary_size = sz
+     }
     use dasu("  Binary:    " + binary_size + " bytes")
 
-    if fs_exists(status_path) {
+    if fs::exists(status_path) {
         set status_content = fs::read(status_path)
         set status_copy = status_content :str
         set last_build = use! util::toml_get_from_string(status_content "build" "last_build_time") :str mut

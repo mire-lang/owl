@@ -2,6 +2,34 @@
 load kioto
 load testlib
 
+fn vec_contains: (v :&vec[i64], target :i64) :bool {
+    set i = 0 :i64 mut
+    while i < vec::len(v) {
+        if vec::get::i64(v i) == target { return true }
+        set i = i + 1
+    }
+    return false
+}
+
+fn vec_index_of: (v :&vec[i64], target :i64) :i64 {
+    set i = 0 :i64 mut
+    while i < vec::len(v) {
+        if vec::get::i64(v i) == target { return i }
+        set i = i + 1
+    }
+    return -1
+}
+
+fn vec_reverse: (v :vec[i64]) :vec[i64] {
+    set out = [] :vec[i64] mut
+    set i = vec::len(v) - 1 :i64 mut
+    while i >= 0 {
+        set out = vec::push::i64(out vec::get::i64(v i))
+        set i = i - 1
+    }
+    return out
+}
+
 pub fn main: () {
     use dasu("--- lists ---")
 
@@ -9,42 +37,42 @@ pub fn main: () {
     testlib.assert_eq(3 len(lst))
     use dasu("  list literal + len builtin: ok")
 
-    testlib.assert_eq(1 lists.get(lst 0))
-    testlib.assert_eq(2 lists.get(lst 1))
-    testlib.assert_eq(3 lists.get(lst 2))
-    use dasu("  lists.get: ok")
+    testlib.assert_eq(1 vec::get::i64(lst 0))
+    testlib.assert_eq(2 vec::get::i64(lst 1))
+    testlib.assert_eq(3 vec::get::i64(lst 2))
+    use dasu("  vec.get: ok")
 
     set empty = [] :vec[i64]
     testlib.assert_eq(0 len(empty))
     use dasu("  empty list: ok")
 
-    testlib.assert_true(lists.contains([1 2 3] 2))
-    testlib.assert_false(lists.contains([1 2 3] 5))
-    use dasu("  lists.contains: ok")
+    testlib.assert_true(vec_contains([1 2 3] 2))
+    testlib.assert_false(vec_contains([1 2 3] 5))
+    use dasu("  vec contains: ok")
 
-    testlib.assert_eq(1 lists.index([10 20 30] 20))
-    testlib.assert_eq(-1 lists.index([10 20 30] 99))
-    use dasu("  lists.index: ok")
+    testlib.assert_eq(1 vec_index_of([10 20 30] 20))
+    testlib.assert_eq(-1 vec_index_of([10 20 30] 99))
+    use dasu("  vec index: ok")
 
-    testlib.assert_eq(1 lists.first([1 2 3]))
-    testlib.assert_eq(3 lists.last([1 2 3]))
-    use dasu("  lists.first/last: ok")
+    testlib.assert_eq(1 vec::get::i64(lst 0))
+    testlib.assert_eq(3 vec::get::i64(lst vec::len(lst) - 1))
+    use dasu("  vec first/last: ok")
 
-    set rev = lists.reverse([1 2 3])
-    testlib.assert_eq(3 lists.get(rev 0))
-    testlib.assert_eq(2 lists.get(rev 1))
-    testlib.assert_eq(1 lists.get(rev 2))
-    use dasu("  lists.reverse: ok")
+    set rev = vec_reverse([1 2 3])
+    testlib.assert_eq(3 vec::get::i64(rev 0))
+    testlib.assert_eq(2 vec::get::i64(rev 1))
+    testlib.assert_eq(1 vec::get::i64(rev 2))
+    use dasu("  vec reverse: ok")
 
-    testlib.assert_true(lists.check.empty([] :vec[i64]))
-    testlib.assert_false(lists.check.empty([1] :vec[i64]))
-    use dasu("  lists.is_empty: ok")
+    testlib.assert_true(vec::len([] :vec[i64]) == 0)
+    testlib.assert_false(vec::len([1] :vec[i64]) == 0)
+    use dasu("  vec.is_empty: ok")
 
     set big = [] :vec[i64] mut
     set i = 0 :i64 mut
     while i < 100 {
         set val = i :i64
-        set big = lists.push(big val)
+        set big = vec::push::i64(big val)
         set i = i + 1
     }
     testlib.assert_eq(100 len(big))

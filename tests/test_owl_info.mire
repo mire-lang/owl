@@ -6,15 +6,15 @@ pub fn main: () {
     use dasu("--- test: owl info ---")
     testlib.assert_true(true)
 
-    set ts = strings.trim(proc::run("date +%s%N"))
+    set ts = strings.trim(proc::run::shell("date +%s%N"))
     set test_base = "/tmp/owl_info_test_" + ts
     set proj_dir = test_base + "/testinfo"
 
-    proc::run("mkdir -p " + test_base)
-    proc::run("cd " + test_base + " && ~/.local/bin/owl new testinfo 2>&1")
+    proc::run::shell("mkdir -p " + test_base)
+    proc::run::shell("cd " + test_base + " && ~/.local/bin/owl new testinfo 2>&1")
 
     set info_cmd = "cd " + proj_dir + " && ~/.local/bin/owl info 2>&1"
-    set info_out = proc::run(info_cmd)
+    set info_out = proc::run::shell(info_cmd)
 
     set has_version = strings.contains(info_out "owl:")
     set has_compiler = strings.contains(info_out "Compiler:")
@@ -27,7 +27,7 @@ pub fn main: () {
     }
 
     set info_json_cmd = "cd " + proj_dir + " && ~/.local/bin/owl info --json 2>&1"
-    set info_json = proc::run(info_json_cmd)
+    set info_json = proc::run::shell(info_json_cmd)
 
     set json_has_name = strings.contains(info_json "\"name\"")
     if json_has_name {
@@ -37,6 +37,6 @@ pub fn main: () {
         use dasu(info_json)
     }
 
-    proc::run("rm -rf " + test_base)
+    proc::run::shell("rm -rf " + test_base)
     use dasu("test_owl_info complete")
 }
