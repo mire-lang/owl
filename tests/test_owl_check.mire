@@ -6,17 +6,29 @@ pub fn main: () {
     use dasu("--- test: owl check ---")
     testlib.assert_true(true)
 
-    set ts = strings.trim(proc::run::shell("date +%s%N"))
-    set test_base = "/tmp/owl_check_test_" + ts
-    set proj_dir = test_base + "/testcheck"
+    set da = [] :vec[str] mut
+    set da = vec::push::str(da "+%s%N")
+    set ts = strings::trim(proc::run::output("date" da))
+    set test_base = strings::concat("/tmp/owl_check_test_", ts)
+    set proj_dir = strings::concat(test_base, strings::copy("/testcheck"))
+    set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl"))
 
-    proc::run::shell("mkdir -p " + test_base)
-    proc::run::shell("cd " + test_base + " && ~/.local/bin/owl new testcheck 2>&1")
+    set mk = [] :vec[str] mut
+    set mk = vec::push::str(mk "-p")
+    set mk = vec::push::str(mk strings::copy(test_base))
+    use proc::run::output("mkdir" mk)
 
-    set check_cmd = "cd " + proj_dir + " && ~/.local/bin/owl check 2>&1"
-    set check_out = proc::run::shell(check_cmd)
+    set na = [] :vec[str] mut
+    set na = vec::push::str(na "new")
+    set na = vec::push::str(na "testcheck")
+    set new_out = proc::run::output_cwd(owl_bin na test_base true)
+    use dasu(new_out)
 
-    set has_pass = strings.contains(check_out "[OK]")
+    set ca = [] :vec[str] mut
+    set ca = vec::push::str(ca "check")
+    set check_out = proc::run::output_cwd(owl_bin ca proj_dir true)
+
+    set has_pass = strings::contains(check_out "[OK]")
     if has_pass {
         use dasu("  owl check on valid project: ok")
     } else {
@@ -24,6 +36,9 @@ pub fn main: () {
         use dasu(check_out)
     }
 
-    proc::run::shell("rm -rf " + test_base)
+    set rm = [] :vec[str] mut
+    set rm = vec::push::str(rm "-rf")
+    set rm = vec::push::str(rm strings::copy(test_base))
+    use proc::run::output("rm" rm)
     use dasu("test_owl_check complete")
 }

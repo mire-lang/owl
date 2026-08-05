@@ -357,7 +357,7 @@ pub fn cmd_registry_sync: () {
                 if enabled_count > 1 {
                     use dasu("  found " + use! util::i64_to_string(enabled_count) + " enabled registries: " + enabled_list)
                     use dasu("  sync all? (Y/n)")
-                    set answer = use! util::trim(proc::run::shell("read ans < /dev/tty && echo $ans 2>/dev/null || echo y"))
+                    set answer = use! util::trim(proc::run::read_line())
                     if answer == "n" || answer == "N" {
                         set do_all = false
                     }
@@ -372,7 +372,7 @@ pub fn cmd_registry_sync: () {
                             set sync_this = true
                         } else {
                             use dasu("  sync " + entry + "? (Y/n)")
-                            set ans = use! util::trim(proc::run::shell("read a < /dev/tty && echo $a 2>/dev/null || echo y"))
+                            set ans = use! util::trim(proc::run::read_line())
                             if ans != "n" && ans != "N" { set sync_this = true }
                         }
                         if sync_this {

@@ -6,17 +6,29 @@ pub fn main: () {
     use dasu("--- test: owl build ---")
     testlib.assert_true(true)
 
-    set ts = strings.trim(proc::run::shell("date +%s%N"))
-    set test_base = "/tmp/owl_build_test_" + ts
-    set proj_dir = test_base + "/testbuild"
+    set da = [] :vec[str] mut
+    set da = vec::push::str(da "+%s%N")
+    set ts = strings::trim(proc::run::output("date" da))
+    set test_base = strings::concat("/tmp/owl_build_test_", ts)
+    set proj_dir = strings::concat(test_base, strings::copy("/testbuild"))
+    set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl"))
 
-    proc::run::shell("mkdir -p " + test_base)
-    proc::run::shell("cd " + test_base + " && ~/.local/bin/owl new testbuild 2>&1")
+    set mk = [] :vec[str] mut
+    set mk = vec::push::str(mk "-p")
+    set mk = vec::push::str(mk strings::copy(test_base))
+    use proc::run::output("mkdir" mk)
 
-    set build_cmd = "cd " + proj_dir + " && ~/.local/bin/owl build 2>&1"
-    set build_out = proc::run::shell(build_cmd)
+    set na = [] :vec[str] mut
+    set na = vec::push::str(na "new")
+    set na = vec::push::str(na "testbuild")
+    set new_out = proc::run::output_cwd(owl_bin na test_base true)
+    use dasu(new_out)
 
-    set build_failed = strings.contains(build_out "error")
+    set ba = [] :vec[str] mut
+    set ba = vec::push::str(ba "build")
+    set build_out = proc::run::output_cwd(owl_bin ba proj_dir true)
+
+    set build_failed = strings::contains(build_out "error")
     if build_failed {
         use dasu("  owl build output contains errors:")
         use dasu(build_out)
@@ -24,15 +36,18 @@ pub fn main: () {
         use dasu("  owl build completed: ok")
     }
 
-    set bin_path = proj_dir + "/bin/debug/testbuild"
-    set bin_check = "test -f " + bin_path + " && echo 'yes' || echo 'no'"
-    set bin_exists = strings.trim(proc::run::shell(bin_check))
-    if bin_exists == "yes" {
+    set bin_path = strings::concat(proj_dir, strings::copy("/bin/debug/testbuild"))
+    set bc = "no" :str mut
+    if fs::exists(bin_path) { set bc = "yes" }
+    if bc == "yes" {
         use dasu("  binary created: ok")
     } else {
         use dasu("  binary NOT created")
     }
 
-    proc::run::shell("rm -rf " + test_base)
+    set rm = [] :vec[str] mut
+    set rm = vec::push::str(rm "-rf")
+    set rm = vec::push::str(rm strings::copy(test_base))
+    use proc::run::output("rm" rm)
     use dasu("test_owl_build complete")
 }
