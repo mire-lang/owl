@@ -352,14 +352,18 @@ fn checkup_deps: () :bool {
                 use dasu("  [FAIL] deps/" + pkg + ": no path configured")
                 set ok = false
             } else {
-                set dp_check = dep_path :str
+                set dp_check = dep_path :str mut
                 set dp_msg = dep_path :str
-                set dp_find = dep_path :str
+                set dp_find = dep_path :str mut
+                if use! util::startswith(dp_check "~") {
+                    set dp_check = use! util::expand_home(dp_check)
+                    set dp_find = dp_check :str
+                }
                 if !fs::exists(dp_check) {
                     use dasu("  [FAIL] deps/" + pkg + ": path not found (" + dp_msg + ")")
                     set ok = false
                 } else {
-                    set toml_check = dep_path + "/owl.toml"
+                    set toml_check = dp_check + "/owl.toml"
                     set toml_msg = toml_check :str
                     set toml_name = toml_check :str
                     set toml_ver = toml_check :str
@@ -373,9 +377,8 @@ fn checkup_deps: () :bool {
                             set ok = false
                         } else {
                             set find_args = [] :vec[str] mut
+                            set find_args = vec::push::str(find_args "-L")
                             set find_args = vec::push::str(find_args strings::copy(dp_find))
-                            set find_args = vec::push::str(find_args "-maxdepth")
-                            set find_args = vec::push::str(find_args "1")
                             set find_args = vec::push::str(find_args "-name")
                             set find_args = vec::push::str(find_args "*.mire")
                             set mire_files = use! util::trim(proc::run::output("find" find_args))
@@ -559,7 +562,8 @@ fn checkup_fix_deps: () {
         if pkg != "" {
             set pkg2 = pkg
             set dep_path = use! deps::get_dep_field(pkg2 "path")
-            if dep_path == "" || !fs::exists(dep_path) {
+            set dep_exists = use! util::expand_home(dep_path)
+            if dep_path == "" || !fs::exists(dep_exists) {
                 set lib_path = lib_dir + "/" + pkg
                 if fs::exists(lib_path) {
                     set toml_path = lib_path + "/owl.toml"
@@ -657,7 +661,8 @@ pub fn cmd_check: (args :&vec[str]) {
                 if path_val == "" {
                     use dasu("  [FAIL]  " + key_display + ": no path specified")
                 } else {
-                    if fs::exists(path_val) {
+                    set path_check = use! util::expand_home(path_val)
+                    if fs::exists(path_check) {
                         set msg = "  [OK]    " + key_display :str mut
                         if ver_val != "" {
                             set msg = msg + "  ->  " + path_val + "  (v" + ver_val + ")"

@@ -22,28 +22,38 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
     set cli_profile = "" :str mut
     set cli_opt = "" :str mut
     set extra_flags = "" :str mut
+    set run_args = [] :vec[str] mut
+    set seen_ddash = false :bool mut
     while i < n {
         set a = rt_vec_get_str(args i)
-        if a == "--debug" || a == "-d" {
-            set cli_profile = "debug"
-            set cli_opt = "0"
+        if a == "--" {
+            set seen_ddash = true
         } else {
-            if a == "--release" || a == "-r" {
-                set cli_profile = "release"
-                set cli_opt = "3"
+            if seen_ddash {
+                set run_args = vec::push::str(run_args strings::copy(a))
             } else {
-                if a == "-O" || a == "--opt-level" {
-                    set i += 1
-                    if i < n { set cli_opt = rt_vec_get_str(args i) }
+                if a == "--debug" || a == "-d" {
+                    set cli_profile = "debug"
+                    set cli_opt = "0"
                 } else {
-                    if use! util::startswith(a "-O") && len(a) > 2 {
-                        set cli_opt = use! util::replace(a "-O" "")
+                    if a == "--release" || a == "-r" {
+                        set cli_profile = "release"
+                        set cli_opt = "3"
                     } else {
-                        if !use! util::startswith(a "-") && cli_file == "" {
-                            set cli_file = a
+                        if a == "-O" || a == "--opt-level" {
+                            set i += 1
+                            if i < n { set cli_opt = rt_vec_get_str(args i) }
                         } else {
-                            if use! util::startswith(a "-") {
-                                set extra_flags = extra_flags + " " + a
+                            if use! util::startswith(a "-O") && len(a) > 2 {
+                                set cli_opt = use! util::replace(a "-O" "")
+                            } else {
+                                if !use! util::startswith(a "-") && cli_file == "" {
+                                    set cli_file = a
+                                } else {
+                                    if use! util::startswith(a "-") {
+                                        set extra_flags = extra_flags + " " + a
+                                    }
+                                }
                             }
                         }
                     }
@@ -130,9 +140,11 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
                 if is_run {
                     set build_out = use! util::run_compiler(argv)
                     use dasu(build_out)
+                    if use! proc::run::last_exit() == 0 { use! util::record_build() }
                 } else {
                     set out = use! util::run_compiler(argv)
                     use dasu(out)
+                    if use! proc::run::last_exit() == 0 { use! util::record_build() }
                 }
 
                 set name = entry :str mut
@@ -147,7 +159,7 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
 
                 use dasu("")
                 use dasu("  running " + bin + " ...")
-                use proc::run::spawn(bin [])
+                use proc::run::spawn(bin run_args)
             }
         }
     }

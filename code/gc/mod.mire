@@ -1,10 +1,23 @@
 load! /code/util
+load! /code/args
 
+/! Garbage-collect orphaned package versions.
+   SAFETY: a package is only pruned when it uses the versioned layout
+   (libs/<pkg>/<version>/meta.toml). Flat working copies -- a top-level
+   meta.toml or owl.toml at libs/<pkg>/ (e.g. the kioto copy, or the mire
+   symlink to a source checkout) -- are NEVER touched. Default is a dry
+   run; pass --yes/-y to actually remove. !/
 pub fn cmd_gc: (args :&vec[str]) {
+    set do_delete = use! args::has_flag(args "--yes") || use! args::has_flag(args "-y")
     set lib_dir = use! util::owl_home_libs()
     set has_libs = fs::exists(lib_dir)
     set removed = 0 :i64 mut
     set kept = 0 :i64 mut
+    set skipped = 0 :i64 mut
+
+    if !do_delete {
+        use dasu("  dry run (use --yes to actually remove)")
+    }
 
     if has_libs {
         set pkg_list = use! util::trim(proc::run::output("ls" ["-1" strings::copy(lib_dir)]))
@@ -15,33 +28,41 @@ pub fn cmd_gc: (args :&vec[str]) {
             while i_pkg < ni {
                 set pkg = use! util::trim(use! util::list_get(entries i_pkg))
                 if pkg != "" {
-                    if fs::exists(lib_dir + "/" + pkg) {
-                        set pkg_dir = lib_dir + "/" + pkg
-
-                        set ver_list = use! util::trim(proc::run::output("ls" ["-1" strings::copy(pkg_dir)]))
-                        set vertries = use! util::split(ver_list "\n")
-                        set nv = len(vertries)
-                        set i_ver = 0 :i64 mut
-                        while i_ver < nv {
-                            set ver = use! util::trim(use! util::list_get(vertries i_ver))
-                            set ver_dir = pkg_dir + "/" + ver
-                            if !fs::exists(ver_dir + "/meta.toml") {
-                                set rm_args = [] :vec[str] mut
-                                set rm_args = vec::push::str(rm_args "-rf")
-                                set rm_args = vec::push::str(rm_args strings::copy(ver_dir))
-                                use proc::run::output("rm" rm_args)
-                                set removed += 1
-                            } else {
-                                set kept += 1
+                    set pkg_dir = lib_dir + "/" + pkg
+                    if fs::exists(pkg_dir) {
+                        /! Flat working copy: top-level meta.toml or owl.toml
+                           marks a single live package, not a versioned dir. !/
+                        if fs::exists(pkg_dir + "/meta.toml") || fs::exists(pkg_dir + "/owl.toml") {
+                            set skipped += 1
+                        } else {
+                            set ver_list = use! util::trim(proc::run::output("ls" ["-1" strings::copy(pkg_dir)]))
+                            set vertries = use! util::split(ver_list "\n")
+                            set nv = len(vertries)
+                            set i_ver = 0 :i64 mut
+                            while i_ver < nv {
+                                set ver = use! util::trim(use! util::list_get(vertries i_ver))
+                                set ver_dir = pkg_dir + "/" + ver
+                                if !fs::exists(ver_dir + "/meta.toml") {
+                                    use dasu("  [orphan] " + pkg + "/" + ver)
+                                    if do_delete {
+                                        set rm_args = [] :vec[str] mut
+                                        set rm_args = vec::push::str(rm_args "-rf")
+                                        set rm_args = vec::push::str(rm_args strings::copy(ver_dir))
+                                        use proc::run::output("rm" rm_args)
+                                    }
+                                    set removed += 1
+                                } else {
+                                    set kept += 1
+                                }
+                                set i_ver += 1
                             }
-                            set i_ver += 1
-                        }
 
-                        set rem_vers = use! util::trim(proc::run::output("ls" ["-1" strings::copy(pkg_dir)]))
-                        if rem_vers == "" {
-                            set rmdir_args = [] :vec[str] mut
-                            set rmdir_args = vec::push::str(rmdir_args strings::copy(pkg_dir))
-                            use proc::run::output("rmdir" rmdir_args)
+                            set rem_vers = use! util::trim(proc::run::output("ls" ["-1" strings::copy(pkg_dir)]))
+                            if rem_vers == "" && do_delete {
+                                set rmdir_args = [] :vec[str] mut
+                                set rmdir_args = vec::push::str(rmdir_args strings::copy(pkg_dir))
+                                use proc::run::output("rmdir" rmdir_args)
+                            }
                         }
                     }
                 }
@@ -50,6 +71,6 @@ pub fn cmd_gc: (args :&vec[str]) {
         }
     }
 
-    use dasu("  gc: " + use! util::i64_to_string(removed) + " orphaned versions removed, " + use! util::i64_to_string(kept) + " kept")
+    use dasu("  gc: " + use! util::i64_to_string(removed) + " orphaned versions removed, " + use! util::i64_to_string(kept) + " kept, " + use! util::i64_to_string(skipped) + " working copies skipped")
     use dasu("  done")
 }
