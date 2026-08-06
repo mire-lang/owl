@@ -383,12 +383,13 @@ pub fn lockfile_validate: () :bool {
                 set entry_ok = true :bool mut
 
                 if pkg_path != "" {
-                    if !fs::exists(pkg_path) {
+                    set pkg_path_check = use! util::expand_home(pkg_path)
+                    if !fs::exists(pkg_path_check) {
                         use dasu("  [FAIL] lockfile/" + pkg_name + ": path not found (" + pkg_path + ")")
                         set entry_ok = false
                         set ok = false
                     } else {
-                        set toml_check = pkg_path + "/owl.toml"
+                        set toml_check = pkg_path_check + "/owl.toml"
                         if !fs::exists(toml_check) {
                             use dasu("  [WARN] lockfile/" + pkg_name + ": path exists but no owl.toml")
                         }

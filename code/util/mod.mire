@@ -175,6 +175,18 @@ pub fn owl_home_libs_display: () :str {
     return "~/.owl/libs"
 }
 
+/! Expand a leading "~" to the user's home directory so TOML dependency
+   paths like "~/.owl/libs/mire" can be checked with fs::exists. !/
+pub fn expand_home: (path :&str) :str {
+    if use! util::startswith(path "~") {
+        set home = env::var("HOME")
+        if home != "" {
+            return strings::concat(home strings::substr(path 1 len(path) - 1))
+        }
+    }
+    return strings::copy(path)
+}
+
 pub fn owl_home_cache_tarballs: () :str {
     return use! util::owl_home() + "/cache/tarballs"
 }
@@ -369,3 +381,20 @@ pub fn scan_load_packages: () :str {
 
 pub fn string_to_i64: (s :str) :i64 { return rt_string_to_i64(s) }
 pub fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
+
+/! Record a successful build in ~/.owl/cache/build_status.toml so
+   `owl profile` can report real build counts and last-build time. !/
+pub fn record_build: () {
+    set status_path = use! util::owl_home() + "/cache/build_status.toml"
+    use! util::mkdir_p(use! util::owl_home() + "/cache")
+    set count = 0 :i64 mut
+    if fs::exists(status_path) {
+        set content = fs::read(status_path)
+        set c = use! util::toml_get_from_string(strings::copy(content) "build" "build_count") :str mut
+        if c != "" { set count = use! util::string_to_i64(c) }
+    }
+    set count += 1
+    set now_ms = time::now::ms()
+    set body = "[build]\nbuild_count = " + use! util::i64_to_string(count) + "\nlast_build_time = " + use! util::i64_to_string(now_ms) + "\n"
+    use fs::write(status_path body)
+}

@@ -1,6 +1,6 @@
 # Owl Technical Notes
 
-## Architecture (v0.29.0)
+## Architecture (v0.31.0)
 
 ### CLI core
 - Entrypoint: `code/main.mire` (slim dispatcher)
@@ -78,7 +78,7 @@ Owl relies on compiler built-ins (not kioto imports):
 - `owl clean --bin` removes `bin/`
 - `owl clean --all` removes both plus `deps/` and `_test_harness.mire`
 
-### Current scope (v0.29.0)
+### Current scope (v0.31.0)
 - Project management: `new`, `run`, `build`, `test`, `clean`, `info`, `check`, `checkup`, `profile`, `tree`
 - `checkup` validates all owl.toml fields, dependency count, and lockfile integrity
 - Package management: `load`, `install`, `install --lock`, `export`, `gc`, `upgrade`
@@ -86,3 +86,27 @@ Owl relies on compiler built-ins (not kioto imports):
 - Dependency pruning: `deps --prune`, `install --prune`
 - Pacman-style short flags for all primary commands
 - Registry sync via HTTP (curl-based, no git required)
+
+## Audit hardening (0.31.0)
+
+- **`util::expand_home(path)`** — expands a leading `~` to `$HOME`. Wired into
+  `cmd_check`, `cmd_checkup` deps check, `checkup --fix deps`, and
+  `lockfile_validate`; TOML `~/.owl/...` paths are otherwise unresolvable.
+- **`util::record_build()`** — appends to `~/.owl/cache/build_status.toml`
+  after a successful compile (gated on `proc::run::last_exit() == 0`), feeding
+  `owl profile`'s build count. Subprocess success is judged ONLY by
+  `last_exit()`, never by string-matching tool output (that was the
+  `owl export` "tar + zstd required" bug).
+- **`gc` is safe by construction:** dry-run default (`--yes` to delete), skips
+  flat working copies (`libs/<pkg>/` with a top-level `meta.toml`/`owl.toml`,
+  e.g. kioto), prunes only versioned `libs/<pkg>/<ver>/`. `rm -rf` does not
+  follow symlinks, but the old layout assumption made it delete flat libs and
+  the `mire` symlink target anyway — hence the hard versioned-layout check.
+- **`deps --prune` never removes `mire`** (the compiler stdlib has no
+  ``load ` `` reference by construction); other deps are pruned only when no
+  source contains ``load <dep> ``.
+- **`run -- args...`** — `compile_pipeline` parses the `--` separator and
+  forwards trailing args to `proc::run::spawn(bin run_args)`.
+- **PAL channel contract honored:** `pal_proc_create` with `{0,0}` channel args
+  means "no pipes, inherit parent fd"; child stdout is no longer swallowed
+  (this was a PAL implementation bug, not a cache issue).

@@ -53,8 +53,8 @@ pub fn cmd_export: (args :&vec[str]) {
                  set tar_args = vec::push::str(tar_args "-cf")
                  set tar_args = vec::push::str(tar_args strings::copy(archive))
                  set tar_args = vec::push::str(tar_args strings::copy(sources))
-                 set code = proc::run::output("tar" tar_args)
-                 set tar_ok = use! util::contains(code "OK") :bool mut
+                 use! proc::run::output("tar" tar_args)
+                 set tar_ok = use! proc::run::last_exit() == 0 :bool mut
 
                  if !tar_ok {
                      set tar_args2 = [] :vec[str] mut
@@ -63,8 +63,8 @@ pub fn cmd_export: (args :&vec[str]) {
                      set tar_args2 = vec::push::str(tar_args2 "-cf")
                      set tar_args2 = vec::push::str(tar_args2 strings::copy(archive))
                      set tar_args2 = vec::push::str(tar_args2 strings::copy(sources))
-                     set code2 = proc::run::output("tar" tar_args2)
-                     set tar_ok = use! util::contains(code2 "OK")
+                     use! proc::run::output("tar" tar_args2)
+                     set tar_ok = use! proc::run::last_exit() == 0
                  }
 
                 if !tar_ok {

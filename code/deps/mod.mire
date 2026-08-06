@@ -86,21 +86,20 @@ pub fn get_dep_names: () :str {
         set pos = 0 :i64 mut
         while pos < clen {
             set nl = strings::index(strings::substr(content pos clen - pos) "\n")
-            if nl < 0 { set pos = clen } else {
-                set real_nl = pos + nl
-                set line = strings::substr(content pos real_nl - pos)
-                set trimmed = use! util::trim(line)
-                if trimmed != "" && !use! util::startswith(trimmed "[") {
-                    set eq_pos = strings::index(trimmed "=")
-                    if eq_pos >= 0 {
-                        set key = use! util::trim(strings::substr(trimmed 0 eq_pos))
-                        if key != "" {
-                            if result != "" { set result = result + "\n" + key } else { set result = key }
-                        }
+            set real_nl = clen :i64 mut
+            if nl >= 0 { set real_nl = pos + nl }
+            set line = strings::substr(content pos real_nl - pos)
+            set trimmed = use! util::trim(line)
+            if trimmed != "" && !use! util::startswith(trimmed "[") {
+                set eq_pos = strings::index(trimmed "=")
+                if eq_pos >= 0 {
+                    set key = use! util::trim(strings::substr(trimmed 0 eq_pos))
+                    if key != "" {
+                        if result != "" { set result = result + "\n" + key } else { set result = key }
                     }
                 }
-                set pos = real_nl + 1
             }
+            set pos = real_nl + 1
         }
     }
     return result
@@ -137,21 +136,20 @@ pub fn get_dep_names_from: (toml_file :str) :str {
             set pos = 0 :i64 mut
             while pos < clen {
                 set nl = strings::index(strings::substr(c pos clen - pos) "\n")
-                if nl < 0 { set pos = clen } else {
-                    set real_nl = pos + nl
-                    set line = strings::substr(c pos real_nl - pos)
-                    set trimmed = use! util::trim(line)
-                    if trimmed != "" && !use! util::startswith(trimmed "[") {
-                        set eq_pos = strings::index(trimmed "=")
-                        if eq_pos >= 0 {
-                            set key = use! util::trim(strings::substr(trimmed 0 eq_pos))
-                            if key != "" {
-                                if result != "" { set result = result + "\n" + key } else { set result = key }
-                            }
+                set real_nl = clen :i64 mut
+                if nl >= 0 { set real_nl = pos + nl }
+                set line = strings::substr(c pos real_nl - pos)
+                set trimmed = use! util::trim(line)
+                if trimmed != "" && !use! util::startswith(trimmed "[") {
+                    set eq_pos = strings::index(trimmed "=")
+                    if eq_pos >= 0 {
+                        set key = use! util::trim(strings::substr(trimmed 0 eq_pos))
+                        if key != "" {
+                            if result != "" { set result = result + "\n" + key } else { set result = key }
                         }
                     }
-                    set pos = real_nl + 1
                 }
+                set pos = real_nl + 1
             }
         }
     }
@@ -249,8 +247,14 @@ pub fn prune_unused: () :bool {
         set dep_name = use! util::trim(name_line)
         set pos = end + 1
         if dep_name != "" {
+            /! `mire` is the compiler's standard library, injected by
+               `owl new`; it must never be pruned even when no source
+               file loads it directly (kioto and tooling load it
+               transitively). !/
             set dn = dep_name
-            if use! deps::list_contains(used dn) {
+            set is_mire = dep_name == "mire" :bool mut
+            set in_used = use! deps::list_contains(used dn)
+            if is_mire || in_used {
                 set dnr = dep_name
                 set raw = use! deps::find_dep_raw(dnr)
                 if !first { set kept = kept + "\n" } else { set first = false }

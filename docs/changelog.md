@@ -1,5 +1,51 @@
 # Owl Changelog
 
+## [0.31.0] - 2026-08-06
+
+### Fixed
+
+- **`owl gc` data-loss bug (rewritten):** the old gc assumed a versioned layout
+  and `rm -rf`'d everything else — it deleted `~/.owl/libs/kioto` contents
+  (left `.git`) and, THROUGH the `mire` symlink, emptied the `Arch/mire` git
+  repo. The new `code/gc/mod.mire` is **dry-run by default** (`--yes`/`-y` to
+  delete), skips flat working copies (top-level `meta.toml`/`owl.toml`, e.g.
+  kioto), only prunes versioned `libs/<pkg>/<ver>/`, and prints `[orphan]`
+  listings.
+- **`owl deps --prune` deleted `mire`:** `used_dep_names()` only counted deps
+  with an explicit ``load ` `` in source, so the compiler stdlib was "unused".
+  `mire` is now never pruned; other deps are pruned only when no `load`
+  references them.
+- **`owl run -- args` never forwarded arguments:** added `--` separator parsing
+  in `compile_pipeline` (`code/build/mod.mire`); spawn is now
+  `proc::run::spawn(bin run_args)`.
+- **`owl profile` always showed "Builds: 0":** `~/.owl/cache/build_status.toml`
+  was read but never written. Added `util::record_build()` (writes build count
+  + last build epoch-ms after a successful compile, gated on
+  `proc::run::last_exit() == 0`). This also exposed that
+  `rt_proc_capture_argv` (v1) never set the thread-local exit status — fixed in
+  the runtime (`helpers.c`).
+- **`owl export --dry-run` claimed "tar + zstd required":** the success check
+  matched the literal string `OK`, but GNU tar signals success via exit code.
+  Now uses `proc::run::last_exit() == 0` (with the fallback `-I zstd` attempt).
+- **Lockfile "no dependencies" bug:** `get_dep_names`/`get_dep_names_from`
+  skipped the last dep line when it lacked a trailing newline →
+  `count_deps == 0` → lockfiles generated with no packages. Both now process
+  the remaining text when the final line has no `\n`.
+- **`owl check`/`checkup`/lockfile failed on `~` paths:** TOML `~/.owl/...`
+  paths were never expanded. Added `util::expand_home()`; wired into `cmd_check`,
+  `cmd_checkup` deps check, `checkup --fix deps`, and `lockfile_validate`.
+  `checkup`'s `find` now uses `-L` (deps are symlinks).
+- **`owl run` swallowed child stdout:** `pal_proc_create(argv, PAL_SPAWN_WAIT,
+  0,0,0)` now means "no pipes, child inherits parent fd" (PAL contract);
+  `linux_proc_create` creates pipes only for non-null channels, so the MireData
+  report and stress metrics are visible again.
+- **4 `incremental::hashing` failures — root cause was `/tmp/owl.toml`:** an
+  orphaned scratch file made `find_project_root` resolve un-nested temp tests
+  to `/tmp` as project root, so every test shared `/tmp/bin/.cache` and
+  `gc_blobs` deleted peers' blobs. Deleted the orphan AND made the 4 cache
+  roundtrip tests hermetic via `setup_test_root` (each writes its own
+  owl.toml/root).
+
 ## [0.30.0] - 2026-08-05
 
 ### Security
