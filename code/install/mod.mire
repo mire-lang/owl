@@ -104,7 +104,7 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
                 set idx_content = fs::read(idx_path)
                 set grep_pattern = "^name = \"" + pkg_name + "\""
                 set gargs = [] :vec[str] mut
-                set gargs = vec::push::str(gargs "-A10")
+                set gargs = vec::push::str(gargs "-A15")
                 set gargs = vec::push::str(gargs strings::copy(grep_pattern))
                 set gargs = vec::push::str(gargs strings::copy(idx_path))
                 set grep_out = use! util::trim(proc::run::output("grep" gargs))
@@ -114,30 +114,52 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
                     set gi = 0 :i64 mut
                     set found_tarball = "" :str mut
                     set found_sha = "" :str mut
+                    set found_method = "" :str mut
+                    set found_repo = "" :str mut
+                    set found_tag = "" :str mut
+                    set found_asset = "" :str mut
+                    set found_ref = "" :str mut
+                    set found_commit = "" :str mut
                     while gi < gnl {
                         set gline = use! util::trim(use! util::list_get(glines gi))
-                        if use! util::startswith(gline "tarball = ") {
-                            set eq = strings::index(gline "=")
-                            if eq >= 0 {
-                                set after = strings::substr(gline eq + 1 9999) :str mut
-                                set after = use! util::trim(after)
-                                if use! util::startswith(after "\"") { set after = use! util::replace(after "\"" "") }
+                        set eq = strings::index(gline "=")
+                        if eq > 0 {
+                            set after = strings::substr(gline eq + 1 9999) :str mut
+                            set after = use! util::trim(after)
+                            if use! util::startswith(after "\"") && use! util::endswith(after "\"") {
+                                set after = strings::substr(after 1 strings::len(after) - 2)
+                            } else {
+                                if use! util::startswith(after "\"") { set after = strings::substr(after 1 9999) }
+                            }
+                            if use! util::startswith(gline "tarball = ") {
                                 set found_tarball = after
                             }
-                        }
-                        if use! util::startswith(gline "sha256 = ") {
-                            set eq = strings::index(gline "=")
-                            if eq >= 0 {
-                                set after = strings::substr(gline eq + 1 9999) :str mut
-                                set after = use! util::trim(after)
-                                if use! util::startswith(after "\"") { set after = use! util::replace(after "\"" "") }
+                            if use! util::startswith(gline "sha256 = ") {
                                 set found_sha = after
+                            }
+                            if use! util::startswith(gline "method = ") {
+                                set found_method = after
+                            }
+                            if use! util::startswith(gline "repo = ") {
+                                set found_repo = after
+                            }
+                            if use! util::startswith(gline "tag = ") {
+                                set found_tag = after
+                            }
+                            if use! util::startswith(gline "asset = ") {
+                                set found_asset = after
+                            }
+                            if use! util::startswith(gline "ref = ") {
+                                set found_ref = after
+                            }
+                            if use! util::startswith(gline "commit = ") {
+                                set found_commit = after
                             }
                         }
                         set gi += 1
                     }
-                    if found_tarball != "" {
-                        set pkg_info = found_tarball + "|" + found_sha + "|" + reg_name
+                    if found_tarball != "" || found_method == "clone" || found_repo != "" {
+                        set pkg_info = found_tarball + "|" + found_sha + "|" + reg_name + "|" + found_method + "|" + found_repo + "|" + found_tag + "|" + found_asset + "|" + found_ref + "|" + found_commit
                     }
                 }
             }
@@ -150,27 +172,37 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
         set ec = 1 :u8
     }
 
+    set tarball_path = "" :str mut
+    set sha256_val = "" :str mut
+    set reg_name = "" :str mut
+    set method = "" :str mut
+    set repo = "" :str mut
+    set tag = "" :str mut
+    set asset = "" :str mut
+    set ref_val = "" :str mut
+    set commit_val = "" :str mut
     if ec == 0 {
         set pipe1 = strings::index(pkg_info "|")
         if pipe1 < 0 {
             use dasu("  error: invalid package info from registry")
             set ec = 1 :u8
+        } else {
+            set fields = strings::split(pkg_info "|")
+            set nf = len(fields)
+            if nf >= 1 { set tarball_path = use! util::list_get(fields 0) }
+            if nf >= 2 { set sha256_val = use! util::list_get(fields 1) }
+            if nf >= 3 { set reg_name = use! util::list_get(fields 2) }
+            if nf >= 4 { set method = use! util::list_get(fields 3) }
+            if nf >= 5 { set repo = use! util::list_get(fields 4) }
+            if nf >= 6 { set tag = use! util::list_get(fields 5) }
+            if nf >= 7 { set asset = use! util::list_get(fields 6) }
+            if nf >= 8 { set ref_val = use! util::list_get(fields 7) }
+            if nf >= 9 { set commit_val = use! util::list_get(fields 8) }
         }
     }
-    set tarball_path = "" :str mut
-    set sha256_val = "" :str mut
-    set reg_name = "" :str mut
-    if ec == 0 {
-        set pipe1 = strings::index(pkg_info "|")
-        set pipe2 = strings::index(strings::substr(pkg_info pipe1 + 1 9999) "|")
-        if pipe2 < 0 {
-            use dasu("  error: invalid package info from registry (missing sha256 or reg)")
-            set ec = 1 :u8
-        } else {
-            set tarball_path = strings::substr(pkg_info 0 pipe1)
-            set sha256_val = strings::substr(pkg_info pipe1 + 1 pipe2)
-            set reg_name = strings::substr(pkg_info pipe1 + pipe2 + 2 9999)
-        }
+
+    if ec == 0 && method == "clone" {
+        return use! install::cmd_install_clone(strings::copy(pkg_name) strings::copy(pkg_ver) strings::copy(repo) strings::copy(ref_val) strings::copy(commit_val))
     }
 
     set reg_url = "" :str mut
@@ -189,7 +221,15 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
     set tarball_url = "" :str mut
     set tarball_file = "" :str mut
     if ec == 0 {
-        set tarball_url = reg_url + "/" + tarball_path
+        if repo != "" && tag != "" && asset != "" {
+            if use! util::startswith(repo "http") {
+                set tarball_url = repo + "/releases/download/" + tag + "/" + asset
+            } else {
+                set tarball_url = "https://github.com/" + repo + "/releases/download/" + tag + "/" + asset
+            }
+        } else {
+            set tarball_url = reg_url + "/" + tarball_path
+        }
         use dasu("  downloading from " + tarball_url + "...")
         set tarball_file = use! util::owl_home() + "/cache/tarballs/" + pkg_name + "-" + pkg_ver + ".tar.zst"
         use! util::mkdir_p(use! util::owl_home() + "/cache/tarballs")
@@ -337,6 +377,74 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
         use proc::run::output("rm" rm8)
         use dasu("  installed " + pkg_name + " v" + pkg_ver)
     }
+    return ec
+}
+
+pub fn cmd_install_clone: (name :str version :str repo :str ref_val :str commit_val :str) :u8 {
+    set ec = 0 :u8 mut
+    set libs_dir = use! util::owl_home_libs()
+    set libs_dir_copy = strings::copy(libs_dir)
+    use! util::mkdir_p(libs_dir)
+    set dest = libs_dir_copy + "/" + name
+    set dest_copy = strings::copy(dest)
+    if fs::exists(strings::copy(dest_copy)) {
+        use! util::rm_RF(strings::copy(dest_copy))
+    }
+
+    use dasu("  cloning " + repo + " ...")
+    set clone_url = repo :str mut
+    set abs_url = false :bool mut
+    if use! util::startswith(repo "http") { set abs_url = true }
+    if use! util::startswith(repo "file://") { set abs_url = true }
+    if use! util::startswith(repo "/") { set abs_url = true }
+    if !abs_url {
+        set clone_url = "https://github.com/" + repo
+    }
+    set git_args = [] :vec[str] mut
+    set git_args = vec::push::str(git_args "clone")
+    set git_args = vec::push::str(git_args "--depth")
+    set git_args = vec::push::str(git_args "1")
+    if ref_val != "" {
+        set git_args = vec::push::str(git_args "--branch")
+        set git_args = vec::push::str(git_args strings::copy(ref_val))
+    }
+    set git_args = vec::push::str(git_args strings::copy(clone_url))
+    set git_args = vec::push::str(git_args strings::copy(dest_copy))
+    use proc::run::output("git" git_args)
+    if use! proc::run::last_exit() != 0 {
+        use dasu("  error: git clone failed")
+        return 1 :u8
+    }
+
+    if commit_val != "" {
+        set rev_args = [] :vec[str] mut
+        set rev_args = vec::push::str(rev_args "-C")
+        set rev_args = vec::push::str(rev_args strings::copy(dest_copy))
+        set rev_args = vec::push::str(rev_args "rev-parse")
+        set rev_args = vec::push::str(rev_args "HEAD")
+        set head = use! util::trim(proc::run::output("git" rev_args))
+        if head != commit_val {
+            use! util::rm_RF(strings::copy(dest_copy))
+            use dasu("  error: cloned commit " + head + " does not match pinned commit " + commit_val)
+            return 1 :u8
+        }
+        use dasu("  commit " + head + " verified")
+    }
+
+    set meta_path = strings::copy(dest_copy) + "/meta.toml"
+    if !fs::exists(strings::copy(meta_path)) {
+        use dasu("  writing metadata...")
+        set meta = "[package]\n" :str mut
+        set meta = meta + "name = \"" + name + "\"\n"
+        set meta = meta + "version = \"" + version + "\"\n"
+        set meta = meta + "compiler = \"" + use! util::compiler_cmd() + "\"\n"
+        set meta = meta + "abi = " + use! util::abi_version() + "\n"
+        set meta = meta + "language = \"" + use! util::language_version() + "\"\n"
+        use fs::write(meta_path meta)
+    }
+
+    use! util::fs_make_readonly(strings::copy(dest_copy))
+    use dasu("  installed " + name + " v" + version + " (clone from " + repo + ")")
     return ec
 }
 
