@@ -353,7 +353,7 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
 
         use dasu("  extracting...")
         set tar_args = [] :vec[str] mut
-        set tar_args = vec::push::str(tar_args "-xzf")
+        set tar_args = vec::push::str(tar_args "-xf")
         set tar_args = vec::push::str(tar_args strings::copy(tarball_file))
         set tar_args = vec::push::str(tar_args "-C")
         set tar_args = vec::push::str(tar_args strings::copy(use! util::owl_home_libs() + "/" + pkg_name))

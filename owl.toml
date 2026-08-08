@@ -16,6 +16,6 @@ output = "bin"
 cache = "bin/.cache"
 
 [dependencies]
-kioto = { path = "../kioto" }
+kioto = { path = "/home/Evelyn/.owl/libs/kioto" }
 testlib = { path = "./tests/lib" }
 crypto = { path = "./code/crypto" }

@@ -247,8 +247,9 @@ pub fn cmd_registry_sync_one: (reg_path :str) {
                     set curl_args = vec::push::str(curl_args strings::copy(tmp + "/index.toml"))
                     set curl_args = vec::push::str(curl_args strings::copy(try_url))
                     use proc::run::output("curl" curl_args)
-                    set test_content = use! util::trim(fs::read(tmp + "/index.toml"))
-                    if test_content != "" {
+                    set test_content = fs::read(tmp + "/index.toml")
+                    set test_trimmed = use! util::trim(fs::read(tmp + "/index.toml"))
+                    if test_trimmed != "" {
                         use fs::write(tmp + "/index.toml" test_content)
                         set syncurl = try_url
                         set synced = true
@@ -302,9 +303,11 @@ pub fn cmd_registry_sync_one: (reg_path :str) {
                 }
 
                 if proceed {
-                    use fs::write(reg_path + "/index.toml" index_content)
+                    use! util::fs_make_writable(strings::copy(reg_path))
+                    use fs::write(strings::copy(reg_path + "/index.toml") index_content)
                     set ts = use! util::trim(proc::run::output("date" ["+%s"]))
-                    use fs::write(reg_path + "/last_sync" ts)
+                    use fs::write(strings::copy(reg_path + "/last_sync") ts)
+                    use! util::fs_make_readonly(strings::copy(reg_path))
                     set rm_args = [] :vec[str] mut
                     set rm_args = vec::push::str(rm_args "-rf")
                     set rm_args = vec::push::str(rm_args strings::copy(tmp))
