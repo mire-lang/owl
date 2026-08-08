@@ -5,47 +5,47 @@ load testlib
 pub fn main: () {
     use dasu("--- math ---")
 
-    testlib.assert_eq(5 math.abs(-5))
-    testlib.assert_eq(42 math.abs(42))
+    testlib.assert_eq(5 math::abs(-5))
+    testlib.assert_eq(42 math::abs(42))
     use dasu("  math.abs: ok")
 
-    testlib.assert_eq(3 math.min(3 7))
-    testlib.assert_eq(3 math.min(7 3))
+    testlib.assert_eq(3 math::min(3 7))
+    testlib.assert_eq(3 math::min(7 3))
     use dasu("  math.min: ok")
 
-    testlib.assert_eq(7 math.max(3 7))
-    testlib.assert_eq(7 math.max(7 3))
+    testlib.assert_eq(7 math::max(3 7))
+    testlib.assert_eq(7 math::max(7 3))
     use dasu("  math.max: ok")
 
-    testlib.assert_eq(1 math.clamp(1 0 5))
-    testlib.assert_eq(0 math.clamp(-1 0 5))
-    testlib.assert_eq(5 math.clamp(10 0 5))
+    testlib.assert_eq(1 math::clamp(1 0 5))
+    testlib.assert_eq(0 math::clamp(-1 0 5))
+    testlib.assert_eq(5 math::clamp(10 0 5))
     use dasu("  math.clamp: ok")
 
-    set r = math.range(5) :vec[i64]
+    set r = math::range(5) :vec[i64]
     testlib.assert_eq(5 len(r))
-    testlib.assert_eq(0 lists.get(r 0))
-    testlib.assert_eq(4 lists.get(r 4))
+    testlib.assert_eq(0 vec::get::i64(r 0))
+    testlib.assert_eq(4 vec::get::i64(r 4))
     use dasu("  math.range: ok")
 
-    set rb = math.between(2 6) :vec[i64]
+    set rb = math::between(2 6) :vec[i64]
     testlib.assert_eq(4 len(rb))
-    testlib.assert_eq(2 lists.get(rb 0))
-    testlib.assert_eq(5 lists.get(rb 3))
+    testlib.assert_eq(2 vec::get::i64(rb 0))
+    testlib.assert_eq(5 vec::get::i64(rb 3))
     use dasu("  math.between: ok")
 
-    set rs = math.step(0 10 3) :vec[i64]
+    set rs = math::step(0 10 3) :vec[i64]
     testlib.assert_eq(4 len(rs))
-    testlib.assert_eq(0 lists.get(rs 0))
-    testlib.assert_eq(9 lists.get(rs 3))
+    testlib.assert_eq(0 vec::get::i64(rs 0))
+    testlib.assert_eq(9 vec::get::i64(rs 3))
     use dasu("  math.step: ok")
 
     set nums = [5 2 8 1 9] :vec[i64]
-    testlib.assert_eq(1 math.minlist(nums))
-    testlib.assert_eq(9 math.maxlist(nums))
+    testlib.assert_eq(1 math::minlist(nums))
+    testlib.assert_eq(9 math::maxlist(nums))
     use dasu("  math.minlist/max_list: ok")
 
-    testlib.assert_eq(25 math.sum(nums))
+    testlib.assert_eq(25 math::sum(nums))
     use dasu("  math.sum: ok")
 
 

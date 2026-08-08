@@ -1,49 +1,70 @@
 load! /code/util
 
 pub fn crypto_tempdir: (prefix :str) :str {
-    set d = use! util::trim(proc::run("mktemp -d /tmp/" + prefix + ".XXXXXX 2>/dev/null || true"))
+    set d = use! util::trim(proc::run::output("mktemp" ["-d" "/tmp/" + prefix + ".XXXXXX"]))
     return d
 }
 
 pub fn crypto_sha256: (file :str) :str {
-    set hash = "" :str mut
-    if fs_exists(file) {
-        set out = use! util::trim(proc::run("sha256sum \"" + file + "\" 2>/dev/null; shasum -a 256 \"" + file + "\" 2>/dev/null; true"))
-        if out != "" {
-            set parts = use! util::split(out " ")
-            if len(parts) >= 1 {
-                set h = use! util::trim(use! util::list_get(parts 0))
-                if len(h) == 64 { set hash = h }
-            }
-        }
-    }
-    return hash
+    return use! util::sha256sum_hex(file)
 }
 
 pub fn crypto_verify_ed25519: (pubkey_b64 :str data_file :str sig_b64 :str) :bool {
     set ok = false :bool mut
-    if pubkey_b64 == "" || sig_b64 == "" || !fs_exists(data_file) {
+    if pubkey_b64 == "" || sig_b64 == "" || !fs::exists(data_file) {
         set ok = false
     } else {
         set tmp = use! crypto::crypto_tempdir("owl-crypto")
         if tmp == "" {
             set ok = false
         } else {
-            use proc::run("printf '%s' \"" + pubkey_b64 + "\" 2>/dev/null | base64 -d > \"" + tmp + "/pubkey.bin\" 2>/dev/null")
-            if !fs_exists(tmp + "/pubkey.bin") {
-                use proc::run("rm -rf \"" + tmp + "\" 2>/dev/null")
+            set pem = "-----BEGIN PUBLIC KEY-----\n" + pubkey_b64 + "\n-----END PUBLIC KEY-----\n"
+            set pk_file = tmp + "/pubkey.pem"
+            use fs::write(pk_file pem)
+            if !fs::exists(pk_file) {
+                set rm1 = [] :vec[str] mut
+                set rm1 = vec::push::str(rm1 "-rf")
+                set rm1 = vec::push::str(rm1 strings::copy(tmp))
+                use proc::run::output("rm" rm1)
                 set ok = false
             } else {
-                use proc::run("printf '%s' \"" + sig_b64 + "\" 2>/dev/null | base64 -d > \"" + tmp + "/sig.bin\" 2>/dev/null")
-                if !fs_exists(tmp + "/sig.bin") {
-                    use proc::run("rm -rf \"" + tmp + "\" 2>/dev/null")
+                set sig_file = tmp + "/sig.b64"
+                use fs::write(sig_file sig_b64)
+                set sig_b64_args = [] :vec[str] mut
+                set sig_b64_args = vec::push::str(sig_b64_args "base64")
+                set sig_b64_args = vec::push::str(sig_b64_args "-d")
+                set sig_b64_args = vec::push::str(sig_b64_args "-A")
+                set sig_b64_args = vec::push::str(sig_b64_args "-in")
+                set sig_b64_args = vec::push::str(sig_b64_args strings::copy(sig_file))
+                set sig_b64_args = vec::push::str(sig_b64_args "-out")
+                set sig_b64_args = vec::push::str(sig_b64_args strings::copy(tmp + "/sig.bin"))
+                use proc::run::output("openssl" sig_b64_args)
+                if !fs::exists(tmp + "/sig.bin") {
+                    set rm2 = [] :vec[str] mut
+                    set rm2 = vec::push::str(rm2 "-rf")
+                    set rm2 = vec::push::str(rm2 strings::copy(tmp))
+                    use proc::run::output("rm" rm2)
                     set ok = false
                 } else {
-                    use proc::run("openssl pkey -inform DER -in \"" + tmp + "/pubkey.bin\" -pubin -out \"" + tmp + "/pubkey.pem\" 2>/dev/null || true")
-                    set cmd = "openssl pkeyutl -verify -pubin -inkey \"" + tmp + "/pubkey.pem\" -inform PEM -in \"" + data_file + "\" -sigfile \"" + tmp + "/sig.bin\" -rawin 2>/dev/null && echo 'OK' || echo 'FAIL'"
-                    set result = use! util::trim(proc::run(cmd))
-                    use proc::run("rm -rf \"" + tmp + "\" 2>/dev/null")
-                    if use! util::contains(result "OK") { set ok = true } else { set ok = false }
+                    set vfy_args = [] :vec[str] mut
+                    set vfy_args = vec::push::str(vfy_args "pkeyutl")
+                    set vfy_args = vec::push::str(vfy_args "-verify")
+                    set vfy_args = vec::push::str(vfy_args "-pubin")
+                    set vfy_args = vec::push::str(vfy_args "-inkey")
+                    set vfy_args = vec::push::str(vfy_args strings::copy(tmp + "/pubkey.pem"))
+                    set vfy_args = vec::push::str(vfy_args "-keyform")
+                    set vfy_args = vec::push::str(vfy_args "PEM")
+                    set vfy_args = vec::push::str(vfy_args "-in")
+                    set vfy_args = vec::push::str(vfy_args strings::copy(data_file))
+                    set vfy_args = vec::push::str(vfy_args "-sigfile")
+                    set vfy_args = vec::push::str(vfy_args strings::copy(tmp + "/sig.bin"))
+                    set vfy_args = vec::push::str(vfy_args "-rawin")
+                    set result = use! util::trim(proc::run::output("openssl" vfy_args))
+                    set rm3 = [] :vec[str] mut
+                    set rm3 = vec::push::str(rm3 "-rf")
+                    set rm3 = vec::push::str(rm3 strings::copy(tmp))
+                    use proc::run::output("rm" rm3)
+                    if use! util::contains(result "Verified Successfully") { set ok = true } else { set ok = false }
                 }
             }
         }
@@ -53,8 +74,11 @@ pub fn crypto_verify_ed25519: (pubkey_b64 :str data_file :str sig_b64 :str) :boo
 
 pub fn crypto_verify_ed25519_sigfile: (pubkey_b64 :str data_file :str sig_file :str) :bool {
     set ok = false :bool mut
-    if pubkey_b64 != "" && fs_exists(data_file) && fs_exists(sig_file) {
-        set sig_b64 = use! util::trim(proc::run("base64 -w0 \"" + sig_file + "\" 2>/dev/null || true"))
+    if pubkey_b64 != "" && fs::exists(data_file) && fs::exists(sig_file) {
+        set b64_args = [] :vec[str] mut
+        set b64_args = vec::push::str(b64_args "-w0")
+        set b64_args = vec::push::str(b64_args strings::copy(sig_file))
+        set sig_b64 = use! util::trim(proc::run::output("base64" b64_args))
         if sig_b64 != "" {
             set ok = use! crypto::crypto_verify_ed25519(pubkey_b64 data_file sig_b64)
         }
@@ -64,12 +88,24 @@ pub fn crypto_verify_ed25519_sigfile: (pubkey_b64 :str data_file :str sig_file :
 
 pub fn crypto_verify_pemfile: (pem_file :str data_file :str sig_file :str) :bool {
     set ok = false :bool mut
-    if !fs_exists(pem_file) || !fs_exists(data_file) || !fs_exists(sig_file) {
+    if !fs::exists(pem_file) || !fs::exists(data_file) || !fs::exists(sig_file) {
         set ok = false
     } else {
-        set cmd = "openssl pkeyutl -verify -pubin -inkey \"" + pem_file + "\" -inform PEM -in \"" + data_file + "\" -sigfile \"" + sig_file + "\" -rawin 2>/dev/null"
-        set result = use! util::trim(proc::run(cmd + " && echo 'OK' || echo 'FAIL'"))
-        if use! util::contains(result "OK") { set ok = true } else { set ok = false }
+        set vfy_args = [] :vec[str] mut
+        set vfy_args = vec::push::str(vfy_args "pkeyutl")
+        set vfy_args = vec::push::str(vfy_args "-verify")
+        set vfy_args = vec::push::str(vfy_args "-pubin")
+        set vfy_args = vec::push::str(vfy_args "-inkey")
+        set vfy_args = vec::push::str(vfy_args strings::copy(pem_file))
+        set vfy_args = vec::push::str(vfy_args "-keyform")
+        set vfy_args = vec::push::str(vfy_args "PEM")
+        set vfy_args = vec::push::str(vfy_args "-in")
+        set vfy_args = vec::push::str(vfy_args strings::copy(data_file))
+        set vfy_args = vec::push::str(vfy_args "-sigfile")
+        set vfy_args = vec::push::str(vfy_args strings::copy(sig_file))
+        set vfy_args = vec::push::str(vfy_args "-rawin")
+        set result = use! util::trim(proc::run::output("openssl" vfy_args))
+        if use! util::contains(result "Verified Successfully") { set ok = true } else { set ok = false }
     }
     return ok
 }

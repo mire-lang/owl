@@ -1,8 +1,8 @@
 load! /code/util
 load! /code/lockfile
+load! /code/deps
 
 pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
-    set mire = use! util::compiler_cmd()
     set is_proj = use! util::has_project()
 
     set n = rt_vec_len(args)
@@ -22,28 +22,38 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
     set cli_profile = "" :str mut
     set cli_opt = "" :str mut
     set extra_flags = "" :str mut
+    set run_args = [] :vec[str] mut
+    set seen_ddash = false :bool mut
     while i < n {
         set a = rt_vec_get_str(args i)
-        if a == "--debug" || a == "-d" {
-            set cli_profile = "debug"
-            set cli_opt = "0"
+        if a == "--" {
+            set seen_ddash = true
         } else {
-            if a == "--release" || a == "-r" {
-                set cli_profile = "release"
-                set cli_opt = "3"
+            if seen_ddash {
+                set run_args = vec::push::str(run_args strings::copy(a))
             } else {
-                if a == "-O" || a == "--opt-level" {
-                    set i += 1
-                    if i < n { set cli_opt = rt_vec_get_str(args i) }
+                if a == "--debug" || a == "-d" {
+                    set cli_profile = "debug"
+                    set cli_opt = "0"
                 } else {
-                    if use! util::startswith(a "-O") && len(a) > 2 {
-                        set cli_opt = use! util::replace(a "-O" "")
+                    if a == "--release" || a == "-r" {
+                        set cli_profile = "release"
+                        set cli_opt = "3"
                     } else {
-                        if !use! util::startswith(a "-") && cli_file == "" {
-                            set cli_file = a
+                        if a == "-O" || a == "--opt-level" {
+                            set i += 1
+                            if i < n { set cli_opt = rt_vec_get_str(args i) }
                         } else {
-                            if use! util::startswith(a "-") {
-                                set extra_flags = extra_flags + " " + a
+                            if use! util::startswith(a "-O") && len(a) > 2 {
+                                set cli_opt = use! util::replace(a "-O" "")
+                            } else {
+                                if !use! util::startswith(a "-") && cli_file == "" {
+                                    set cli_file = a
+                                } else {
+                                    if use! util::startswith(a "-") {
+                                        set extra_flags = extra_flags + " " + a
+                                    }
+                                }
                             }
                         }
                     }
@@ -60,12 +70,26 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
         if cli_file == "" {
             use! util::error_line("OWL0002" "no file specified and no owl.toml found")
         } else {
-            set cmd = mire :str mut
-            if is_run { set cmd = cmd + " run " + cli_file } else { set cmd = cmd + " build " + cli_file }
-            if cli_profile == "release" { set cmd = cmd + " --release" } else { set cmd = cmd + " --debug" }
-            if cli_opt != "" { set cmd = cmd + " -O " + cli_opt }
-            if extra_flags != "" { set cmd = cmd + extra_flags }
-            set out = proc::run(cmd)
+            set argv = [] :vec[str] mut
+            if is_run { set argv = vec::push::str(argv "run") } else { set argv = vec::push::str(argv "build") }
+            set argv = vec::push::str(argv cli_file)
+            if cli_profile == "release" { set argv = vec::push::str(argv "--release") } else { set argv = vec::push::str(argv "--debug") }
+            if cli_opt != "" {
+                set argv = vec::push::str(argv "-O")
+                set argv = vec::push::str(argv cli_opt)
+            }
+            set argv = vec::push::str(argv "--lib-dir")
+            set argv = vec::push::str(argv use! util::owl_home_libs_display())
+            if extra_flags != "" {
+                set toks = strings::split(extra_flags " ")
+                set ti = 0 :i64 mut
+                while ti < len(toks) {
+                    set tk = use! util::list_get(toks ti)
+                    if tk != "" { set argv = vec::push::str(argv tk) }
+                    set ti += 1
+                }
+            }
+            set out = use! util::run_compiler(argv)
             use dasu(out)
         }
     } else {
@@ -74,7 +98,7 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
         } else {
             set entry = use! util::config_required("project" "entry")
             set file = entry :str mut
-            if cli_file != "" && fs_exists(cli_file) { set file = cli_file }
+            if cli_file != "" && fs::exists(cli_file) { set file = cli_file }
 
             set profile = use! util::config_required("build" "profile") :str mut
             set opt = use! util::config_required("build" "opt-level") :str mut
@@ -84,7 +108,7 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
             set out_dir = use! util::config_required("paths" "output") :str mut
             set cache_dir = use! util::config_required("paths" "cache") :str mut
 
-            if !fs_exists(file) {
+            if !fs::exists(file) {
                 use! util::error_line("OWL0002" "input not found: " + file)
             } else {
                 set cache = cache_dir
@@ -94,23 +118,37 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
 
                 set out_dir2 = use! util::config_required("paths" "output")
 
-                set build_cmd = mire :str mut
-                set build_cmd = build_cmd + " build " + file
-                if profile == "release" { set build_cmd = build_cmd + " --release" } else { set build_cmd = build_cmd + " --debug" }
-                set build_cmd = build_cmd + " -O " + opt
-                if extra_flags != "" { set build_cmd = build_cmd + extra_flags }
+                set argv = [] :vec[str] mut
+                set argv = vec::push::str(argv "build")
+                set argv = vec::push::str(argv strings::copy(file))
+                if profile == "release" { set argv = vec::push::str(argv "--release") } else { set argv = vec::push::str(argv "--debug") }
+                set argv = vec::push::str(argv "-O")
+                set argv = vec::push::str(argv strings::copy(opt))
+                set argv = vec::push::str(argv "--lib-dir")
+                set argv = vec::push::str(argv use! util::owl_home_libs_display())
+                if extra_flags != "" {
+                    set toks = strings::split(extra_flags " ")
+                    set ti = 0 :i64 mut
+                    while ti < len(toks) {
+                        set tk = use! util::list_get(toks ti)
+                        if tk != "" { set argv = vec::push::str(argv strings::copy(tk)) }
+                        set ti += 1
+                    }
+                }
                 use dasu("  [" + profile + " -O" + opt + "]")
 
                 if is_run {
-                    set build_out = proc::run(build_cmd)
+                    set build_out = use! util::run_compiler(argv)
                     use dasu(build_out)
+                    if use! proc::run::last_exit() == 0 { use! util::record_build() }
                 } else {
-                    set out = proc::run(build_cmd)
+                    set out = use! util::run_compiler(argv)
                     use dasu(out)
+                    if use! proc::run::last_exit() == 0 { use! util::record_build() }
                 }
 
                 set name = entry :str mut
-                if cli_file != "" && (fs_exists(cli_file) || use! util::endswith(cli_file ".mire")) { set name = cli_file }
+                if cli_file != "" && (fs::exists(cli_file) || use! util::endswith(cli_file ".mire")) { set name = cli_file }
                 if use! util::endswith(name ".mire") {
                     set name = use! util::replace(name ".mire" "")
                 }
@@ -120,16 +158,14 @@ pub fn compile_pipeline: (args :&vec[str] is_run :bool) {
                 set bin = "./" + out_dir2 + "/" + profile + "/" + name :str mut
 
                 use dasu("")
-                use proc_spawn("echo \"  running " + bin + " ...\"")
-                set pid = proc_spawn(bin)
-                use proc_wait(pid)
+                use dasu("  running " + bin + " ...")
+                use proc::run::spawn(bin run_args)
             }
         }
     }
 }
 
 pub fn cmd_debug: (args :&vec[str]) {
-    set mire = use! util::compiler_cmd()
     set is_proj = use! util::has_project()
     set n = rt_vec_len(args)
 
@@ -160,7 +196,7 @@ pub fn cmd_debug: (args :&vec[str]) {
                     if a == "--run" || a == "-r" {
                         set extra_flags = extra_flags + " --run"
                     } else {
-                        if !use! util::startswith(a "-") && (fs_exists(a) || use! util::endswith(a ".mire")) {
+                        if !use! util::startswith(a "-") && (fs::exists(a) || use! util::endswith(a ".mire")) {
                             set file_idx = i
                         } else {
                             if use! util::startswith(a "-") {
@@ -182,8 +218,21 @@ pub fn cmd_debug: (args :&vec[str]) {
             use! util::error_line("OWL0002" "no file specified and no owl.toml found")
             return
         }
-        set cmd = mire + " debug " + cli_file + extra_flags
-        set out = proc::run(cmd)
+        set argv = [] :vec[str] mut
+        set argv = vec::push::str(argv "debug")
+        set argv = vec::push::str(argv strings::copy(cli_file))
+        set argv = vec::push::str(argv "--lib-dir")
+        set argv = vec::push::str(argv use! util::owl_home_libs_display())
+        if extra_flags != "" {
+            set toks = strings::split(extra_flags " ")
+            set ti = 0 :i64 mut
+            while ti < len(toks) {
+                set tk = use! util::list_get(toks ti)
+                if tk != "" { set argv = vec::push::str(argv strings::copy(tk)) }
+                set ti += 1
+            }
+        }
+        set out = use! util::run_compiler(argv)
         use dasu(out)
         return
     }
@@ -194,18 +243,31 @@ pub fn cmd_debug: (args :&vec[str]) {
     }
     set entry = use! util::config_required("project" "entry")
     set file = entry :str mut
-    if cli_file != "" && fs_exists(cli_file) { set file = cli_file }
-    if !fs_exists(file) {
+    if cli_file != "" && fs::exists(cli_file) { set file = cli_file }
+    if !fs::exists(file) {
         use! util::error_line("OWL0002" "input not found: " + file)
         return
     }
-    set cmd = mire + " debug " + file + extra_flags
-    set out = proc::run(cmd)
+    set argv = [] :vec[str] mut
+    set argv = vec::push::str(argv "debug")
+    set argv = vec::push::str(argv strings::copy(file))
+    set argv = vec::push::str(argv "--lib-dir")
+    set argv = vec::push::str(argv use! util::owl_home_libs_display())
+    if extra_flags != "" {
+        set toks = strings::split(extra_flags " ")
+        set ti = 0 :i64 mut
+        while ti < len(toks) {
+            set tk = use! util::list_get(toks ti)
+            if tk != "" { set argv = vec::push::str(argv strings::copy(tk)) }
+            set ti += 1
+        }
+    }
+    set out = use! util::run_compiler(argv)
     use dasu(out)
 }
 
 pub fn cmd_new: (name :str) {
-    if fs_exists(name) {
+    if fs::exists(name) {
         use dasu("Error: directory already exists")
     } else {
         set dirs = use! util::split(name "/")
@@ -215,9 +277,18 @@ pub fn cmd_new: (name :str) {
         use! util::mkdir_p(name + "/bin")
         use! util::mkdir_p(name + "/tests")
         use! util::mkdir_p(name + "/docs")
-        use fs_write(name + "/owl.toml" "[project]\nname = \"" + n + "\"\nversion = \"0.1.0\"\ndescription = \"A Mire project\"\nentry = \"code/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\n\n[paths]\nsources = \"code\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n\n[dependencies]\n")
-        use fs_write(name + "/code/main.mire" "pub fn main: () {\n    use dasu(\"ok\")\n}\n")
-        use fs_write(name + "/tests/smoke.mire" "@[test]\npub fn test_smoke: () :bool {\n    return true\n}\n")
+
+        set mire_path = use! util::owl_home_libs_display() + "/mire"
+        set auto = use! deps::gather_latest_libs()
+        set deps_section = "[dependencies]\nmire = { path = \"" + mire_path + "\", version = \"0.1.0\" }\n"
+        set auto_section = "" :str mut
+        if auto != "" {
+            set auto_section = "\n[tool.owl.auto-deps]\n" + auto + "\n"
+        }
+        set toml = "[project]\nname = \"" + n + "\"\nversion = \"0.1.0\"\ndescription = \"A Mire project\"\nentry = \"code/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\n\n[paths]\nsources = \"code\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n\n" + deps_section + auto_section
+        use fs::write(name + "/owl.toml" toml)
+        use fs::write(name + "/code/main.mire" "pub fn main: () {\n    use dasu(\"ok\")\n}\n")
+        use fs::write(name + "/tests/smoke.mire" "@[test]\npub fn test_smoke: () :bool {\n    return true\n}\n")
         use dasu("Project created: " + name)
     }
 }

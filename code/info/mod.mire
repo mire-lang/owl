@@ -35,20 +35,21 @@ pub fn cmd_info: (args :&vec[str]) {
         set c_val = use! util::toml_get("owl.toml" "paths" "cache") :str mut
         if c_val == "" { set c_val = "?" }
 
-        set arch_val = use! util::trim(proc::run("uname -m 2>/dev/null || true")) :str mut
-        set kernel_val = use! util::trim(proc::run("uname -s | tr '[:upper:]' '[:lower:]' 2>/dev/null || true")) :str mut
+        set arch_val = use! util::trim(proc::run::output("uname" ["-m"])) :str mut
+        set kernel_val = use! util::trim(proc::run::output("uname" ["-s"])) :str mut
+        if kernel_val != "" { set kernel_val = strings::lower(kernel_val) }
         if arch_val == "" { set arch_val = "?" }
         if kernel_val == "" { set kernel_val = "?" }
     }
 
     set compiler_line = "?" :str mut
-    set compiler_out = use! util::trim(proc::run("mire --version 2>/dev/null || true"))
+    set compiler_out = use! util::trim(proc::run::output("mire" ["--version"]))
     if compiler_out != "" {
         set clines = use! util::split(compiler_out "\n")
         set compiler_line = use! util::list_get(clines 0)
     }
 
-    set llvm = use! util::trim(proc::run("llvm-config --version 2>/dev/null || true")) :str mut
+    set llvm = use! util::trim(proc::run::output("llvm-config" ["--version"])) :str mut
     if llvm == "" { set llvm = "?" }
 
     set deps_raw = "" :str mut
@@ -184,7 +185,7 @@ pub fn cmd_clean: (args :&vec[str]) {
 
     if clean_global {
         use! util::rm_RF(use! util::owl_home() + "/cache")
-        use! util::rm_RF(use! util::owl_home() + "/modules")
+        use! util::rm_RF(use! util::owl_home() + "/libs")
         use dasu("cleaned global caches")
         return
     }
@@ -197,25 +198,25 @@ pub fn cmd_clean: (args :&vec[str]) {
     set cleaned = false :bool mut
 
     if clean_all || clean_bin {
-        if fs_exists("bin") {
+        if fs::exists("bin") {
             use! util::rm_RF("bin")
             set cleaned = true
         }
     }
     if clean_all || clean_cache {
-        if fs_exists(".cache") {
+        if fs::exists(".cache") {
             use! util::rm_RF(".cache")
             set cleaned = true
         }
     }
     if clean_all {
-        if fs_exists("deps") {
+        if fs::exists("deps") {
             use! util::rm_RF("deps")
             set cleaned = true
         }
     }
 
-    if fs_exists("_test_harness.mire") {
+    if fs::exists("_test_harness.mire") {
         use fs::drop("_test_harness.mire")
         set cleaned = true
     }

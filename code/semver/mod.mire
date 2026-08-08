@@ -210,7 +210,7 @@ pub fn resolve_from_registry: (name :&str constraint :&str) :str {
     if cached != "" { set result = cached }
     if cached == "" {
         set reg_dir = use! util::owl_home_registries()
-        set reg_list = use! util::trim(proc::run("ls \"" + reg_dir + "\" 2>/dev/null || true"))
+        set reg_list = use! util::trim(proc::run::output("ls" ["-1" strings::copy(reg_dir)]))
         if reg_list == "" { set result = "" }
         if reg_list != "" {
             set all_versions = "" :str mut
@@ -221,10 +221,30 @@ pub fn resolve_from_registry: (name :&str constraint :&str) :str {
                 set reg_name = use! util::trim(use! util::list_get(entries i_reg))
                 if reg_name != "" {
                     set index_path = reg_dir + "/" + reg_name + "/index.toml"
-                    set version_cmd = "grep -A1 '^name = \"" + *name + "\"' \"" + index_path + "\" | grep '^version =' | sed 's/.*= \"\\(.*\\)\"/\\1/' | head -1"
-                    set versions = use! util::trim(proc::run(version_cmd))
-                    if versions != "" {
-                        if all_versions == "" { set all_versions = versions } else { set all_versions = all_versions + " " + versions }
+                    set grep_args = [] :vec[str] mut
+                    set grep_args = vec::push::str(grep_args "-A1")
+                    set grep_args = vec::push::str(grep_args strings::copy("^name = \"" + strings::copy(name) + "\""))
+                    set grep_args = vec::push::str(grep_args strings::copy(index_path))
+                    set grep_out = use! util::trim(proc::run::output("grep" grep_args))
+                    set vlines = strings::split(grep_out "\n")
+                    set vn = len(vlines)
+                    set vi = 0 :i64 mut
+                    set found_version = "" :str mut
+                    while vi < vn {
+                        set vline = use! util::trim(use! util::list_get(vlines vi))
+                        if use! util::startswith(vline "version = ") {
+                            set eq = strings::index(vline "=")
+                            if eq >= 0 {
+                                set after = strings::substr(vline eq + 1 9999) :str mut
+                                set after = use! util::trim(after)
+                                if use! util::startswith(after "\"") { set after = use! util::replace(after "\"" "") }
+                                set found_version = after
+                            }
+                        }
+                        set vi += 1
+                    }
+                    if found_version != "" {
+                        if all_versions == "" { set all_versions = found_version } else { set all_versions = all_versions + " " + found_version }
                     }
                 }
                 set i_reg += 1
@@ -260,13 +280,13 @@ pub fn cache_resolution: (name :&str constraint :&str version :&str) {
     set v = use! util::trim(version)
     if n == "" || c == "" { return }
     set entry = n + "|" + c + "=\"" + v + "\"\n"
-    use fs_write(cache_file entry)
+    use fs::write(cache_file entry)
 }
 
 pub fn get_cached_resolution: (name :&str constraint :&str) :str {
     set cache_file = use! util::owl_home_cache_resolution()
     set result = "" :str mut
-    if fs_exists(cache_file) {
+    if fs::exists(cache_file) {
         set content = fs::read(cache_file)
         set n = use! util::trim(name)
         set c = use! util::trim(constraint)

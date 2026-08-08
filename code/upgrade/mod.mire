@@ -34,12 +34,24 @@ pub fn cmd_upgrade: (args :&vec[str]) :i64 {
     }
 
     use dasu("cloning repository...")
-    use proc::run("rm -rf " + tmp_dir)
-    set clone_ok = use! util::trim(proc::run("git clone --depth 1 " + remote_url + " " + tmp_dir + " 2>&1"))
+    set rm1 = [] :vec[str] mut
+    set rm1 = vec::push::str(rm1 "-rf")
+    set rm1 = vec::push::str(rm1 strings::copy(tmp_dir))
+    use proc::run::output("rm" rm1)
+    set clone_args = [] :vec[str] mut
+    set clone_args = vec::push::str(clone_args "--depth")
+    set clone_args = vec::push::str(clone_args "1")
+    set clone_args = vec::push::str(clone_args strings::copy(remote_url))
+    set clone_args = vec::push::str(clone_args strings::copy(tmp_dir))
+    set clone_out = use! util::trim(proc::run::output("git" clone_args))
+    set clone_ok = clone_out
     if strings::contains(clone_ok "fatal") || strings::contains(clone_ok "error") {
         use dasu("error: git clone failed")
         use dasu(clone_ok)
-        use proc::run("rm -rf " + tmp_dir)
+        set rm2 = [] :vec[str] mut
+        set rm2 = vec::push::str(rm2 "-rf")
+        set rm2 = vec::push::str(rm2 strings::copy(tmp_dir))
+        use proc::run::output("rm" rm2)
         return 1
     }
     use dasu("  clone ok")
@@ -48,13 +60,28 @@ pub fn cmd_upgrade: (args :&vec[str]) :i64 {
     set new_bin = tmp_dir + "/bin/release/main"
 
     set owl_home = use! util::owl_home()
-    use proc::run("ln -sfn " + owl_home + "/lib/kioto " + tmp_dir + "/../kioto 2>/dev/null")
+    set ln_args = [] :vec[str] mut
+    set ln_args = vec::push::str(ln_args "-sfn")
+    set ln_args = vec::push::str(ln_args owl_home + "/lib/kioto")
+    set ln_args = vec::push::str(ln_args tmp_dir + "/../kioto")
+    use proc::run::output("ln" ln_args)
 
-    set build_out = use! util::trim(proc::run("cd " + tmp_dir + " && mire build code/main.mire --release 2>&1"))
-    if !fs_exists(new_bin) {
+    set build_args = [] :vec[str] mut
+    set build_args = vec::push::str(build_args "build")
+    set build_args = vec::push::str(build_args "code/main.mire")
+    set build_args = vec::push::str(build_args "--release")
+    set build_out = use! util::trim(proc::run::output_cwd("mire" build_args strings::copy(tmp_dir) true))
+    if !fs::exists(new_bin) {
         use dasu("error: build failed")
         use dasu(build_out)
-        use proc::run("rm -rf " + tmp_dir + "; rm -f " + tmp_dir + "/../kioto")
+        set rm3 = [] :vec[str] mut
+        set rm3 = vec::push::str(rm3 "-rf")
+        set rm3 = vec::push::str(rm3 strings::copy(tmp_dir))
+        set rm3b = [] :vec[str] mut
+        set rm3b = vec::push::str(rm3b "-f")
+        set rm3b = vec::push::str(rm3b strings::copy(tmp_dir + "/../kioto"))
+        use proc::run::output("rm" rm3)
+        use proc::run::output("rm" rm3b)
         return 1
     }
     use dasu("  build ok")
@@ -67,37 +94,56 @@ pub fn cmd_upgrade: (args :&vec[str]) :i64 {
     }
 
     use dasu("installing...")
-    set install_out = use! util::trim(proc::run("install -m 0755 " + new_bin + " " + owl_bin + " 2>&1"))
+    set inst_args = [] :vec[str] mut
+    set inst_args = vec::push::str(inst_args "-m")
+    set inst_args = vec::push::str(inst_args "0755")
+    set inst_args = vec::push::str(inst_args strings::copy(new_bin))
+    set inst_args = vec::push::str(inst_args strings::copy(owl_bin))
+    set install_out = use! util::trim(proc::run::output("install" inst_args))
     if strings::contains(install_out "Permission denied") || strings::contains(install_out "No such file") {
         use dasu("error: install failed - permission denied or path not found")
         use dasu("try running with sudo:")
         use dasu("  sudo install -m 0755 " + new_bin + " " + owl_bin)
-        use proc::run("rm -rf " + tmp_dir + "; rm -f " + tmp_dir + "/../kioto")
+        set rm4 = [] :vec[str] mut
+        set rm4 = vec::push::str(rm4 "-rf")
+        set rm4 = vec::push::str(rm4 strings::copy(tmp_dir))
+        set rm4b = [] :vec[str] mut
+        set rm4b = vec::push::str(rm4b "-f")
+        set rm4b = vec::push::str(rm4b strings::copy(tmp_dir + "/../kioto"))
+        use proc::run::output("rm" rm4)
+        use proc::run::output("rm" rm4b)
         return 1
     }
 
-    use proc::run("rm -rf " + tmp_dir + "; rm -f " + tmp_dir + "/../kioto")
+    set rm5 = [] :vec[str] mut
+    set rm5 = vec::push::str(rm5 "-rf")
+    set rm5 = vec::push::str(rm5 strings::copy(tmp_dir))
+    set rm5b = [] :vec[str] mut
+    set rm5b = vec::push::str(rm5b "-f")
+    set rm5b = vec::push::str(rm5b strings::copy(tmp_dir + "/../kioto"))
+    use proc::run::output("rm" rm5)
+    use proc::run::output("rm" rm5b)
     use dasu("done! owl has been updated.")
     use dasu("restart your shell or run: hash -r")
     return 0
 }
 
 fn find_owl_binary: () :str {
-    set path_val = env::get("PATH")
+    set path_val = env::var("PATH")
     set dirs = strings::split(path_val ":")
     set n = len(dirs)
     set i = 0 :i64 mut
     while i < n {
-        set dir = lists::get::str(dirs i)
+        set dir = vec::get::str(dirs i)
         set candidate = dir + "/owl"
-        if fs_exists(candidate) {
+        if fs::exists(candidate) {
             return candidate
         }
         set i += 1
     }
-    set home = env::get("HOME")
-    set fallback = home + "/.local/bin/owl"
-    if fs_exists(fallback) {
+    set home = env::var("HOME")
+    set fallback = strings::concat(home "/.local/bin/owl")
+    if fs::exists(fallback) {
         return fallback
     }
     return ""

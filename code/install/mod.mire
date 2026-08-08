@@ -1,9 +1,14 @@
 load! /code/util
 load! /code/crypto
 load! /code/semver
+load! /code/lockfile
 
-pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_val :str yes :bool name :str ver :str) :u8 {
+pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_val :str yes :bool name :str ver :str has_lock :bool) :u8 {
     set ec = 0 :u8 mut
+    if has_lock {
+        use! lockfile::lockfile_install_all()
+        return ec
+    }
     if has_l {
         use! install::cmd_list_packages()
     } else {
@@ -11,9 +16,10 @@ pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_
         if is_empty {
             if has_t { use dasu("Usage: owl install -t <name>") } else {
                 if target_val == "d" || target_val == "r" { use! install::cmd_target_install(target_val "") } else {
-                    use dasu("Usage: owl install [-l] [-t] [--target=d|r] <name> [version]")
+                    use dasu("Usage: owl install [-l] [-t] [--lock] [--target=d|r] <name> [version]")
                     use dasu("  -l, --list   List packages from all registries")
                     use dasu("  -t, --test   Test install")
+                    use dasu("  --lock       Install all packages from owl.lock")
                     use dasu("  --target=d|r Install compiled binary to owl cache")
                 }
             }
@@ -28,7 +34,7 @@ pub fn cmd_install: (has_l :bool has_t :bool no_verify :bool force :bool target_
 
 pub fn cmd_list_packages: () {
     set reg_dir = use! util::owl_home_registries()
-    set reg_list = use! util::trim(proc::run("ls \"" + reg_dir + "\" 2>/dev/null || true"))
+    set reg_list = use! util::trim(proc::run::output("ls" ["-1" strings::copy(reg_dir)]))
     if len(reg_list) == 0 {
         use dasu("  no registries configured -- run: owl load --url <registry-url>")
     } else {
@@ -40,7 +46,7 @@ pub fn cmd_list_packages: () {
             set reg_name = use! util::trim(use! util::list_get(entries i_reg))
             if len(reg_name) > 0 {
                 set idx_path = reg_dir + "/" + reg_name + "/index.toml"
-                set content = use! util::trim(proc::run("cat \"" + idx_path + "\" 2>/dev/null || true"))
+                set content = fs::read(idx_path)
                 if len(content) > 0 {
                     set lines = use! semver::count_lines(content)
                     set in_pkg = false :bool mut
@@ -85,7 +91,7 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
     set pkg_name = name :str
 
     set reg_dir = use! util::owl_home_registries()
-    set reg_list = use! util::trim(proc::run("ls \"" + reg_dir + "\" 2>/dev/null || true"))
+    set reg_list = use! util::trim(proc::run::output("ls" ["-1" strings::copy(reg_dir)]))
     if reg_list != "" {
         set entries = use! util::split(reg_list "\n")
         set ni = len(entries)
@@ -95,18 +101,67 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
             if pkg_info != "" { break }
             if len(reg_name) > 0 {
                 set idx_path = reg_dir + "/" + reg_name + "/index.toml"
-                set tmp = "/tmp/owl_install_pkg.tmp"
-                set cmd = "grep -A10 '^name = \"" + pkg_name + "\"' \"" + idx_path + "\" > \"" + tmp + "\" 2>/dev/null"
-                use proc::run(cmd)
-                set grep_out = use! util::trim(fs::read(tmp))
+                set idx_content = fs::read(idx_path)
+                set grep_pattern = "^name = \"" + pkg_name + "\""
+                set gargs = [] :vec[str] mut
+                set gargs = vec::push::str(gargs "-A15")
+                set gargs = vec::push::str(gargs strings::copy(grep_pattern))
+                set gargs = vec::push::str(gargs strings::copy(idx_path))
+                set grep_out = use! util::trim(proc::run::output("grep" gargs))
                 if grep_out != "" {
-                    set tarball_line = use! util::trim(proc::run("grep '^tarball =' \"" + tmp + "\" 2>/dev/null | sed 's/.*= \"\\(.*\\)\"/\\1/'"))
-                    set sha256_line = use! util::trim(proc::run("grep '^sha256 =' \"" + tmp + "\" 2>/dev/null | sed 's/.*= \"\\(.*\\)\"/\\1/'"))
-                    if tarball_line != "" {
-                        set pkg_info = tarball_line + "|" + sha256_line + "|" + reg_name
+                    set glines = strings::split(grep_out "\n")
+                    set gnl = len(glines)
+                    set gi = 0 :i64 mut
+                    set found_tarball = "" :str mut
+                    set found_sha = "" :str mut
+                    set found_method = "" :str mut
+                    set found_repo = "" :str mut
+                    set found_tag = "" :str mut
+                    set found_asset = "" :str mut
+                    set found_ref = "" :str mut
+                    set found_commit = "" :str mut
+                    while gi < gnl {
+                        set gline = use! util::trim(use! util::list_get(glines gi))
+                        set eq = strings::index(gline "=")
+                        if eq > 0 {
+                            set after = strings::substr(gline eq + 1 9999) :str mut
+                            set after = use! util::trim(after)
+                            if use! util::startswith(after "\"") && use! util::endswith(after "\"") {
+                                set after = strings::substr(after 1 strings::len(after) - 2)
+                            } else {
+                                if use! util::startswith(after "\"") { set after = strings::substr(after 1 9999) }
+                            }
+                            if use! util::startswith(gline "tarball = ") {
+                                set found_tarball = after
+                            }
+                            if use! util::startswith(gline "sha256 = ") {
+                                set found_sha = after
+                            }
+                            if use! util::startswith(gline "method = ") {
+                                set found_method = after
+                            }
+                            if use! util::startswith(gline "repo = ") {
+                                set found_repo = after
+                            }
+                            if use! util::startswith(gline "tag = ") {
+                                set found_tag = after
+                            }
+                            if use! util::startswith(gline "asset = ") {
+                                set found_asset = after
+                            }
+                            if use! util::startswith(gline "ref = ") {
+                                set found_ref = after
+                            }
+                            if use! util::startswith(gline "commit = ") {
+                                set found_commit = after
+                            }
+                        }
+                        set gi += 1
+                    }
+                    if found_tarball != "" || found_method == "clone" || found_repo != "" {
+                        set pkg_info = found_tarball + "|" + found_sha + "|" + reg_name + "|" + found_method + "|" + found_repo + "|" + found_tag + "|" + found_asset + "|" + found_ref + "|" + found_commit
                     }
                 }
-                use proc::run("rm -f \"" + tmp + "\" 2>/dev/null")
             }
             set i_reg += 1
         }
@@ -117,31 +172,41 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
         set ec = 1 :u8
     }
 
+    set tarball_path = "" :str mut
+    set sha256_val = "" :str mut
+    set reg_name = "" :str mut
+    set method = "" :str mut
+    set repo = "" :str mut
+    set tag = "" :str mut
+    set asset = "" :str mut
+    set ref_val = "" :str mut
+    set commit_val = "" :str mut
     if ec == 0 {
         set pipe1 = strings::index(pkg_info "|")
         if pipe1 < 0 {
             use dasu("  error: invalid package info from registry")
             set ec = 1 :u8
-        }
-    }
-    set tarball_path = "" :str mut
-    set sha256_val = "" :str mut
-    set reg_name = "" :str mut
-    if ec == 0 {
-        set pipe1 = strings::index(pkg_info "|")
-        set pipe2 = strings::index(strings::substr(pkg_info pipe1 + 1 9999) "|")
-        if pipe2 < 0 {
-            use dasu("  error: invalid package info from registry (missing sha256 or reg)")
-            set ec = 1 :u8
         } else {
-            set tarball_path = strings::substr(pkg_info 0 pipe1)
-            set sha256_val = strings::substr(pkg_info pipe1 + 1 pipe2)
-            set reg_name = strings::substr(pkg_info pipe1 + pipe2 + 2 9999)
+            set fields = strings::split(pkg_info "|")
+            set nf = len(fields)
+            if nf >= 1 { set tarball_path = use! util::list_get(fields 0) }
+            if nf >= 2 { set sha256_val = use! util::list_get(fields 1) }
+            if nf >= 3 { set reg_name = use! util::list_get(fields 2) }
+            if nf >= 4 { set method = use! util::list_get(fields 3) }
+            if nf >= 5 { set repo = use! util::list_get(fields 4) }
+            if nf >= 6 { set tag = use! util::list_get(fields 5) }
+            if nf >= 7 { set asset = use! util::list_get(fields 6) }
+            if nf >= 8 { set ref_val = use! util::list_get(fields 7) }
+            if nf >= 9 { set commit_val = use! util::list_get(fields 8) }
         }
     }
 
+    if ec == 0 && method == "clone" {
+        return use! install::cmd_install_clone(strings::copy(pkg_name) strings::copy(pkg_ver) strings::copy(repo) strings::copy(ref_val) strings::copy(commit_val))
+    }
+
     set reg_url = "" :str mut
-    if ec == 0 && fs_exists(reg_dir + "/" + reg_name + "/registry.json") {
+    if ec == 0 && fs::exists(reg_dir + "/" + reg_name + "/registry.json") {
         set reg_content = fs::read(reg_dir + "/" + reg_name + "/registry.json")
         set reg_url = use! util::json_get_str(reg_content "url") :str mut
         if reg_url == "" {
@@ -156,22 +221,39 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
     set tarball_url = "" :str mut
     set tarball_file = "" :str mut
     if ec == 0 {
-        set tarball_url = reg_url + "/" + tarball_path
+        if repo != "" && tag != "" && asset != "" {
+            if use! util::startswith(repo "http") {
+                set tarball_url = repo + "/releases/download/" + tag + "/" + asset
+            } else {
+                set tarball_url = "https://github.com/" + repo + "/releases/download/" + tag + "/" + asset
+            }
+        } else {
+            set tarball_url = reg_url + "/" + tarball_path
+        }
         use dasu("  downloading from " + tarball_url + "...")
         set tarball_file = use! util::owl_home() + "/cache/tarballs/" + pkg_name + "-" + pkg_ver + ".tar.zst"
         use! util::mkdir_p(use! util::owl_home() + "/cache/tarballs")
-        use proc::run("curl -sL --fail -o \"" + tarball_file + "\" \"" + tarball_url + "\" 2>/dev/null || true")
+        set curl_args = [] :vec[str] mut
+        set curl_args = vec::push::str(curl_args "-sL")
+        set curl_args = vec::push::str(curl_args "--fail")
+        set curl_args = vec::push::str(curl_args "-o")
+        set curl_args = vec::push::str(curl_args strings::copy(tarball_file))
+        set curl_args = vec::push::str(curl_args strings::copy(tarball_url))
+        use proc::run::output("curl" curl_args)
 
-        if !fs_exists(tarball_file) {
+        if !fs::exists(tarball_file) {
             use dasu("  error: download failed")
             set ec = 1 :u8
         }
     }
 
     if ec == 0 {
-        set file_size = use! util::trim(proc::run("stat -c%s \"" + tarball_file + "\" 2>/dev/null || echo 0"))
+        set file_size = use! util::trim(proc::run::output("stat" ["-c" "%s" strings::copy(tarball_file)]))
         if file_size == "0" {
-            use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+            set rm1 = [] :vec[str] mut
+            set rm1 = vec::push::str(rm1 "-f")
+            set rm1 = vec::push::str(rm1 strings::copy(tarball_file))
+            use proc::run::output("rm" rm1)
             use dasu("  error: download failed (empty file)")
             set ec = 1 :u8
         }
@@ -179,19 +261,28 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
 
     if ec == 0 {
         if sha256_val == "" {
-            use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+            set rm2 = [] :vec[str] mut
+            set rm2 = vec::push::str(rm2 "-f")
+            set rm2 = vec::push::str(rm2 strings::copy(tarball_file))
+            use proc::run::output("rm" rm2)
             use dasu("  error: registry entry for \"" + pkg_name + "\" has no sha256 - refusing to install unverified package")
             set ec = 1 :u8
         } else {
             use dasu("  verifying SHA-256...")
-            set actual = use! util::trim(proc::run("sha256sum \"" + tarball_file + "\" 2>/dev/null | cut -d' ' -f1 || true"))
+            set actual = use! util::sha256sum_hex(tarball_file)
             if actual == "" {
-                use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+                set rm3 = [] :vec[str] mut
+                set rm3 = vec::push::str(rm3 "-f")
+                set rm3 = vec::push::str(rm3 strings::copy(tarball_file))
+                use proc::run::output("rm" rm3)
                 use dasu("  error: could not compute SHA-256 (sha256sum missing) - refusing to install unverified package")
                 set ec = 1 :u8
             } else {
                 if actual != sha256_val {
-                    use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+                    set rm4 = [] :vec[str] mut
+                    set rm4 = vec::push::str(rm4 "-f")
+                    set rm4 = vec::push::str(rm4 strings::copy(tarball_file))
+                    use proc::run::output("rm" rm4)
                     use dasu("  error: SHA-256 mismatch")
                     use dasu("    expected: " + sha256_val)
                     use dasu("    actual:   " + actual)
@@ -206,41 +297,69 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
     if ec == 0 {
         set sig_url = tarball_url + ".sig"
         set sig_file = tarball_file + ".sig"
-        use proc::run("curl -sL --fail -o \"" + sig_file + "\" \"" + sig_url + "\" 2>/dev/null || true")
-        if fs_exists(sig_file) {
+        set curl_sig = [] :vec[str] mut
+        set curl_sig = vec::push::str(curl_sig "-sL")
+        set curl_sig = vec::push::str(curl_sig "--fail")
+        set curl_sig = vec::push::str(curl_sig "-o")
+        set curl_sig = vec::push::str(curl_sig strings::copy(sig_file))
+        set curl_sig = vec::push::str(curl_sig strings::copy(sig_url))
+        use proc::run::output("curl" curl_sig)
+        if fs::exists(sig_file) {
             set pubkey = "" :str mut
-            if fs_exists(reg_dir + "/" + reg_name + "/registry.json") {
+            if fs::exists(reg_dir + "/" + reg_name + "/registry.json") {
                 set reg_content = fs::read(reg_dir + "/" + reg_name + "/registry.json")
                 set pubkey = use! util::json_get_str(reg_content "public-key") :str mut
             }
             if pubkey == "" {
-                use proc::run("rm -f \"" + tarball_file + "\" \"" + sig_file + "\" 2>/dev/null")
+                set rm5 = [] :vec[str] mut
+                set rm5 = vec::push::str(rm5 "-f")
+                set rm5 = vec::push::str(rm5 strings::copy(tarball_file))
+                set rm5b = [] :vec[str] mut
+                set rm5b = vec::push::str(rm5b "-f")
+                set rm5b = vec::push::str(rm5b strings::copy(sig_file))
+                use proc::run::output("rm" rm5)
+                use proc::run::output("rm" rm5b)
                 use dasu("  error: no public-key for registry \"" + reg_name + "\" - refusing to install signed package without verification")
                 set ec = 1 :u8
             } else {
                 use dasu("  verifying Ed25519 signature...")
-                set tf = tarball_file + ""
-                set sf = sig_file + ""
-                if !use! crypto::crypto_verify_ed25519_sigfile(pubkey tf sf) {
-                    use proc::run("rm -f \"" + tarball_file + "\" \"" + sig_file + "\" 2>/dev/null")
+                set tf_copy = strings::copy(tarball_file)
+                set sf_copy = strings::copy(sig_file)
+                if !use! crypto::crypto_verify_ed25519_sigfile(pubkey tf_copy sf_copy) {
+                    set rm6 = [] :vec[str] mut
+                    set rm6 = vec::push::str(rm6 "-f")
+                    set rm6 = vec::push::str(rm6 strings::copy(tarball_file))
+                    set rm6b = [] :vec[str] mut
+                    set rm6b = vec::push::str(rm6b "-f")
+                    set rm6b = vec::push::str(rm6b strings::copy(sig_file))
+                    use proc::run::output("rm" rm6)
+                    use proc::run::output("rm" rm6b)
                     use dasu("  error: Ed25519 signature verification failed")
                     set ec = 1 :u8
                 } else {
                     use dasu("  Ed25519 signature OK")
                 }
             }
-            use proc::run("rm -f \"" + sig_file + "\" 2>/dev/null")
+            set rm7 = [] :vec[str] mut
+            set rm7 = vec::push::str(rm7 "-f")
+            set rm7 = vec::push::str(rm7 strings::copy(sig_file))
+            use proc::run::output("rm" rm7)
         }
     }
 
     if ec == 0 {
-        set meta_path = use! util::owl_home_modules() + "/" + pkg_name + "/meta.toml"
-        use! util::mkdir_p(use! util::owl_home_modules() + "/" + pkg_name)
+        set meta_path = use! util::owl_home_libs() + "/" + pkg_name + "/meta.toml"
+        use! util::mkdir_p(use! util::owl_home_libs() + "/" + pkg_name)
 
         use dasu("  extracting...")
-        use proc::run("tar -xzf \"" + tarball_file + "\" -C \"" + use! util::owl_home_modules() + "/" + pkg_name + "\" 2>/dev/null || true")
+        set tar_args = [] :vec[str] mut
+        set tar_args = vec::push::str(tar_args "-xf")
+        set tar_args = vec::push::str(tar_args strings::copy(tarball_file))
+        set tar_args = vec::push::str(tar_args "-C")
+        set tar_args = vec::push::str(tar_args strings::copy(use! util::owl_home_libs() + "/" + pkg_name))
+        use proc::run::output("tar" tar_args)
 
-        if !fs_exists(meta_path) {
+        if !fs::exists(meta_path) {
             use dasu("  writing metadata...")
             set meta = "[package]\n" :str mut
             set meta = meta + "name = \"" + pkg_name + "\"\n"
@@ -248,23 +367,100 @@ pub fn cmd_install_pkg: (name :str version :str no_verify :bool force :bool) :u8
             set meta = meta + "compiler = \"" + use! util::compiler_cmd() + "\"\n"
             set meta = meta + "abi = " + use! util::abi_version() + "\n"
             set meta = meta + "language = \"" + use! util::language_version() + "\"\n"
-            use fs_write(use! util::owl_home_modules() + "/" + pkg_name + "/meta.toml" meta)
+            use fs::write(use! util::owl_home_libs() + "/" + pkg_name + "/meta.toml" meta)
         }
 
-        use! util::fs_make_readonly(use! util::owl_home_modules() + "/" + pkg_name)
-        use proc::run("rm -f \"" + tarball_file + "\" 2>/dev/null")
+        use! util::fs_make_readonly(use! util::owl_home_libs() + "/" + pkg_name)
+        set rm8 = [] :vec[str] mut
+        set rm8 = vec::push::str(rm8 "-f")
+        set rm8 = vec::push::str(rm8 strings::copy(tarball_file))
+        use proc::run::output("rm" rm8)
         use dasu("  installed " + pkg_name + " v" + pkg_ver)
     }
     return ec
 }
 
+pub fn cmd_install_clone: (name :str version :str repo :str ref_val :str commit_val :str) :u8 {
+    set ec = 0 :u8 mut
+    set libs_dir = use! util::owl_home_libs()
+    set libs_dir_copy = strings::copy(libs_dir)
+    use! util::mkdir_p(libs_dir)
+    set dest = libs_dir_copy + "/" + name
+    set dest_copy = strings::copy(dest)
+    if fs::exists(strings::copy(dest_copy)) {
+        use! util::rm_RF(strings::copy(dest_copy))
+    }
+
+    use dasu("  cloning " + repo + " ...")
+    set clone_url = repo :str mut
+    set abs_url = false :bool mut
+    if use! util::startswith(repo "http") { set abs_url = true }
+    if use! util::startswith(repo "file://") { set abs_url = true }
+    if use! util::startswith(repo "/") { set abs_url = true }
+    if !abs_url {
+        set clone_url = "https://github.com/" + repo
+    }
+    set git_args = [] :vec[str] mut
+    set git_args = vec::push::str(git_args "clone")
+    set git_args = vec::push::str(git_args "--depth")
+    set git_args = vec::push::str(git_args "1")
+    if ref_val != "" {
+        set git_args = vec::push::str(git_args "--branch")
+        set git_args = vec::push::str(git_args strings::copy(ref_val))
+    }
+    set git_args = vec::push::str(git_args strings::copy(clone_url))
+    set git_args = vec::push::str(git_args strings::copy(dest_copy))
+    use proc::run::output("git" git_args)
+    if use! proc::run::last_exit() != 0 {
+        use dasu("  error: git clone failed")
+        return 1 :u8
+    }
+
+    if commit_val != "" {
+        set rev_args = [] :vec[str] mut
+        set rev_args = vec::push::str(rev_args "-C")
+        set rev_args = vec::push::str(rev_args strings::copy(dest_copy))
+        set rev_args = vec::push::str(rev_args "rev-parse")
+        set rev_args = vec::push::str(rev_args "HEAD")
+        set head = use! util::trim(proc::run::output("git" rev_args))
+        if head != commit_val {
+            use! util::rm_RF(strings::copy(dest_copy))
+            use dasu("  error: cloned commit " + head + " does not match pinned commit " + commit_val)
+            return 1 :u8
+        }
+        use dasu("  commit " + head + " verified")
+    }
+
+    set meta_path = strings::copy(dest_copy) + "/meta.toml"
+    if !fs::exists(strings::copy(meta_path)) {
+        use dasu("  writing metadata...")
+        set meta = "[package]\n" :str mut
+        set meta = meta + "name = \"" + name + "\"\n"
+        set meta = meta + "version = \"" + version + "\"\n"
+        set meta = meta + "compiler = \"" + use! util::compiler_cmd() + "\"\n"
+        set meta = meta + "abi = " + use! util::abi_version() + "\n"
+        set meta = meta + "language = \"" + use! util::language_version() + "\"\n"
+        use fs::write(meta_path meta)
+    }
+
+    use! util::fs_make_readonly(strings::copy(dest_copy))
+    use dasu("  installed " + name + " v" + version + " (clone from " + repo + ")")
+    return ec
+}
+
 pub fn cmd_target_install: (target_val :str named :str) {
     if len(named) > 0 {
-        if !fs_exists(named) {
+        if !fs::exists(named) {
             use dasu("  error: binary not found at " + named)
         } else {
-            use proc::run("cp \"" + named + "\" \"" + use! util::owl_home() + "/bin/\"")
-            use proc::run("chmod +x \"" + named + "\"")
+            set cp_args = [] :vec[str] mut
+            set cp_args = vec::push::str(cp_args strings::copy(named))
+            set cp_args = vec::push::str(cp_args strings::copy(use! util::owl_home() + "/bin"))
+            use proc::run::output("cp" cp_args)
+            set chmod_args = [] :vec[str] mut
+            set chmod_args = vec::push::str(chmod_args "+x")
+            set chmod_args = vec::push::str(chmod_args strings::copy(named))
+            use proc::run::output("chmod" chmod_args)
             use dasu("  installed to owl cache")
         }
     } else {
@@ -276,10 +472,27 @@ pub fn cmd_target_install: (target_val :str named :str) {
             set out_dir = use! util::toml_get("owl.toml" "paths" "output") :str mut
             if len(out_dir) == 0 { set out_dir = "bin" }
             set bin_path = out_dir + "/" + profile
-            if !fs_exists(bin_path) {
+            if !fs::exists(bin_path) {
                 use dasu("  error: no build output at " + bin_path + " -- run owl build first")
             } else {
-                use proc::run("cp \"" + bin_path + "\"/* \"" + use! util::owl_home() + "/bin/\" 2>/dev/null || true")
+                set dest_bin = use! util::owl_home() + "/bin"
+                set ls_args = [] :vec[str] mut
+                set ls_args = vec::push::str(ls_args "-1")
+                set ls_args = vec::push::str(ls_args strings::copy(bin_path))
+                set listing = use! util::trim(proc::run::output("ls" ls_args))
+                set files = use! util::split(listing "\n")
+                set nf = len(files)
+                set j = 0 :i64 mut
+                while j < nf {
+                    set fname = use! util::trim(use! util::list_get(files j))
+                    if fname != "" {
+                        set cp_args = [] :vec[str] mut
+                        set cp_args = vec::push::str(cp_args strings::copy(bin_path + "/" + fname))
+                        set cp_args = vec::push::str(cp_args strings::copy(dest_bin))
+                        use proc::run::output("cp" cp_args)
+                    }
+                    set j += 1
+                }
                 use dasu("  installed build artifacts to owl cache")
             }
         }

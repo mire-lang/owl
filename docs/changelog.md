@@ -1,5 +1,127 @@
 # Owl Changelog
 
+## [0.31.0] - 2026-08-06
+
+### Fixed
+
+- **`owl gc` data-loss bug (rewritten):** the old gc assumed a versioned layout
+  and `rm -rf`'d everything else — it deleted `~/.owl/libs/kioto` contents
+  (left `.git`) and, THROUGH the `mire` symlink, emptied the `Arch/mire` git
+  repo. The new `code/gc/mod.mire` is **dry-run by default** (`--yes`/`-y` to
+  delete), skips flat working copies (top-level `meta.toml`/`owl.toml`, e.g.
+  kioto), only prunes versioned `libs/<pkg>/<ver>/`, and prints `[orphan]`
+  listings.
+- **`owl deps --prune` deleted `mire`:** `used_dep_names()` only counted deps
+  with an explicit ``load ` `` in source, so the compiler stdlib was "unused".
+  `mire` is now never pruned; other deps are pruned only when no `load`
+  references them.
+- **`owl run -- args` never forwarded arguments:** added `--` separator parsing
+  in `compile_pipeline` (`code/build/mod.mire`); spawn is now
+  `proc::run::spawn(bin run_args)`.
+- **`owl profile` always showed "Builds: 0":** `~/.owl/cache/build_status.toml`
+  was read but never written. Added `util::record_build()` (writes build count
+  + last build epoch-ms after a successful compile, gated on
+  `proc::run::last_exit() == 0`). This also exposed that
+  `rt_proc_capture_argv` (v1) never set the thread-local exit status — fixed in
+  the runtime (`helpers.c`).
+- **`owl export --dry-run` claimed "tar + zstd required":** the success check
+  matched the literal string `OK`, but GNU tar signals success via exit code.
+  Now uses `proc::run::last_exit() == 0` (with the fallback `-I zstd` attempt).
+- **Lockfile "no dependencies" bug:** `get_dep_names`/`get_dep_names_from`
+  skipped the last dep line when it lacked a trailing newline →
+  `count_deps == 0` → lockfiles generated with no packages. Both now process
+  the remaining text when the final line has no `\n`.
+- **`owl check`/`checkup`/lockfile failed on `~` paths:** TOML `~/.owl/...`
+  paths were never expanded. Added `util::expand_home()`; wired into `cmd_check`,
+  `cmd_checkup` deps check, `checkup --fix deps`, and `lockfile_validate`.
+  `checkup`'s `find` now uses `-L` (deps are symlinks).
+- **`owl run` swallowed child stdout:** `pal_proc_create(argv, PAL_SPAWN_WAIT,
+  0,0,0)` now means "no pipes, child inherits parent fd" (PAL contract);
+  `linux_proc_create` creates pipes only for non-null channels, so the MireData
+  report and stress metrics are visible again.
+- **4 `incremental::hashing` failures — root cause was `/tmp/owl.toml`:** an
+  orphaned scratch file made `find_project_root` resolve un-nested temp tests
+  to `/tmp` as project root, so every test shared `/tmp/bin/.cache` and
+  `gc_blobs` deleted peers' blobs. Deleted the orphan AND made the 4 cache
+  roundtrip tests hermetic via `setup_test_root` (each writes its own
+  owl.toml/root).
+
+## [0.30.0] - 2026-08-05
+
+### Security
+
+- **Subprocess shell-call audit (argv-only):** Every `proc::run::shell` call whose
+  arguments could be derived from untrusted input (registry indices, lockfiles,
+  user flags) was converted to `proc::run::output(cmd, args)` (argv-based, no
+  shell). See `docs/SECURITY.md` for the full inventory. Critical fixes:
+  - `upgrade`: `git clone` of a user-provided `--url` no longer passes through a shell.
+  - `install`/`lockfile`: `curl` downloads of registry-derived tarball/signature URLs are argv-based.
+  - `crypto`/`registry`: pubkey and signature material (network-sourced) is decoded via
+    temp-file + argv `base64 -d -i -o` instead of `printf ... | base64 -d`.
+  - `check`/`semver`/`lockfile`: `grep|sed|wc` pipelines with lockfile-derived package names
+    replaced by argv `grep` + string parsing; `find|wc` replaced by argv `find` + `vec::len`.
+- **Only four shell calls remain**, all documented as acceptable in `docs/SECURITY.md`:
+  `cd ... && mire build` (hardcoded dir), interactive `read < /dev/tty` (×2), and
+  `cp bin_path/*` glob expansion.
+- **New `util::sha256sum_hex(path)`** helper; `crypto_sha256` now delegates to it
+  instead of shell pipelines.
+
+### Fixed
+
+- **`owl test` invoked mire without the `test` subcommand:** after the argv conversion,
+  `collect_test_args` started at argv index 2 and dropped the `test` keyword, so `mire`
+  printed its help screen. The collected argv now starts with `["test", ...]`.
+- **`lockfile_get_field()` mis-resolved package blocks:** it rewound to the *first*
+  `[[package]]` header, so fields for later packages (e.g. `testlib`, `crypto`) were
+  read from the first package's block. The field is now searched within the block that
+  follows the matched `name` line. This was causing a false `owl.lock is out of sync`
+  report that blocked `owl build`.
+- **`testlib/mod.mire` restored** (was accidentally deleted) and migrated off the
+  removed `proc_exit` to the runtime `exit` extern.
+
+## [0.29.0] - 2026-07-26
+
+### Added
+
+- **`owl install --lock`:** Install all packages from `owl.lock`. Reads each
+  `[[package]]` entry, skips local registry packages, downloads and installs
+  missing packages from their configured registries.
+- **`lockfile_validate()`:** Checks each lockfile entry's path exists, reports
+  valid/total count. Integrated into `owl checkup`.
+- **`lockfile_get_field()`:** Extract a specific field from a lockfile package
+  entry by name.
+- **Registry resolution in lockfile generation:** When a dependency has no
+  explicit `registry` field, `generate_lockfile()` now scans configured
+  registries to find which one contains the package, instead of defaulting
+  to `"local"`.
+- **Compiler/language metadata in lockfile:** `generate_lockfile()` now includes
+  `compiler` and `language` fields from `meta.toml` when available.
+
+### Changed
+
+- **`owl checkup` now validates lockfile:** The deps check section includes
+  `lockfile_validate()` to verify all lockfile entries are valid.
+
+## [0.28.0] - 2026-07-22
+
+### Changed
+
+- **Cache path rename `modules` → `libs`:** `util::owl_home_modules()`
+ renamed to `util::owl_home_libs()` and now points at `~/.owl/libs/`
+ (previously `~/.owl/modules/`). All references in `code/gc`, `code/info`,
+ `code/install`, `code/dload` and the docs updated accordingly.
+- **`owl deps --prune` / `owl install --prune`:** New capability to prune
+ unused dependencies. Scans `code/` and `tests/` for `load <dep>` usage via
+ the new `util::grep_load()`, removes orphans from `owl.toml [dependencies]`,
+ and regenerates `owl.lock`. Implemented in `code/deps/mod.mire`
+ (`prune_unused()`); exposed both as `owl deps --prune` (`-p`) and
+ `owl install --prune`.
+
+### Added
+
+- `util::grep_load(dep)` — returns true if any `.mire` under `code/` or
+ `tests/` contains a `load <dep>` statement.
+
 ## [0.27.0] - 2026-07-19
 
 ### Changed
@@ -145,7 +267,7 @@
 - **`owl gc`** — garbage collect: scans `~/.owl/lib/`, removes orphaned versions not referenced in any `owl.lock`
 - **`owl tree [--all]`** — dependency tree: flat by default, `--all` shows recursive
 - **`owl profile [--json]`** — build metrics: binary size, compiler, last build, build count
-- **`owl clean --global`** — cleans `~/.owl/cache/` and `~/.owl/modules/`
+- **`owl clean --global`** — cleans `~/.owl/cache/` and `~/.owl/libs/`
 - `deps::get_dep_names_from(toml_file)` — get dependency names from any owl.toml
 - `deps::get_dep_field_from(toml_file, dep_name, field)` — get a specific dep field from any owl.toml
 
@@ -296,7 +418,7 @@
 
 ### `owl import` / `owl -I`
 
-- `owl import <name>`: imports from `~/.owl/modules/<name>` cache
+- `owl import <name>`: imports from `~/.owl/libs/<name>` cache
 - `owl -I <name>`: same as `owl import`
 - `owl import <name> --path <path>`: imports local path dependency
 - `owl -I <name> --path <path>`: same
