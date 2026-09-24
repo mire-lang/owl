@@ -34,3 +34,6 @@ _test_harness.mire
 
 # Generated test lib symlink
 tests/lib
+
+# Test runner logs/cache
+tests/log/

@@ -10,17 +10,17 @@ fn fib: (n :i64) :i64 {
 pub fn main: () {
     use dasu("--- stress ---")
 
-    set start = time.unix.ms() :i64
+    set start = time::now::ms() :i64
     set result = fib(35)
-    set elapsed = time.unix.ms() - start :i64
+    set elapsed = time::now::ms() - start :i64
     testlib.assert_eq(9227465 result)
-    use dasu("  fib(35) in " + strings.from.i64(elapsed) + "ms: ok")
+    use dasu("  fib(35) in " + strings::from::i64(elapsed) + "ms: ok")
 
-    set start2 = time.unix.ms() :i64
+    set start2 = time::now::ms() :i64
     set result2 = fib(40)
-    set elapsed2 = time.unix.ms() - start2 :i64
+    set elapsed2 = time::now::ms() - start2 :i64
     testlib.assert_eq(102334155 result2)
-    use dasu("  fib(40) in " + strings.from.i64(elapsed2) + "ms: ok")
+    use dasu("  fib(40) in " + strings::from::i64(elapsed2) + "ms: ok")
 
     set sum = 0 :i64 mut
     set i = 0 :i64 mut
@@ -37,19 +37,19 @@ pub fn main: () {
         set big_str = big_str + "x"
         set rep = rep + 1
     }
-    testlib.assert_eq(10000 strings.len(big_str))
+    testlib.assert_eq(10000 strings::len(big_str))
     use dasu("  string concat 10000x: ok")
 
     set lst = [] :vec[i64] mut
     set j = 0 :i64 mut
     while j < 5000 {
         set val = j :i64
-        set lst = lists.push(lst val)
+        set lst = vec::push::i64(lst val)
         set j = j + 1
     }
     testlib.assert_eq(5000 len(lst))
-    testlib.assert_eq(0 lists.get(lst 0))
-    testlib.assert_eq(4999 lists.get(lst 4999))
+    testlib.assert_eq(0 vec::get::i64(lst 0))
+    testlib.assert_eq(4999 vec::get::i64(lst 4999))
     use dasu("  5000-element list: ok")
 
     use dasu("all stress tests passed")

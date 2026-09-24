@@ -31,4 +31,4 @@ set +x
 
 echo
 printf 'Done. You can rerun with explicit options, e.g.:\n'
-printf '  %q --with-mire --owl-repo <owner/repo> --mire-repo <owner/repo>\n' "$BASE_SCRIPT"
+printf '  %q --yes --owl-repo <url> --mire-repo <url> --mire-lib-repo <url> --kioto-repo <url>\n' "$BASE_SCRIPT"

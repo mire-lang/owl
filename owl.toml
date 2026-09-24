@@ -1,6 +1,6 @@
 [project]
 name = "owl"
-version = "0.27.0"
+version = "1.1.2"
 description = "Package and project manager for the Mire (Avenys) language"
 entry = "code/main.mire"
 
@@ -8,14 +8,50 @@ entry = "code/main.mire"
 compiler = "mire"
 profile = "debug"
 opt-level = "0"
+artifact = "bin"
+runtime = "minimal"
+target = "x86_64-unknown-linux-gnu"
+panic = "abort"
+incremental = true
+debug-info = true
 
 [paths]
 sources = "code"
 tests = "tests"
 output = "bin"
 cache = "bin/.cache"
+generated = "bin/generated"
+
+[cfg]
+publisher = "publish.toml"
+registry = "local"
+registry_url = "http://localhost:8080"
+cache = "~/.owl/cache"
+libs = "~/.owl/libs"
+
+[exports]
+owl = "code/main.mire"
+util = "code/util"
+crypto = "code/crypto"
+trust = "code/trust"
+registry = "code/registry"
+install = "code/install"
+build = "code/build"
+check = "code/check"
+info = "code/info"
+ui = "code/ui"
+args = "code/args"
+deps = "code/deps"
+lockfile = "code/lockfile"
+gc = "code/gc"
+profile = "code/profile"
+export = "code/export"
+upgrade = "code/upgrade"
 
 [dependencies]
-kioto = { path = "../kioto" }
-testlib = { path = "./tests/lib" }
+kioto = { path = "~/.owl/libs/kioto" }
+testlib = { path = "./testlib" }
 crypto = { path = "./code/crypto" }
+
+["owl@lock"]
+version = "3"

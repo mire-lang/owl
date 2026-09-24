@@ -1,26 +1,28 @@
+module dload
+
 load! /code/util
 load! /code/registry
 load! /code/deps
 load! /code/args
 
-pub fn cmd_load_url: (args :&vec[str]) {
-    set url = use! args::get_flag_value(args "--url") :str mut
+pub fn url: (args :&vec[str]) {
+    set url = use! args::flag::value(args "--url") :str mut
     if url == "" {
-        set url = use! args::get_flag_value(args "-u")
+        set url = use! args::flag::value(args "-u")
     }
     if url == "" {
-        set url = use! args::get_positional(args 0)
+        set url = use! args::position::get(args 0)
     }
     if url == "" {
         use dasu("usage: owl load --url <url>")
         use dasu("       owl -Lu <url>")
     } else {
-        use! registry::cmd_registry_add(url)
+        use! registry::add(url)
     }
     return
 }
 
-pub fn cmd_load_dep: (args :&vec[str]) {
+pub fn dependency: (args :&vec[str]) {
     set n = rt_vec_len(args)
     set proceed = true :bool mut
     if n < 3 {
@@ -81,7 +83,7 @@ pub fn cmd_load_dep: (args :&vec[str]) {
 
                 if proceed {
                     set backup_name = "owl.toml.backup"
-                    use fs_write(backup_name c)
+                    use fs::write(backup_name c)
 
                     set insert_pos = sec_pos + len(marker)
                     set before = strings::substr(c 0 insert_pos)
@@ -97,15 +99,16 @@ pub fn cmd_load_dep: (args :&vec[str]) {
                         if proceed {
                             set dep_line = name_arg + " = { path = \"" + path_val + "\" }"
                             set new_c = before + "\n" + dep_line + after
-                            use fs_write("owl.toml" new_c)
+                            use fs::write("owl.toml" new_c)
                             set ok_msg = "loaded '" + name_arg + "' from " + path_val
                             use dasu(ok_msg)
                         }
                     } else {
                         set owl_home = use! util::owl_home()
-                        set mp = owl_home + "/modules/" + name_arg + "/owl.toml"
-                        if !fs_exists(mp) {
-                            set err_msg = "error: '" + name_arg + "' not found in " + owl_home + "/modules/"
+                        set owl_libs = use! util::owl_home_libs_display()
+                        set mp = owl_home + "/libs/" + name_arg + "/owl.toml"
+                        if !fs::exists(mp) {
+                            set err_msg = "error: '" + name_arg + "' not found in " + owl_libs + "/"
                             use dasu(err_msg)
                             use dasu("  has the package been installed?")
                             set proceed = false
@@ -114,10 +117,10 @@ pub fn cmd_load_dep: (args :&vec[str]) {
                         if proceed {
                             set version = use! util::toml_get(mp "project" "version") :str mut
                             if version == "" { set version = "0.1.0" }
-                            set real_path = owl_home + "/modules/" + name_arg
+                            set real_path = owl_libs + "/" + name_arg
                             set dep_line = name_arg + " = { path = \"" + real_path + "\", version = \"" + version + "\" }"
                             set new_c = before + "\n" + dep_line + after
-                            use fs_write("owl.toml" new_c)
+                            use fs::write("owl.toml" new_c)
                             set ok_msg = "loaded '" + name_arg + "' v" + version + " from cache"
                             use dasu(ok_msg)
                         }
@@ -129,32 +132,71 @@ pub fn cmd_load_dep: (args :&vec[str]) {
     return
 }
 
-pub fn cmd_load_remove_registry: (args :&vec[str]) {
-    set name = use! args::get_positional(args 0) :str mut
+pub fn remove_registry: (args :&vec[str]) {
+    set name = use! args::position::get(args 0) :str mut
     if name == "" {
-        set name = use! args::get_flag_value(args "-r")
+        set name = use! args::flag::value(args "-r")
     }
     if name == "" {
-        set name = use! args::get_flag_value(args "--remove")
+        set name = use! args::flag::value(args "--remove")
     }
     if name == "" {
         use dasu("usage: owl load -r|--remove <name>")
     } else {
-        use! registry::cmd_registry_remove(name)
+        use! registry::remove(name)
     }
     return
 }
 
-pub fn cmd_load: (args :&vec[str]) {
-    set is_url = use! args::has_flag(args "-u") || use! args::has_flag(args "--url")
-    set is_list = use! args::has_flag(args "-l") || use! args::has_flag(args "--list")
-    set is_sync = use! args::has_flag(args "-s") || use! args::has_flag(args "--sync")
-    set is_rm = use! args::has_flag(args "-r") || use! args::has_flag(args "--remove")
-    if is_url { use! dload::cmd_load_url(args) } else {
-        if is_list { use! registry::cmd_registry_list() } else {
-            if is_sync { use! registry::cmd_registry_sync() } else {
-                if is_rm { use! dload::cmd_load_remove_registry(args) } else {
-                    use! dload::cmd_load_dep(args)
+pub fn run: (args :&vec[str]) {
+    set is_url = use! args::flag::has(args "-u") || use! args::flag::has(args "--url")
+    set is_list = use! args::flag::has(args "-l") || use! args::flag::has(args "--list")
+    set is_sync = use! args::flag::has(args "-s") || use! args::flag::has(args "--sync")
+    set is_rm = use! args::flag::has(args "-r") || use! args::flag::has(args "--remove")
+    if is_url { use! dload::url(args) } else {
+        if is_list { use! registry::list() } else {
+            if is_sync { use! registry::sync() } else {
+                if is_rm { use! dload::remove_registry(args) } else {
+                    use! dload::dependency(args)
+                }
+            }
+        }
+    }
+}
+
+/! Public `reg` command. Registry administration is deliberately separate
+   from `owl load`: load edits project dependencies, while registry manages
+   the configured package indexes in ~/.owl/reg. !/
+pub fn registry_command: (args :&vec[str]) {
+    set action = use! args::position::get(args 0)
+    if action == "add" {
+        set url_value = use! args::position::get(args 1)
+        if url_value == "" {
+            use dasu("usage: owl reg add <url>")
+        } else {
+            use! registry::add(url_value)
+        }
+    } else {
+        if action == "list" {
+            use! registry::list()
+            use! registry::list_beta()
+        } else {
+            if action == "sync" {
+                use! registry::sync()
+            } else {
+                if action == "remove" {
+                    set name = use! args::position::get(args 1)
+                    if name == "" {
+                        use dasu("usage: owl reg remove <name>")
+                    } else {
+                        use! registry::remove(name)
+                    }
+                } else {
+                    if action == "beta" {
+                        use! registry::list_beta()
+                    } else {
+                        use dasu("usage: owl reg <add|list|sync|remove|beta> [value]")
+                    }
                 }
             }
         }

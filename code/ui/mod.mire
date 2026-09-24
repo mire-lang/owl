@@ -1,43 +1,98 @@
+module ui
+
 load! /code/util
 
-pub fn print_banner: () {
+pub fn banner: () {
     use dasu("Owl v" + use! util::owl_version())
     use dasu("Compiler: " + use! util::compiler_version())
     use dasu("Language: Mire")
 }
 
-pub fn print_help: () {
-    use! ui::print_banner()
+pub fn help: () {
+    use! ui::banner()
     use dasu("")
     use dasu("Usage: owl <command> [flags]")
     use dasu("")
     use dasu("Build commands:")
     use dasu("  build  -B  [file]  [-d|--debug|-r|--release] [-O <n>]")
     use dasu("  run    -R  [file]  [-d|--debug|-r|--release] [-O <n>] [-- <args>]")
-    use dasu("  test   -T  [file]  [--verbose] [--no-run]")
-    use dasu("  check  -K         validate dependencies and ABI")
+    use dasu("  test   -T  [file]  [--log] [--verbose] [--no-run]")
+    use dasu("  check  -K         validate dependencies, loads and ABI")
     use dasu("  debug  -D  [file]  [--tokens|-t] [--ast|-p] [--ir] [--run|-r]   compiler introspection (tokens/ast/ir)")
     use dasu("")
     use dasu("Project commands:")
     use dasu("  new    -N  <Name>     create new project")
     use dasu("  clean  -C  [--bin] [--cache] [--all|-A] [--global]")
     use dasu("  info   -Q            show project and environment info")
-    use dasu("  checkup              validate and repair owl.toml")
-    use dasu("  tree   [--all]       show dependency tree")
+    use dasu("  checkup              project diagnostics and repair")
     use dasu("  profile [--json]     build metrics")
     use dasu("")
     use dasu("Package commands:")
     use dasu("  load  -L  <name>         add dependency to owl.toml")
-    use dasu("  load  -Lu <url>          add a package registry")
-    use dasu("  load  -Ll                list registries")
-    use dasu("  load  -Ls                sync registries")
-    use dasu("  load  -Lr <name>         remove registry")
-    use dasu("  install -S  <name> [ver] download and install package")
+    use dasu("  reg add <url>           add a package registry")
+    use dasu("  reg list                list registries")
+    use dasu("  reg sync                synchronize registries")
+    use dasu("  reg remove <name>       remove a registry")
+    use dasu("  install -S  [<name> [ver]] resolve/install dependencies")
+    use dasu("  install -S  --lock       install all packages from owl.lock")
     use dasu("  export -e  [--check|--dry-run]  package and sign")
+    use dasu("  deps   --prune           remove unused dependencies")
     use dasu("  gc                   garbage collect orphaned packages")
     use dasu("  upgrade [--yes]      self-update owl from source")
     use dasu("")
     use dasu("Global:")
     use dasu("  -V, --version     Show version")
     use dasu("  -h, --help        Show this help")
+}
+
+pub fn command: (name :str) {
+    use! ui::banner()
+    use dasu("")
+    if name == "install" {
+        use dasu("Usage: owl install [name [version]] [options]")
+        use dasu("  --lock          install exactly owl.lock; never resolve")
+        use dasu("  --no-verify     skip package hash/signature verification")
+        use dasu("  --force         replace an installed package")
+        use dasu("  --target=d|r    install debug or release compiler target")
+        use dasu("  -l, --list      list registry packages")
+    } else { if name == "load" {
+        use dasu("Usage: owl load <package> [--path <path>]")
+        use dasu("  Adds a dependency to owl.toml; it does not install it.")
+    } else { if name == "reg" {
+        use dasu("Usage: owl reg <add|list|sync|remove> [value]")
+        use dasu("  Registry data is stored under ~/.owl/reg.")
+    } else { if name == "checkup" {
+        use dasu("Usage: owl checkup [--deps] [--fix] [--fix-loads]")
+        use dasu("  --deps          validate lockfile and dependency metadata")
+        use dasu("  --fix           repair missing project configuration")
+        use dasu("  --fix-loads     add source load dependencies to owl.toml")
+    } else { if name == "export" {
+        use dasu("Usage: owl export [--check] [--dry-run] [--yes]")
+        use dasu("  --check         audit package metadata and integrity")
+        use dasu("  --dry-run       show archive/signature actions without writing")
+    } else { if name == "debug" {
+        use dasu("Usage: owl debug [file] [--tokens|--ast|--ir|--run]")
+        use dasu("  --tokens        print lexer tokens")
+        use dasu("  --ast           print parsed AST")
+        use dasu("  --ir            print lowered IR")
+        use dasu("  --run           execute the debug build")
+    } else { if name == "run" {
+        use dasu("Usage: owl run [file] [--debug|--release] [-- <program args>]")
+    } else { if name == "build" {
+        use dasu("Usage: owl build [file] [--debug|--release] [-O <level>]")
+    } else { if name == "gc" {
+        use dasu("Usage: owl gc [--dry-run] [--all]")
+    } else { if name == "profile" {
+        use dasu("Usage: owl profile [--json] [--record]")
+    } else {
+        use! ui::help()
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+    }
 }

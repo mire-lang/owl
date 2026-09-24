@@ -1,34 +1,22 @@
+module util
 
 // NOTE: 9999 is used as "rest of string" length in strings::substr calls
 // throughout the codebase. It works because substr clamps to string bounds.
 
-/! TOML parser (helpers first) !/
-fn toml_extract_val: (content :&str, val_start :i64) :str {
-    set val = "" :str mut
-    set after_key = strings::substr(content val_start 9999)
-    set nl_pos = strings::index(after_key "\n")
-    set raw_val = after_key :str mut
-    if nl_pos >= 0 { set raw_val = strings::substr(after_key 0 nl_pos) }
-    set trimmed = strings::trim(raw_val)
-    if strings::startswith(trimmed "\"") && strings::endswith(trimmed "\"") {
-        set no_start = strings::replace(trimmed "\"" "")
-        if strings::endswith(no_start "\"") {
-            set val = strings::replace(no_start "\"" "")
-        } else {
-            set val = no_start
-        }
-    } else {
-        set val = trimmed
-    }
-    return val
-}
+// Native string operations replacing shell-based trim_command.
+// These functions parse TOML, extract values, and perform string operations
+// without invoking shell commands.
 
 pub fn toml_get: (file :str section :str key :str) :str {
     set val = "" :str mut
-    if fs_exists(file) {
-        set content = fs::read(file)
-        set section_marker = "[" + section + "]"
-        set section_start = strings::index(content section_marker)
+    set content = fs::read(file)
+    if content != "" {
+        set section_marker = "[" + section + "]" :str mut
+        set section_start = strings::index(content section_marker) :i64 mut
+        if section_start < 0 {
+            set section_marker = "[\"" + section + "\"]"
+            set section_start = strings::index(content section_marker)
+        }
         if section_start >= 0 {
             set key_with_space = "\n" + key + " ="
             set key_pos1 = strings::index(content key_with_space)
@@ -44,6 +32,22 @@ pub fn toml_get: (file :str section :str key :str) :str {
                 }
             }
         }
+    }
+    return val
+}
+fn toml_extract_val: (content :&str, val_start :i64) :str {
+    set val = "" :str mut
+    set after_key = strings::substr(content val_start 9999)
+    set nl_pos = strings::index(after_key "\n")
+    set raw_val = after_key :str mut
+    if nl_pos >= 0 { set raw_val = strings::substr(after_key 0 nl_pos) }
+    set trimmed = strings::trim(raw_val)
+    if strings::starts::with(trimmed "\"") && strings::ends::with(trimmed "\"") {
+        set trimmed_len = strings::len(trimmed)
+        set inner_len = trimmed_len - 2
+        set val = strings::substr(trimmed 1 inner_len)
+    } else {
+        set val = trimmed
     }
     return val
 }
@@ -70,23 +74,226 @@ pub fn toml_get_from_string: (content :str section :str key :str) :str {
     return val
 }
 
-/! Filesystem operations !/
-pub fn mkdir_p: (path :str) {
-    use proc::run("mkdir -p \"" + path + "\"")
+/! Reads a TOML array of strings (`key = ["a", "b"]`) from `[section]`.
+    Scalar-only `toml_get` cannot express native C sources/libs, so project
+    `[c]` entries are read with this helper. Returns an empty vector when the
+    key is missing or is not a bracketed array. !/
+pub fn toml_get_array: (file :str section :str key :str) :vec[str] {
+    set out = [] :vec[str] mut
+    if !fs::exists(file) { return out }
+    set content = fs::read(file)
+
+    set section_marker = "[" + section + "]" :str mut
+    set section_start = strings::index(content section_marker) :i64 mut
+    if section_start < 0 {
+        set section_marker = "[\"" + section + "\"]"
+        set section_start = strings::index(content section_marker)
+    }
+    if section_start < 0 { return out }
+
+    // Bound the search to the section body so a same-named key in another
+    // section cannot leak into this result.
+    set body_start = section_start + strings::len(section_marker)
+    set after_section = strings::substr(content body_start 9999)
+    set next_rel = strings::index(after_section "\n[")
+    set body = after_section :str mut
+    if next_rel >= 0 { set body = strings::substr(after_section 0 next_rel) }
+
+    set pos = strings::index(body key + " = [") :i64 mut
+    if pos < 0 { set pos = strings::index(body key + "=[") }
+    if pos < 0 { return out }
+    // Skip the opening bracket itself: locate the `[` after the key.
+    set bracket_rel = strings::index(strings::substr(body pos 9999) "[")
+    if bracket_rel < 0 { return out }
+    set tail_start = pos + bracket_rel + 1 :i64 mut
+    set arr_tail = strings::substr(body tail_start 9999)
+    set close = strings::index(arr_tail "]")
+    if close < 0 { return out }
+    set inner = strings::substr(arr_tail 0 close)
+    if strings::trim(inner) == "" { return out }
+
+    set parts = strings::split(inner ",")
+    set i = 0 :i64 mut
+    while i < vec::len(parts) {
+        set item = strings::trim(vec::get::str(parts i)) :str mut
+        if strings::starts::with(item "\"") && strings::ends::with(item "\"") {
+            set inner_len = strings::len(item) - 2 :i64 mut
+            set item = strings::substr(item 1 inner_len)
+        }
+        if item != "" { set out = vec::push::str(out item) }
+        set i += 1
+    }
+    return out
 }
 
-pub fn rm_RF: (path :str) {
-    use proc::run("rm -rf \"" + path + "\"")
+pub fn toml_array_literal: (items :&vec[str]) :str {
+    set out = "[" :str mut
+    set i = 0 :i64 mut
+    while i < vec::len(items) {
+        if i > 0 { set out = out + ", " }
+        set out = out + "\"" + vec::get::str(items i) + "\""
+        set i += 1
+    }
+    return out + "]"
+}
+
+/! Inserts or replaces `key = "value"` inside `[section]` of a TOML file,
+   creating the section (and the file) when needed. Section names that are not
+   valid TOML bare keys (e.g. `owl@lock`) are written quoted. Returns true on
+   write. !/
+pub fn toml_set: (file :str section :str key :str value :str) :bool {
+    set content = "" :str mut
+    if fs::exists(file) { set content = fs::read(file) }
+    set header = "[" + section + "]" :str mut
+    if strings::index(section "@") >= 0 { set header = "[\"" + section + "\"]" }
+    set key_line = key + " = \"" + value + "\""
+    set sec_pos = strings::index(content header)
+    if sec_pos >= 0 {
+        set body_start = sec_pos + strings::len(header)
+        set after = strings::substr(content body_start 9999)
+        set next_rel = strings::index(after "\n[")
+        set sec_end = strings::len(content) :i64 mut
+        if next_rel >= 0 { set sec_end = body_start + next_rel + 1 }
+        set span = sec_end - body_start :i64 mut
+        set section_body = strings::substr(content body_start span)
+        set lines = strings::split(section_body "\n")
+        set out_body = "" :str mut
+        set replaced = false :bool mut
+        set i = 0 :i64 mut
+        set n = vec::len(lines)
+        while i < n {
+            set line = vec::get::str(lines i)
+            set trimmed = strings::trim(line)
+            if !replaced && (strings::starts::with(trimmed key + " =") || strings::starts::with(trimmed key + "=")) {
+                if i < n - 1 || strings::len(trimmed) > 0 { set out_body = out_body + key_line + "\n" }
+                set replaced = true
+            } else {
+                if i < n - 1 || strings::len(line) > 0 { set out_body = out_body + line + "\n" }
+            }
+            set i = i + 1
+        }
+        if !replaced { set out_body = key_line + "\n" + out_body }
+        set new_content = strings::substr(content 0 body_start) + out_body + strings::substr(content sec_end 9999)
+        fs::write(file new_content)
+        return true
+    }
+    if strings::len(content) > 0 && !strings::ends::with(content "\n") { set content = content + "\n" }
+    fs::write(file content + header + "\n" + key_line + "\n")
+    return true
+}
+
+pub fn extract_git_head: (args :vec[str] dest :&str) :str {
+    // Execute git rev-parse HEAD and return the commit hash
+    // This replaces util::trim_command("git" args) with native string parsing
+    set output = proc::run::output("git" args)
+    set head = strings::trim(output)
+    // Validate it's a valid hex commit hash (40 chars)
+    if len(head) == 40 { return head }
+    return ""
+}
+
+pub fn extract_install_status: (output :&str) :bool {
+    // Check if install was successful by looking for error patterns
+    if strings::index(output "Permission denied") >= 0 { return false }
+    if strings::index(output "No such file") >= 0 { return false }
+    return true
+}
+
+/! Filesystem operations !/
+pub fn mkdir_p: (path :str) {
+    if path == "" || path == "." { return }
+    set absolute = use! util::startswith(path "/")
+    set parts = strings::split(path "/")
+    set current = "" :str mut
+    if absolute { set current = "/" }
+    set i = 0 :i64 mut
+    while i < len(parts) {
+        set part = use! util::list_get(parts i)
+        if part != "" && part != "." {
+            if current == "" || current == "/" {
+                set current = current + part
+            } else {
+                set current = current + "/" + part
+            }
+            if !fs::exists(current) {
+                fs::dir::create(current)
+            }
+        }
+        set i += 1
+    }
+}
+
+/! Per-package resolver records. These are deliberately plain text so they
+    remain inspectable, but contain only trust metadata (never private keys). !/
+pub fn cfg: () {
+pub fn home: () :str {
+    return use! util::owl_home() + "/cfg"
+}
+pub fn package: (name :str) :str {
+    return use! util::cfg::home() + "/" + name
+}
+pub fn write: (name :str version :str path :str sha :str registry :str verified :bool) {
+    set dir = use! util::cfg::home()
+    use! util::mkdir_p(dir)
+    set status = "false" :str mut
+    if verified { set status = "true" }
+    set record = "name = \"" + name + "\"\n" :str mut
+    set record = record + "version = \"" + version + "\"\n"
+    set record = record + "path = \"" + path + "\"\n"
+    set record = record + "sha256 = \"" + sha + "\"\n"
+    set record = record + "registry = \"" + registry + "\"\n"
+    set record = record + "verified = " + status + "\n"
+    use fs::write(use! util::cfg::package(name) record)
+}
+}
+
+pub fn rm_RF: (path :&str) {
+    if fs::exists(path) { fs::remove_all(path) }
+}
+
+// Returns directory entries in the same newline-separated shape used by the
+// old `ls -1` callers. The data comes directly from Kioto's PAL directory
+// API, so filenames are not parsed through a child process.
+pub fn list_text: (path :&str) :str {
+    set entries = fs::list(path)
+    return strings::join(entries "\n")
+}
+
+// Reads file metadata through Kioto/PAL. This replaces `stat` and keeps size
+// checks available on systems where command-line utilities are absent.
+pub fn file_size: (path :&str) :i64 {
+    if !fs::exists(path) { return 0 }
+    set root = fs::root::open(".")
+    set file = fs::file::open::read(root path)
+    set size = fs::file::size(file)
+    return size
+}
+
+// Computes a directory's total byte size recursively using only PAL file and
+// directory operations. The result is intentionally integer bytes; callers
+// can format it without depending on `du` or locale-specific output.
+pub fn tree_size: (path :&str) :i64 {
+    if fs::is_file(path) { return use! util::file_size(path) }
+    if !fs::exists(path) { return 0 }
+    set total = 0 :i64 mut
+    set entries = fs::list(path)
+    set i = 0 :i64 mut
+    while i < len(entries) {
+        set child = fs::path::join(path use! util::list_get(entries i))
+        set total += use! util::tree_size(child)
+        set i += 1
+    }
+    return total
 }
 
 pub fn fs_make_readonly: (path :str) {
-    if !fs_exists(path) { return }
-    use proc::run("chmod -R a-w \"" + path + "\" 2>/dev/null || true")
+    if !fs::exists(path) { return }
+    fs::permission(path, "0755")
 }
 
 pub fn fs_make_writable: (path :str) {
-    if !fs_exists(path) { return }
-    use proc::run("chmod -R u+w \"" + path + "\" 2>/dev/null || true")
+    if !fs::exists(path) { return }
+    fs::permission(path, "0644")
 }
 
 /! Error reporting !/
@@ -136,25 +343,56 @@ pub fn json_get_int_str: (content :&str key :str) :str {
 /! Paths and environment !/
 pub fn owl_home: () :str {
     set path = "" :str mut
-    set home = env::get("HOME")
+    set home = env::var("HOME")
     if home == "" {
         set path = "/tmp/.owl"
     } else {
-        set path = home + "/.owl"
+        set path = strings::concat(home "/.owl")
     }
     return path
 }
 
 pub fn owl_home_registries: () :str {
-    return use! util::owl_home() + "/registries"
+    return use! util::owl_home() + "/reg"
+}
+
+/! Owl's persistent configuration and version store are separate from the
+   package cache. `libs/` remains the active rolling view; versioned copies
+   are retained only while a lockfile still needs them. !/
+pub fn owl_home_cfg: () :str {
+    return use! util::owl_home() + "/cfg"
+}
+
+pub fn owl_home_versions: () :str {
+    return use! util::owl_home() + "/version"
+}
+
+pub fn owl_home_libs_index: () :str {
+    return use! util::owl_home_cfg() + "/libs.json"
 }
 
 pub fn owl_home_lib: () :str {
-    return use! util::owl_home() + "/lib"
+    return use! util::owl_home_libs()
 }
 
-pub fn owl_home_modules: () :str {
-    return use! util::owl_home() + "/modules"
+pub fn owl_home_libs: () :str {
+    return use! util::owl_home() + "/libs"
+}
+
+pub fn owl_home_libs_display: () :str {
+    return "~/.owl/libs"
+}
+
+/! Expand a leading "~" to the user's home directory so TOML dependency
+   paths like "~/.owl/libs/mire" can be checked with fs::exists. !/
+pub fn expand_home: (path :&str) :str {
+    if use! util::startswith(path "~") {
+        set home = env::var("HOME")
+        if home != "" {
+            return strings::concat(home strings::substr(path 1 len(path) - 1))
+        }
+    }
+    return strings::copy(path)
 }
 
 pub fn owl_home_cache_tarballs: () :str {
@@ -162,7 +400,7 @@ pub fn owl_home_cache_tarballs: () :str {
 }
 
 pub fn owl_home_cache_resolution: () :str {
-    return use! util::owl_home() + "/cache/resolution.toml"
+    return use! util::owl_home() + "/cache/registry/resolution.toml"
 }
 
 pub fn owl_home_keys: () :str {
@@ -171,12 +409,12 @@ pub fn owl_home_keys: () :str {
 
 /! Version and compiler info !/
 pub fn owl_version: () :str {
-    return "0.27.0"
+    return "1.1.2"
 }
 
 pub fn compiler_version: () :str {
     set ver = "" :str mut
-    set v = strings::trim(proc::run("mire --version"))
+    set v = proc::run::output(use! util::compiler_cmd() ["--version"])
     if v != "" {
         set ver = v
     } else {
@@ -207,17 +445,73 @@ pub fn language_version: () :str {
 
 /! Project config !/
 pub fn has_project: () :bool {
-    return fs_exists("owl.toml")
+    return fs::exists("owl.toml")
 }
-
 pub fn compiler_cmd: () :str {
     set cmd = "" :str mut
     if use! util::has_project() {
         set c = use! util::toml_get("owl.toml" "build" "compiler")
-        if c != "" { set cmd = c }
+        /! `mire` is the canonical portable spelling, but leaving it as a
+           bare argv[0] would make Owl depend on the caller's PATH. Resolve
+           it through the controlled installation locations below. !/
+        if c != "" && c != "mire" { set cmd = c }
     }
-    if cmd == "" { set cmd = "mire" }
+    if cmd == "" {
+        /! CI may provide an explicit compiler location without modifying a
+           project manifest. This is read-only environment configuration, not
+           shell evaluation; the resulting path is passed as argv[0]. !/
+        set home = env::var("HOME")
+        set configured = env::var("MIRE_COMPILER")
+        if configured != "" && fs::exists(configured) {
+            set cmd = strings::copy(configured)
+        } else {
+            set mire_home = strings::copy(env::var("MIRE_HOME"))
+            if mire_home != "" && fs::exists(mire_home + "/bin/mire") {
+                set cmd = mire_home + "/bin/mire"
+            } else {
+                /! Priority: project-configured path > MIRE_HOME > owl-installed > cargo-installed
+                   The cargo-installed binary is a build artifact, not a deployment target.
+                   If no project config and no MIRE_HOME, fall back to "mire" which relies
+                   on the caller's PATH being set up by the CI/workflow, not by end users. !/
+                set c1 = strings::concat(home "/.cargo/bin/mire")
+                set c2 = strings::concat(home "/.local/bin/mire")
+                if fs::exists(c1) && fs::exists(strings::concat(home "/.owl")) {
+                    /! Only use cargo-installed mire if owl is also installed (indicates
+                       a development environment, not a production deployment). !/
+                    set cmd = c1
+                } elif fs::exists(c2) && fs::exists(strings::concat(home "/.owl")) {
+                    set cmd = c2
+                } else {
+                    /! Portable CI fallback. proc::run::output performs a
+                       direct executable lookup through PATH; no shell is
+                       created and no command string is interpreted. !/
+                    set cmd = "mire"
+                }
+            }
+        }
+    } else {
+        /! A configured compiler must be an absolute path. The only
+           bare name accepted is the canonical "mire"; any other bare
+           name is resolved through PATH and is a hijack vector.
+           Note: the use! call is split out of the boolean expression
+           because use! greedily consumes trailing `&&` operands. !/
+        set is_abs = use! util::startswith(cmd "/")
+        if !is_abs && cmd != "mire" {
+            use! util::error_line("OWL0004" "unsafe compiler '" + cmd + "' in owl.toml: use an absolute path or \"mire\"")
+            exit(1)
+        }
+    }
     return cmd
+}
+
+/! Runs the compiler with argv (no shell). Returns captured output.
+   This is the single choke point through which owl invokes the
+   compiler, so hardening compiler_cmd() covers every build path.
+   argv[0] (the compiler) is supplied by compiler_cmd(); the caller
+   passes only the compiler arguments. !/
+pub fn run_compiler: (args :vec[str]) :str {
+    set mire = use! util::compiler_cmd()
+    return proc::run::output(mire args)
 }
 
 pub fn config_required: (section :str key :str) :str {
@@ -232,10 +526,261 @@ pub fn config_required: (section :str key :str) :str {
             use! util::error_line("OWL0003" "missing [" + section + "]." + key + " in owl.toml")
             use dasu("")
             use dasu("  Run 'owl checkup --fix' to regenerate owl.toml with defaults")
-            proc_exit(1)
+            exit(1)
         }
     }
     return val
+}
+
+/! Same as config_required but returns a caller-provided default when the
+   key is absent (or outside a project), instead of aborting. Used for
+   build policies like ``[build] runtime`` that must not hardcode
+   avenys' fallback tier. !/
+pub fn config_default: (section :str key :str default :str) :str {
+    use! kioto::fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: section=" + section + " key=" + key + " default=" + default + " has_project=" + (if use! util::has_project() { "true" } else { "false" }))
+    set val = default :str mut
+    if use! util::has_project() {
+        use! kioto::fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: has_project=true")
+        set s = section
+        set k = key
+        set v = use! util::toml_get("owl.toml" s k)
+        use! kioto::fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: toml_get returned=[" + v + "]")
+        if v != "" {
+            set val = v
+        }
+    }
+    use! kioto::fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT returning: [" + val + "]")
+    return val
+}
+
+// Returns the value following a CLI flag. Owl uses this small parser for
+// compiler-facing options that must be represented in the normalized Mire
+// configuration instead of being appended ambiguously to a command string.
+pub fn arg_value: (args :&vec[str], flag :&str) :str {
+    set n = rt_vec_len(args)
+    set result = "" :str mut
+    set i = 0 :i64 mut
+    while i < n {
+        set item = rt_vec_get_str(args i)
+        if item == flag && i + 1 < n {
+            set result = rt_vec_get_str(args i + 1)
+        }
+        set i += 1
+    }
+    return result
+}
+
+// Writes the closed configuration contract consumed by Avenys 4.0.0. The
+// file is generated inside Owl's cache and overwritten on every build, so the
+// compiler never needs to rediscover owl.toml or the dependency graph.
+pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :str runtime :str target :str output :str cache :str libs :str) :bool {
+    set artifact_copy = strings::copy(artifact)
+    use dasu("[DEBUG] write_mire_config: artifact=[" + artifact_copy + "]")
+    use! util::mkdir_p(strings::copy(fs::path::dir(path)))
+
+    set proj_name = use! util::toml_get("owl.toml" "project" "name") :str mut
+    if proj_name == "" { set proj_name = "owl-managed" }
+    set proj_ver = use! util::toml_get("owl.toml" "project" "version") :str mut
+    if proj_ver == "" { set proj_ver = "1.0.0" }
+    set paths_source = use! util::toml_get("owl.toml" "paths" "source") :str mut
+    if paths_source == "" { set paths_source = "." }
+    set paths_test = use! util::toml_get("owl.toml" "paths" "test") :str mut
+    if paths_test == "" { set paths_test = "tests" }
+    set artifact_from_toml = use! util::config_default("build" "artifact" artifact)
+
+    use dasu("[DEBUG] write_mire_config: artifact=[" + artifact_copy + "]")
+    use! util::mkdir_p(strings::copy(fs::path::dir(path)))
+
+    set config = "" :str mut
+    set config = config + "[build]\n"
+    set config = config + "compiler = \"mire\"\n"
+    set config = config + "profile = \"" + profile + "\"\n"
+    set config = config + "opt-level = " + opt + "\n"
+    set config = config + "artifact = \"" + artifact_from_toml + "\"\n"
+    set config = config + "runtime = \"" + runtime + "\"\n"
+    set config = config + "target = \"" + target + "\"\n"
+    set config = config + "panic = \"abort\"\n"
+    set config = config + "incremental = true\n"
+    set config = config + "debug-info = true\n\n"
+
+    set config = "[project]\n" :str mut
+    set config = config + "name = \"" + proj_name + "\"\n"
+    set config = config + "version = \"" + proj_ver + "\"\n"
+    set config = config + "entry = \"" + entry + "\"\n\n"
+    set config = config + "[build]\n"
+    set config = config + "compiler = \"mire\"\n"
+    set config = config + "profile = \"" + profile + "\"\n"
+    set config = config + "opt-level = " + opt + "\n"
+    set config = config + "artifact = \"" + artifact_from_toml + "\"\n"
+    set config = config + "runtime = \"" + runtime + "\"\n"
+    set config = config + "target = \"" + target + "\"\n"
+    set config = config + "panic = \"abort\"\n"
+    set config = config + "incremental = true\n"
+    set config = config + "debug-info = true\n\n"
+    set config = config + "[paths]\n"
+    set config = config + "source = \"" + paths_source + "\"\n"
+    set config = config + "test = \"" + paths_test + "\"\n"
+    set config = config + "bin = \"" + output + "\"\n"
+    set config = config + "cache = \"" + cache + "\"\n"
+    set config = config + "generated = \"" + cache + "/generated\"\n\n"
+    set config = config + "[cfg]\n"
+    // Always add cfg section with defaults for new projects
+    // Existing projects will have these values unless they manually configure
+    set config = config + "lock = 1\n"
+    set config = config + "\"update@lock\" = \"Build\"\n"
+    // Project-declared native C sources/libs/includes (the `[c]` section) are
+    // part of the explicit compiler contract: Avenys never reads owl.toml, so
+    // Owl must forward them here. Without this a project such as token that
+    // defines its own `rt_*` helpers in C fails to link.
+    set c_sources = use! util::toml_get_array("owl.toml" "c" "sources") :vec[str] mut
+    set c_include = use! util::toml_get_array("owl.toml" "c" "include") :vec[str] mut
+    set c_libs = use! util::toml_get_array("owl.toml" "c" "libs") :vec[str] mut
+    set c_cflags = use! util::toml_get_array("owl.toml" "c" "cflags") :vec[str] mut
+    // Package roots belong to Avenys' --lib-dir search path, not to native
+    // linker `-l` entries. Owl's own archive bridge is the one exception: it
+    // is a deliberate development-time C bridge to libarchive, not a Mire
+    // runtime dependency.
+    if fs::exists("native/archive.c") {
+        set c_sources = vec::push::str(c_sources "native/archive.c")
+        set c_libs = vec::push::str(c_libs "archive")
+    }
+    set config = config + "libs = " + use! util::toml_array_literal(c_libs) + "\n"
+    set config = config + "sources = " + use! util::toml_array_literal(c_sources) + "\n"
+    set config = config + "link-dirs = []\nfeatures = []\ndefines = []\n"
+    set inc_flags = [] :vec[str] mut
+    set ci = 0 :i64 mut
+    while ci < vec::len(c_include) {
+        set inc_flags = vec::push::str(inc_flags "-I" + vec::get::str(c_include ci))
+        set ci += 1
+    }
+    set ci = 0
+    while ci < vec::len(c_cflags) {
+        set inc_flags = vec::push::str(inc_flags vec::get::str(c_cflags ci))
+        set ci += 1
+    }
+    set config = config + "cflags = " + use! util::toml_array_literal(inc_flags) + "\n\n"
+    /! Forward project [security] section if present !/
+    set sec_mode = use! util::toml_get("owl.toml" "security" "mode") :str mut
+    if sec_mode == "" { set sec_mode = "strict" }
+
+    /! Start with project's security settings !/
+    set sec_externs = use! util::toml_get_array("owl.toml" "security" "externs") :vec[str] mut
+    if vec::len(sec_externs) == 0 {
+        set sec_externs = [] :vec[str] mut
+        set sec_externs = vec::push::str(sec_externs "rt_*")
+        set sec_externs = vec::push::str(sec_externs "pal_*")
+        set sec_externs = vec::push::str(sec_externs "exit")
+        set sec_externs = vec::push::str(sec_externs "owl_archive_*")
+    }
+
+    set sec_extern_libs = use! util::toml_get_array("owl.toml" "security" "extern-libs") :vec[str] mut
+    if vec::len(sec_extern_libs) == 0 {
+        set sec_extern_libs = [] :vec[str] mut
+        set sec_extern_libs = vec::push::str(sec_extern_libs "c")
+    }
+
+    set sec_macros = use! util::toml_get_array("owl.toml" "security" "macros") :vec[str] mut
+    if vec::len(sec_macros) == 0 {
+        set sec_macros = [] :vec[str] mut
+        set sec_macros = vec::push::str(sec_macros "assert")
+        set sec_macros = vec::push::str(sec_macros "assert_eq")
+        set sec_macros = vec::push::str(sec_macros "assert_ne")
+        set sec_macros = vec::push::str(sec_macros "dbg")
+        set sec_macros = vec::push::str(sec_macros "trace_i64")
+    }
+
+    set sec_allow_unsafe = use! util::toml_get("owl.toml" "security" "allow-unsafe") :str mut
+    if sec_allow_unsafe == "" { set sec_allow_unsafe = "false" }
+
+    /! Merge security settings from dependencies !/
+    set dep_names_str = use! deps::get_dep_names()
+    set dep_names = strings::split(dep_names_str "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(dep_names) {
+        set dep_name = use! util::trim(use! util::list_get(dep_names i))
+        if dep_name != "" {
+            /! Try to find dependency owl.toml in libs directories !/
+            set lib_dirs = strings::split(libs ":")
+            set j = 0 :i64 mut
+            while j < vec::len(lib_dirs) {
+                set lib_dir = use! util::trim(use! util::list_get(lib_dirs j))
+                if lib_dir != "" {
+                    set dep_toml = lib_dir + "/" + dep_name + "/owl.toml"
+                    if fs::exists(dep_toml) {
+                        /! Merge externs !/
+                        set dep_toml_ext = strings::copy(dep_toml) :str mut
+                        set dep_externs = use! util::toml_get_array(dep_toml_ext "security" "externs") :vec[str] mut
+                        set k = 0 :i64 mut
+                        while k < vec::len(dep_externs) {
+                            set ext = use! util::trim(use! util::list_get(dep_externs k))
+                            if ext != "" {
+                                set found = false :bool mut
+                                set m = 0 :i64 mut
+                                while m < vec::len(sec_externs) {
+                                    if use! util::list_get(sec_externs m) == ext { set found = true }
+                                    set m += 1
+                                }
+                                if !found { set sec_externs = vec::push::str(sec_externs ext) }
+                                set k += 1
+                            }
+                        }
+                        /! Merge extern-libs !/
+                        set dep_toml_ext = strings::copy(dep_toml) :str mut
+                        set dep_extern_libs = use! util::toml_get_array(dep_toml_ext "security" "extern-libs") :vec[str] mut
+                        set k = 0 :i64 mut
+                        while k < vec::len(dep_extern_libs) {
+                            set ext = use! util::trim(use! util::list_get(dep_extern_libs k))
+                            if ext != "" {
+                                set found = false :bool mut
+                                set m = 0 :i64 mut
+                                while m < vec::len(sec_extern_libs) {
+                                    if use! util::list_get(sec_extern_libs m) == ext { set found = true }
+                                    set m += 1
+                                }
+                                if !found { set sec_extern_libs = vec::push::str(sec_extern_libs ext) }
+                                set k += 1
+                            }
+                        }
+                        /! Merge macros !/
+                        set dep_toml_ext = strings::copy(dep_toml) :str mut
+                        set dep_macros = use! util::toml_get_array(dep_toml_ext "security" "macros") :vec[str] mut
+                        set k = 0 :i64 mut
+                        while k < vec::len(dep_macros) {
+                            set mac = use! util::trim(use! util::list_get(dep_macros k))
+                            if mac != "" {
+                                set found = false :bool mut
+                                set m = 0 :i64 mut
+                                while m < vec::len(sec_macros) {
+                                    if use! util::list_get(sec_macros m) == mac { set found = true }
+                                    set m += 1
+                                }
+                                if !found { set sec_macros = vec::push::str(sec_macros mac) }
+                                set k += 1
+                            }
+                        }
+                        /! Merge allow-unsafe (if any dep allows unsafe, allow it) !/
+                        set dep_toml_ext = strings::copy(dep_toml) :str mut
+                        set dep_allow_unsafe = use! util::toml_get(dep_toml_ext "security" "allow-unsafe") :str mut
+                        if dep_allow_unsafe == "true" { set sec_allow_unsafe = "true" }
+                        /! Break after first found (use first match) !/
+                        set j = vec::len(lib_dirs) /! break outer loop !/
+                    }
+                    set j += 1
+                }
+            }
+        }
+        set i += 1
+    }
+
+    set config = config + "[security]\n"
+    set config = config + "mode = \"" + sec_mode + "\"\n"
+    set config = config + "externs = " + use! util::toml_array_literal(sec_externs) + "\n"
+    set config = config + "extern-libs = " + use! util::toml_array_literal(sec_extern_libs) + "\n"
+    set config = config + "macros = " + use! util::toml_array_literal(sec_macros) + "\n"
+    set config = config + "allow-unsafe = " + sec_allow_unsafe + "\n"
+
+    fs::write(path config)
+    return fs::exists(path)
 }
 
 /! Kioto wrappers !/
@@ -243,15 +788,136 @@ extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
 extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
 extern fn rt_string_to_i64: (value :str) :i64 lib "c"
 extern fn rt_i64_to_string: (value :i64) :str lib "c"
+extern fn exit: (code :i64) lib "c"
 
 pub fn trim: (s :&str) :str { return strings::trim(s) }
 pub fn split: (s :&str, sep :&str) :vec[str] { return strings::split(s sep) }
 pub fn contains: (s :&str, sub :&str) :bool { return rt_strings_contains(s sub) }
-pub fn startswith: (s :&str, prefix :&str) :bool { return strings::startswith(s prefix) }
-pub fn endswith: (s :&str, suffix :&str) :bool { return strings::endswith(s suffix) }
+pub fn startswith: (s :&str, prefix :&str) :bool { return strings::starts::with(s prefix) }
+pub fn endswith: (s :&str, suffix :&str) :bool { return strings::ends::with(s suffix) }
 pub fn substr: (s :&str, start :i64, len :i64) :str { return strings::substr(s start len) }
-pub fn replace: (s :&str, old :&str, new :&str) :str { return strings::replace(s old new) }
-pub fn list_get: (list :&vec[str], index :i64) :str { return lists::get::str(list index) }
+pub fn replace: (s :&str, old :&str, new :&str) :str { return strings::replace::all(s old new) }
+pub fn list_get: (list :&vec[str], index :i64) :str { return vec::get::str(list index) }
+
+pub fn path_exists: (path :&str) :bool { return fs::exists(path) }
+pub fn copy_value: (value :&str) :str { return strings::copy(value) }
+pub fn trim_value: (value :str) :str { return strings::trim(value) }
+pub fn str_equals: (a :&str, b :&str) :bool { return a == b }
+pub fn read_line_trim: () :str { return strings::trim(proc::run::read_line()) }
+pub fn read_line: () :str { return proc::run::read_line() }
+pub fn trim_substr: (s :&str, start :i64, length :i64) :str { return strings::trim(strings::substr(s start length)) }
+pub fn substr_i64: (s :&str, start :i64, length :i64) :i64 { return use! util::string_to_i64(strings::substr(s start length)) }
+
+/! Returns the lowercase-hex SHA-256 of a file. The digest is computed by
+   kioto's binary-safe runtime binding (embedded NULs preserved, no shell, no
+   temp files). Returns "" on any failure. !/
+pub fn sha256sum_hex: (path :&str) :str {
+    if !fs::exists(path) { return "" }
+    return use! kioto::crypto::hash::sha256_file(path)
+}
+
+/! Returns the lowercase-hex SHA-512 of a file. The registry may publish
+   either SHA-256 or SHA-512; Owl computes the declared algorithm itself and
+   never trusts a hash copied from publish.toml. !/
+pub fn sha512sum_hex: (path :&str) :str {
+    if !fs::exists(path) { return "" }
+    return use! kioto::crypto::hash::sha512_file(path)
+}
+
+/! Returns true if any .mire under code/ or tests/ contains a
+   `load <dep>` statement. Used by `owl deps --prune`.
+!/
+fn contains_load_tree: (path :&str pattern :&str) :bool {
+    if fs::is_file(path) {
+        set source = fs::read(path)
+        return strings::contains(source pattern)
+    }
+    if !fs::exists(path) { return false }
+    set entries = fs::list(path)
+    set i = 0 :i64 mut
+    while i < len(entries) {
+        set entry_check = use! util::list_get(entries i)
+        if entry_check != "." && entry_check != ".." {
+            if contains_load_tree(fs::path::join(path use! util::list_get(entries i)) pattern) { return true }
+        }
+        set i += 1
+    }
+    return false
+}
+
+pub fn grep_load: (dep :str) :bool {
+    set pattern = "load " + dep
+    if contains_load_tree("code" pattern) { return true }
+    return contains_load_tree("tests" pattern)
+}
+
+/! Scans code/ and tests/ for external `load <name>` statements (not `load!`)
+   and returns a newline-separated list of unique package names found.
+   Full package names including :: segments are returned.
+!/
+fn scan_source_loads: (source :&str, result :str) :str {
+    set lines = use! util::split(source "\n")
+    set n = len(lines)
+    set output = result :str mut
+    set i = 0 :i64 mut
+    while i < n {
+        set line = use! util::trim(use! util::list_get(lines i))
+        if use! util::startswith(line "load ") && !use! util::startswith(line "load!") {
+            set pkg = strings::substr(line 5 9999) :str mut
+            if pkg != "" {
+                set space = strings::index(pkg " ")
+                if space >= 0 { set pkg = strings::substr(pkg 0 space) }
+                if pkg != "" && !use! util::contains(output pkg + "\n") && !use! util::startswith(output pkg + "\n") && output != pkg {
+                    if output == "" { set output = pkg } else { set output = output + "\n" + pkg }
+                }
+            }
+        }
+        set i += 1
+    }
+    return output
+}
+
+fn scan_load_tree: (path :&str, result :str) :str {
+    set output = result :str mut
+    if fs::is_file(path) {
+        return scan_source_loads(fs::read(path) strings::copy(output))
+    }
+    if !fs::exists(path) { return output }
+    set entries = fs::list(path)
+    set i = 0 :i64 mut
+    while i < len(entries) {
+        set entry = use! util::list_get(entries i)
+        if entry != "." && entry != ".." {
+            set child = fs::path::join(path entry)
+            set output = scan_load_tree(child output)
+        }
+        set i += 1
+    }
+    return output
+}
+
+pub fn scan_load_packages: () :str {
+    set result = scan_load_tree("code" "")
+    return scan_load_tree("tests" result)
+}
 
 pub fn string_to_i64: (s :str) :i64 { return rt_string_to_i64(s) }
 pub fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
+
+/! Record a successful build in ~/.owl/cache/build_status.toml so
+   `owl profile` can report real build counts and last-build time. !/
+pub fn record_build: () {
+    set status_path = use! util::owl_home() + "/cache/build_status.toml"
+    use! util::mkdir_p(use! util::owl_home() + "/cache")
+    set count = 0 :i64 mut
+    if fs::exists(status_path) {
+        set content = fs::read(status_path)
+        set content_copy = strings::copy(content)
+        set c = use! util::toml_get_from_string(content_copy "build" "build_count") :str mut
+        if c != "" { set count = use! util::string_to_i64(c) }
+    }
+    set count += 1
+    set now_ms = time::now::ms()
+    set body = "[build]\nbuild_count = " + use! util::i64_to_string(count) + "\nlast_build_time = " + use! util::i64_to_string(now_ms) + "\n"
+    use fs::write(status_path body)
+}

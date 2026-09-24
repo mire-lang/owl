@@ -1,0 +1,21 @@
+[project]
+name = "owl"
+version = "1.1.1"
+entry = "code/main.mire"
+
+[build]
+profile = "release"
+opt-level = 3
+artifact = "bin"
+runtime = "minimal"
+target = "x86_64-unknown-linux-gnu"
+
+[paths]
+bin = "/tmp/owl-archive-bin"
+cache = "/tmp/owl-archive-cache"
+
+[cfg]
+libs = ["archive"]
+sources = ["native/archive.c"]
+link-dirs = []
+cflags = ["-Wl,--disable-new-dtags", "-Wl,-rpath,$ORIGIN/../lib/mire"]

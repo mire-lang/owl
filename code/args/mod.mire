@@ -1,9 +1,12 @@
+module args
+
 load! /code/util
 
 extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
 extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
 
-pub fn has_flag: (args :&vec[str], flag :&str) :bool {
+pub fn flag: () {
+pub fn has: (args :&vec[str], flag :&str) :bool {
     set n = rt_vec_len(args)
     set result = false :bool mut
     set i = 0 :i64 mut
@@ -15,7 +18,7 @@ pub fn has_flag: (args :&vec[str], flag :&str) :bool {
     return result
 }
 
-pub fn get_flag_value: (args :&vec[str], flag :&str) :str {
+pub fn value: (args :&vec[str], flag :&str) :str {
     set n = rt_vec_len(args)
     set result = "" :str mut
     set i = 0 :i64 mut
@@ -30,7 +33,10 @@ pub fn get_flag_value: (args :&vec[str], flag :&str) :str {
     return result
 }
 
-pub fn get_positional: (args :&vec[str], nth :i64) :str {
+}
+
+pub fn position: () {
+pub fn get: (args :&vec[str], nth :i64) :str {
     set n = rt_vec_len(args)
     set result = "" :str mut
     set found = 0 :i64 mut
@@ -49,4 +55,5 @@ pub fn get_positional: (args :&vec[str], nth :i64) :str {
         set i += 1
     }
     return result
+}
 }

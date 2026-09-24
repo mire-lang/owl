@@ -6,17 +6,29 @@ pub fn main: () {
     use dasu("--- test: owl run ---")
     testlib.assert_true(true)
 
-    set ts = strings.trim(proc::run("date +%s%N"))
-    set test_base = "/tmp/owl_run_test_" + ts
-    set proj_dir = test_base + "/testrun"
+    set da = [] :vec[str] mut
+    set da = vec::push::str(da "+%s%N")
+    set ts = strings::trim(proc::run::output("date" da))
+    set test_base = strings::concat("/tmp/owl_run_test_", ts)
+    set proj_dir = strings::concat(test_base, strings::copy("/testrun"))
+    set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl"))
 
-    proc::run("mkdir -p " + test_base)
-    proc::run("cd " + test_base + " && ~/.local/bin/owl new testrun 2>&1")
+    set mk = [] :vec[str] mut
+    set mk = vec::push::str(mk "-p")
+    set mk = vec::push::str(mk strings::copy(test_base))
+    use proc::run::output("mkdir" mk)
 
-    set run_cmd = "cd " + proj_dir + " && ~/.local/bin/owl run 2>&1"
-    set run_out = proc::run(run_cmd)
+    set na = [] :vec[str] mut
+    set na = vec::push::str(na "new")
+    set na = vec::push::str(na "testrun")
+    set new_out = proc::run::output_cwd(owl_bin na test_base true)
+    use dasu(new_out)
 
-    set output_ok = strings.contains(run_out "ok")
+    set ra = [] :vec[str] mut
+    set ra = vec::push::str(ra "run")
+    set run_out = proc::run::output_cwd(owl_bin ra proj_dir true)
+
+    set output_ok = strings::contains(run_out "ok")
     if output_ok {
         use dasu("  owl run output contains 'ok': ok")
     } else {
@@ -24,6 +36,9 @@ pub fn main: () {
         use dasu(run_out)
     }
 
-    proc::run("rm -rf " + test_base)
+    set rm = [] :vec[str] mut
+    set rm = vec::push::str(rm "-rf")
+    set rm = vec::push::str(rm strings::copy(test_base))
+    use proc::run::output("rm" rm)
     use dasu("test_owl_run complete")
 }

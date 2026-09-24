@@ -1,0 +1,10 @@
+module test
+
+load! util
+
+pub fn main: () {
+    use dasu("[TEST] has_project: " + (if use! util::has_project() { "true" } else { "false" }))
+    set v = use! util::toml_get("owl.toml" "build" "artifact")
+    use dasu("[TEST] toml_get artifact: [" + v + "]")
+    return true
+}

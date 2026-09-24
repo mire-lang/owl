@@ -1,6 +1,8 @@
+module profile
+
 load! /code/util
 
-pub fn cmd_profile: (args :&vec[str]) {
+pub fn run: (args :&vec[str]) {
     if !use! util::has_project() {
         use dasu("error: no owl.toml found")
         return
@@ -17,13 +19,14 @@ pub fn cmd_profile: (args :&vec[str]) {
     use dasu("  Output:    " + use! util::toml_get("owl.toml" "paths" "output") + "/" + use! util::toml_get("owl.toml" "build" "profile") + "/main")
 
     set binary_size = "0" :str mut
-    if fs_exists("bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main") {
-        set sz = use! util::trim(proc::run("stat --format=%s \"bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main\" 2>/dev/null || echo 0"))
-        set binary_size = sz
-    }
+     if fs::exists("bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main") {
+         set prof = use! util::toml_get("owl.toml" "build" "profile")
+         set sz = use! util::file_size("bin/" + prof + "/main")
+         set binary_size = use! util::i64_to_string(sz)
+     }
     use dasu("  Binary:    " + binary_size + " bytes")
 
-    if fs_exists(status_path) {
+    if fs::exists(status_path) {
         set status_content = fs::read(status_path)
         set status_copy = status_content :str
         set last_build = use! util::toml_get_from_string(status_content "build" "last_build_time") :str mut
@@ -37,7 +40,7 @@ pub fn cmd_profile: (args :&vec[str]) {
         use dasu("  Builds:    0")
     }
 
-    if use! args::has_flag(args "--json") {
+    if use! args::flag::has(args "--json") {
         set json = "{\n" :str mut
         set json = json + "  \"project\": \"" + use! util::toml_get("owl.toml" "project" "name") + "\",\n"
         set json = json + "  \"version\": \"" + use! util::toml_get("owl.toml" "project" "version") + "\",\n"

@@ -1,7 +1,7 @@
 load kioto
 load! semver
 load! util
-load crypto
+load! /code/crypto
 load! trust
 load! registry
 load! build
@@ -15,12 +15,12 @@ load! dload
 load! install
 load! export
 load! gc
-load! tree
 load! profile
 load! upgrade
 
 extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
 extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
+extern fn exit: (code :i64) lib "c"
 
 fn expand_short_flags: (args :&vec[str]) :vec[str] {
     set n = rt_vec_len(args)
@@ -31,13 +31,25 @@ fn expand_short_flags: (args :&vec[str]) :vec[str] {
         if i == 0 {
             set result = a
         } else {
-            if use! util::startswith(a "-") && !use! util::startswith(a "--")
-               && len(a) > 2 {
+            if use! util::startswith(a "-") && !use! util::startswith(a "--") && len(a) > 2 {
+                set is_short_flags = true :bool mut
                 set j = 1 :i64 mut
                 while j < len(a) {
                     set ch = strings::substr(a j 1)
-                    set result = result + " -" + ch
+                    if ch < "a" || ch > "z" {
+                        set is_short_flags = false
+                    }
                     set j += 1
+                }
+                if is_short_flags {
+                    set j = 1 :i64 mut
+                    while j < len(a) {
+                        set ch = strings::substr(a j 1)
+                        set result = result + " -" + ch
+                        set j += 1
+                    }
+                } else {
+                    set result = result + " " + a
                 }
             } else {
                 set result = result + " " + a
@@ -48,7 +60,7 @@ fn expand_short_flags: (args :&vec[str]) :vec[str] {
     return strings::split(result " ")
 }
 
-fn find_cmd_index: (args :&vec[str]) :i64 {
+fn command_index: (args :&vec[str]) :i64 {
     set n = rt_vec_len(args)
     set idx = -1 :i64 mut
     set i = 1 :i64 mut
@@ -65,20 +77,32 @@ fn find_cmd_index: (args :&vec[str]) :i64 {
     return idx
 }
 
-fn collect_test_flags: (args :&vec[str]) :str {
+fn collect_test_args: (args :&vec[str]) :vec[str] {
     set n = rt_vec_len(args)
     set i = 2 :i64 mut
-    set flags = "" :str mut
+    set result = ["test"] :vec[str] mut
+    // Owl resolves, installs, and exposes dependencies. Avenys receives only
+    // this explicit library directory and never reads the project's dependency
+    // table while compiling the test program.
+    set result = vec::push::str(result "--lib-dir")
+    set result = vec::push::str(result use! deps::compiler_lib_dirs())
+    if use! util::has_project() && !use! args::flag::has(args "--config") {
+        set config = use! build::test_config(args)
+        if config != "" {
+            set result = vec::push::str(result "--config")
+            set result = vec::push::str(result config)
+        }
+    }
     while i < n {
         set a = rt_vec_get_str(args i)
         if use! util::startswith(a "-") {
-            set flags = flags + " " + a
+            set result = vec::push::str(result a)
         } else {
-            set flags = flags + " \"" + a + "\""
+            set result = vec::push::str(result strings::copy(a))
         }
         set i += 1
     }
-    return flags
+    return result
 }
 
 pub fn main: () {
@@ -86,12 +110,22 @@ pub fn main: () {
     set args = expand_short_flags(raw_args)
     set n = rt_vec_len(args)
     if n <= 1 {
-        use! ui::print_help()
+        use! ui::help()
         return
     }
 
-    set cmd_idx = find_cmd_index(args)
+    set cmd_idx = command_index(args)
     set cmd = rt_vec_get_str(args cmd_idx)
+
+    if use! args::flag::has(args "--help") {
+        set help_name = strings::copy(cmd)
+        if help_name == "--help" || help_name == "-h" {
+            use! ui::help()
+        } else {
+            use! ui::command(help_name)
+        }
+        return
+    }
 
     if cmd == "-V" || cmd == "--version" {
         use dasu("Owl v" + use! util::owl_version())
@@ -99,87 +133,113 @@ pub fn main: () {
         return
     }
     if cmd == "-h" || cmd == "--help" || cmd == "help" {
-        use! ui::print_help()
+        set help_cmd = use! args::position::get(args 1)
+        if help_cmd == "" { use! ui::help() } else { use! ui::command(help_cmd) }
         return
     }
     if cmd == "-T" || cmd == "test" {
-        set out = proc::run("mire test " + collect_test_flags(args))
+        set test_args = collect_test_args(args)
+        set out = proc::run::output("mire" test_args)
         use dasu(out)
         return
     }
     if cmd == "-B" || cmd == "build" {
-        use! build::compile_pipeline(args false)
+        use dasu("[DEBUG] main: calling build::compile")
+        use! build::compile(args false)
         return
     }
     if cmd == "run" || cmd == "-R" {
-        use! build::compile_pipeline(args true)
+        use! build::compile(args true)
         return
     }
     if cmd == "debug" || cmd == "-D" {
-        use! build::cmd_debug(args)
+        use! build::debug(args)
         return
     }
     if cmd == "-N" || cmd == "new" {
         if n <= 2 {
             use dasu("Usage: owl new <Name>")
         } else {
-            use! build::cmd_new(rt_vec_get_str(args 2))
+            use! build::new(rt_vec_get_str(args 2))
         }
         return
     }
     if cmd == "-C" || cmd == "clean" {
-        use! info::cmd_clean(args)
+        use! info::clean(args)
         return
     }
     if cmd == "checkup" {
-        use! check::cmd_checkup(args)
+        use! check::checkup(args)
         return
     }
     if cmd == "check" || cmd == "-K" {
-        use! check::cmd_check(args)
+        use! check::run(args)
         return
     }
     if cmd == "info" || cmd == "-Q" {
-        use! info::cmd_info(args)
+        use! info::run(args)
         return
     }
     if cmd == "install" || cmd == "-S" {
-        set i_has_l = use! args::has_flag(args "-l") || use! args::has_flag(args "--list")
-        set i_has_t = use! args::has_flag(args "-t") || use! args::has_flag(args "--test")
-        set i_no_verify = use! args::has_flag(args "--no-verify")
-        set i_force = use! args::has_flag(args "--force")
-        set i_target = use! args::get_flag_value(args "--target")
-        set i_yes = use! args::has_flag(args "-y") || use! args::has_flag(args "--yes")
-        set i_name = use! args::get_positional(args 0)
-        set i_ver = use! args::get_positional(args 1)
-        set ec = use! install::cmd_install(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver) :u8
+        set i_prune = use! args::flag::has(args "--prune")
+        if i_prune {
+            if use! deps::prune_unused() {
+                use dasu("pruned unused dependencies and regenerated owl.lock")
+            } else {
+                use dasu("no unused dependencies to prune")
+            }
+            return
+        }
+        set i_has_l = use! args::flag::has(args "-l") || use! args::flag::has(args "--list")
+        set i_has_t = use! args::flag::has(args "-t") || use! args::flag::has(args "--test")
+        set i_no_verify = use! args::flag::has(args "--no-verify")
+        set i_force = use! args::flag::has(args "--force")
+        set i_target = use! args::flag::value(args "--target")
+        set i_yes = use! args::flag::has(args "-y") || use! args::flag::has(args "--yes")
+        set i_lock = use! args::flag::has(args "--lock")
+        set i_name = use! args::position::get(args 0)
+        set i_ver = use! args::position::get(args 1)
+        set ec = use! install::run(i_has_l i_has_t i_no_verify i_force i_target i_yes i_name i_ver i_lock) :u8
         set ec_i64 = ec :i64
-        if ec_i64 != 0 { proc_exit(ec_i64) }
+        if ec_i64 != 0 { exit(ec_i64) }
         return
     }
     if cmd == "load" || cmd == "-L" {
-        use! dload::cmd_load(args)
+        use! dload::run(args)
+        return
+    }
+    if cmd == "reg" {
+        use! dload::registry_command(args)
         return
     }
     if cmd == "-e" || cmd == "export" {
-        use! export::cmd_export(args)
+        use! export::run(args)
         return
     }
     if cmd == "gc" {
-        use! gc::cmd_gc(args)
+        use! gc::run(args)
         return
     }
-    if cmd == "tree" {
-        use! tree::cmd_tree(args)
+    if cmd == "deps" {
+        set d_prune = use! args::flag::has(args "--prune") || use! args::flag::has(args "-p")
+        if d_prune {
+            if use! deps::prune_unused() {
+                use dasu("pruned unused dependencies and regenerated owl.lock")
+            } else {
+                use dasu("no unused dependencies to prune")
+            }
+        } else {
+            use dasu("usage: owl deps --prune")
+        }
         return
     }
     if cmd == "profile" {
-        use! profile::cmd_profile(args)
+        use! profile::run(args)
         return
     }
     if cmd == "upgrade" {
-        set ec = use! upgrade::cmd_upgrade(args) :i64
-        if ec != 0 { proc_exit(ec) }
+        set ec = use! upgrade::run(args) :i64
+        if ec != 0 { exit(ec) }
         return
     }
 

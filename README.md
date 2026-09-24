@@ -1,10 +1,12 @@
-# Owl
+# Owl v1.1.1
 
 Package and project manager for the [Mire](https://github.com/mire-lang) (Avenys) language.
 Written in Mire, compiled by Avenys.
 
 Owl provides project scaffolding, compilation orchestration, static analysis,
 test execution, package management, and build profiling.
+
+**Always use `owl` CLI. Never use `mire` CLI directly except for compiler development.**
 
 ## Quick Start
 
@@ -14,60 +16,190 @@ cd myproject
 owl run
 ```
 
+## Installation and CI
+
+The reproducible source installer builds Avenys first and then compiles Owl
+with that exact compiler. At runtime Owl invokes the compiler with argv-safe
+process execution; it does not use a shell to build projects.
+
+```bash
+./scripts/install.sh --check
+./scripts/install.sh --yes --prefix "$HOME/.local"
+```
+
+The installer supports apt, dnf, pacman, apk and zypper. It provisions Rust /
+Cargo, Clang, LLVM 22/LLD, pkg-config, libarchive, OpenSSL, libsodium, zlib and zstd. On an
+older distribution whose glibc cannot run a prebuilt binary, use this source
+installer rather than replacing system libraries.
+
+Owl packages are created and extracted through `libarchive` linked with zstd;
+the runtime does not require the `tar` or `zstd` executables. The corresponding
+development package (`libarchive-dev`, `libarchive-devel`, or the distribution
+equivalent) is checked by the installer.
+
+Avenys 4.0.0 currently requires LLVM 22. The installer rejects older
+`llvm-config` versions so a CI image fails with an actionable toolchain error
+instead of a later `llvm-sys` linker failure.
+
 ## Commands
 
 ### Build
 
 | Short | Command | Description |
-|-------|---------------|-------------|
-| `-B` | `build` | Compile project to binary |
-| | `run` | Compile and execute |
-| | `check` | Validate dependencies (path, version, integrity) |
-| | `info` | Project and environment information (live, no hardcoded values) |
-| | `info --json` | Machine-readable JSON output (CI/IDE-friendly) |
+|-------|---------|-------------|
+| `-B` | `build [file] [-d\|-r] [-O <n>]` | Compile project to binary |
+| `-R` | `run [file] [-d\|-r] [-O <n>] [-- <args>]` | Compile and execute |
+| `-T` | `test [file] [--verbose] [--no-run]` | Run test suite |
+| `-K` | `check` | Validate dependencies (path, version, integrity) |
+| `-D` | `debug [file] [--tokens\|-t] [--ast\|-p] [--ir] [--run\|-r]` | Compiler introspection |
+| `-Q` | `info [--json]` | Project and environment information |
 
 ### Project
 
 | Short | Command | Description |
-|-------|---------------|-------------|
-| `-N` | `new <name>` | Scaffold a new project |
-| `-C` | `clean` | Remove build artifacts and cache |
-| | `checkup` | Validate all owl.toml fields and environment |
-| | `checkup --fix <field>...` | Fix specific owl.toml fields, e.g. `checkup --fix name version` |
+|-------|---------|-------------|
+| `-N` | `new <Name>` | Scaffold a new project |
+| `-C` | `clean [--bin] [--cache] [--all\|-A] [--global]` | Remove build artifacts and cache |
+| | `checkup [--fix <field>...]` | Project diagnostics and repair |
+| | `profile [--json]` | Build metrics |
+
+### Packages
+
+| Short | Command | Description |
+|-------|---------|-------------|
+| `-L` | `load <name>` | Add dependency to owl.toml |
+| `-G` | `reg add <url>` | Add a package registry |
+| `-G` | `reg list` | List registries |
+| `-G` | `reg sync` | Sync registries |
+| `-G` | `reg remove <name>` | Remove registry |
+| `-S` | `install <name> [ver]` | Download and install package |
+| `-S` | `install --lock` | Install all packages from owl.lock |
+| `-S` | `install -l` | List packages from all registries |
+| | `install --prune` | Install and prune unused dependencies |
+| | `deps --prune` | Remove unused dependencies from owl.toml |
+| `-e` | `export [--check\|--dry-run]` | Package and sign |
+| | `gc` | Garbage collect orphaned packages |
+| | `upgrade [--yes]` | Self-update owl from source |
 
 ### Global
 
 | Flag | Description |
-|-------|-------------|
-| `-V` | Show version |
-| `-h` | Show help |
+|------|-------------|
+| `-V`, `--version` | Show version |
+| `-h`, `--help` | Show help |
 
-## Planned (future releases)
+## checkup Command — Diagnostics & Repair
 
-- `test` / `-T` — test runner
-- `-S`, `-R`, `-Q` — package management (`-S` sync, `-R` remove, `-Q` query)
-- `profile` — build metrics
-- Pacman-style short flags for `check` and `info`
+```bash
+# Full diagnostic (all checks)
+owl checkup
+
+# Specific checks
+owl checkup --cache       # validate build cache integrity
+owl checkup --deps        # validate dependencies can be loaded
+owl checkup --loads       # validate load statements resolve
+
+# Repair (skips diagnostics when --fix with fields specified)
+owl checkup --fix loads        # scan sources, inject missing deps from load statements
+owl checkup --fix deps         # resolve dep paths from ~/.owl/libs
+owl checkup --fix cache        # clean build cache
+owl checkup --fix name entry   # regenerate owl.toml fields
+
+# Example: fix missing dependencies from load statements
+owl checkup --fix loads
+```
+
+### checkup Behavior
+
+- **Without `--fix`**: runs all selected diagnostics, reports all issues
+- **With `--fix <fields>`**: **skips diagnostics**, runs only the requested fix
+  - `--fix loads` → scans source files for `load` statements, injects missing deps
+  - `--fix deps` → resolves dep paths from `~/.owl/libs/`
+  - `--fix cache` → clears `bin/.cache`
+  - `--fix <field>` → regenerates `owl.toml` fields
+
+---
+
+## Module Loading — Important Rules
+
+### External packages (from `[dependencies]`)
+
+```mire
+# In code/main.mire
+load kioto              # makes kioto namespace available
+load blu::parse         # specific submodule from blu
+load sdl::sdl3          # submodule from sdl
+
+# External package calls are direct; local module calls use `use!`.
+pub fn main: () {
+    set text = kioto::strings::concat("a" "b")
+    set style = blu::parse::load_file("style.css")
+    set window = sdl::sdl3::create_window("title" 800 600)
+}
+```
+
+### Redundant Load Anti-pattern
+
+```mire
+# WRONG — redundant
+load blu
+load blu::parse
+load blu::widget
+
+# CORRECT — load blu once, it exposes everything
+load blu
+
+pub fn main: () {
+    use! blu::parse::load_file("style.css")
+    use! blu::widget::arena::create()
+}
+```
+
+**Why:** `load blu` imports the entire `blu` package namespace. Submodules like `blu::parse`, `blu::widget` are accessible as `blu::parse::...` and `blu::widget::...`. Loading them again is redundant.
+
+### Local modules (within project)
+
+```mire
+# In code/main.mire
+load! code/lib/utils    # local module from code/lib/utils/mod.mire
+
+# Usage requires use!
+pub fn main: () {
+    use! utils::helper()
+}
+```
+
+### Key Loading Rules
+
+| Rule | Description |
+|------|-------------|
+| `load X` | External package from `[dependencies]`. **Must be in owl.toml**. |
+| `load! X` | Local module (`code/...`). Path relative to `sources` dir. |
+| `use! mod::fn()` | **Mandatory** for ALL cross-module calls. |
+| `load X::Y` | Submodule of external package. |
+| `load! X::Y` | NOT valid — local modules loaded as single unit. |
+
+---
 
 ## Build profiles
 
 ```bash
-owl build --release -O3 # Release mode, max optimization
-owl run -r -Os # Release, size optimization
-owl check # Validate dependencies
+owl build --release -O3   # Release mode, max optimization
+owl run -r -Os            # Release, size optimization
+owl check                 # Validate dependencies
 ```
 
 ## Project structure
 
 ```
 myproject/
- owl.toml -- Project manifest
- code/main.mire -- Entry point
- tests/ -- Test files
- bin/
- debug/ -- Debug binaries
- release/ -- Release binaries
- .cache/ -- Build cache
+  owl.toml          # Project manifest
+  code/main.mire    # Entry point
+  tests/            # Test files
+  bin/
+    debug/          # Debug binaries
+    release/        # Release binaries
+    .cache/         # Build cache
 ```
 
 ## owl.toml
@@ -83,71 +215,46 @@ entry = "code/main.mire"
 compiler = "mire"
 profile = "debug"
 opt-level = 0
+artifact = "bin"
+runtime = "minimal"
+target = "x86_64-unknown-linux-gnu"
+panic = "abort"
+incremental = true
+debug-info = true
 
 [paths]
-sources = "code"
-tests = "tests"
-output = "bin"
+source = "code"
+test = "tests"
+bin = "bin/debug"
 cache = "bin/.cache"
+generated = "bin/generated"
 
 [dependencies]
+kioto = { path = "~/.owl/libs/kioto", version = "2.4.9" }
+
+[cfg]
+publisher = "publish.toml"
+registry = "mor"
+libs = "~/.owl/libs"
+cache = "~/.owl/cache"
+```
+
+**Critical:** All external packages MUST be in `[dependencies]` for `load` to work.
+
+## Lockfile
+
+Owl generates `owl.lock` automatically when you build or install. The lockfile
+pins exact versions and paths for reproducible installs.
+
+```bash
+owl install           # Resolve owl.toml and update/install owl.lock
+owl install --lock   # Install all packages from owl.lock
 ```
 
 ## Documentation
 
 - [Changelog](docs/changelog.md) — release history
 - [Technical notes](docs/technical.md) — architecture overview
-- [Roadmap](docs/roadmap.md) — planned features
-
-## Recent changes (v0.27.0)
-
-- **Flag passthrough to the compiler:** `owl build` / `owl run` now forward
- any extra flag starting with `-` to the underlying `mire` invocation
- (e.g. `owl run -- --some-mire-flag`), so compiler-specific options no longer
- need dedicated owl flags.
-- **`owl test` forwards all flags:** `collect_test_flags` now passes through
- every argument beginning with `-` (instead of a fixed allowlist) and quotes
- non-flag arguments, so custom test flags reach the runner correctly.
-- **Lockfile parser fix:** Corrected `[[package]]` section splitting in
- `lockfile_package_names` (off-by-one at the section delimiter) and removed a
- duplicated consistency check. Lockfile/dependency name extraction is now
- accurate.
-
-## Recent changes (v0.17.0)
-
-- **Modularized codebase:** Split monolithic `code/main.mire` into 8
- sub-packages (`util`, `crypto`, `trust`, `registry`, `build`, `check`,
- `info`, `ui`) with proper dependency management via `owl.toml`.
-- **Compiler fixes:** Resolved multi-level namespace resolution in MIR
- codegen, error positions now accurate in MIR lowering, loader prefix
- bug fixed for cross-package dependency symbols.
-- **Version bump:** `0.16.2` → `0.17.0`
-
-## Recent changes (v0.16.1)
-
-- **`checkup --fix` now requires explicit field arguments:**
- `owl checkup --fix <field> [<field> ...]` — the developer specifies
- exactly which fields to fix. `--fix` without field names shows a usage
- hint. This replaces blanket regeneration for better control.
-- **Version bump:** `0.16.0` → `0.16.1`
-- **Removed `OWL_ROADMAP.md`** from repo (kept in root Arch context).
-
-## Recent changes (v0.16.0)
-
-- **Full owl.toml validation:** `cmd_checkup` now validates all 11 fields
- (`name`, `version`, `description`, `entry`, `profile`, `opt-level`,
- `compiler`, `output`, `cache`, `sources`, `tests`) plus dependency counting.
- Missing fields produce `[FAIL]` or `[WARN]` with clear messages.
-- **Dependency check:** `checkup` counts `[dependencies]` entries and reports
- `[WARN]` if none configured.
-- **`checkup --fix`:** Regenerates `owl.toml` preserving all existing values,
- only filling missing fields with defaults.
-- **De-hardcoded config:** All paths (`entry`, `profile`, `opt-level`, `tests`, `output`, `cache`)
- now read exclusively from `owl.toml`. Missing fields produce errors instead of silent fallbacks.
-- **Removed `bin/main` shortcut:** `owl run` always delegates to `mire run`, using MIR's
- incremental cache for fast recompilation.
-- **Standalone files:** Running `owl run file.mire` without a project delegates directly to
- `mire run file.mire`.
 
 ## License
 
