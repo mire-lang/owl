@@ -8,7 +8,7 @@ pub fn main: () {
 
     set da = [] :vec[str] mut
     set da = vec::push::str(da "+%s%N")
-    set ts = strings::trim(proc::run::output("date" da))
+    set ts = strings::trim(proc::run_output("date" da))
     set test_base = strings::concat("/tmp/owl_build_test_", ts)
     set proj_dir = strings::concat(test_base, strings::copy("/testbuild"))
     set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl"))
@@ -16,17 +16,17 @@ pub fn main: () {
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")
     set mk = vec::push::str(mk strings::copy(test_base))
-    use proc::run::output("mkdir" mk)
+    use proc::run_output("mkdir" mk)
 
     set na = [] :vec[str] mut
     set na = vec::push::str(na "new")
     set na = vec::push::str(na "testbuild")
-    set new_out = proc::run::output_cwd(owl_bin na test_base true)
+    set new_out = proc::run_output_cwd(owl_bin na test_base true)
     use dasu(new_out)
 
     set ba = [] :vec[str] mut
     set ba = vec::push::str(ba "build")
-    set build_out = proc::run::output_cwd(owl_bin ba proj_dir true)
+    set build_out = proc::run_output_cwd(owl_bin ba proj_dir true)
 
     set build_failed = strings::contains(build_out "error")
     if build_failed {
@@ -48,6 +48,6 @@ pub fn main: () {
     set rm = [] :vec[str] mut
     set rm = vec::push::str(rm "-rf")
     set rm = vec::push::str(rm strings::copy(test_base))
-    use proc::run::output("rm" rm)
+    use proc::run_output("rm" rm)
     use dasu("test_owl_build complete")
 }

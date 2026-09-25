@@ -55,6 +55,23 @@
 - Contains `[[package]]` entries with: name, version, path, registry, abi, compiler, language
 - `owl install --lock` reads lockfile and installs missing packages
 - Registry resolution: scans configured registries when no explicit registry field
+- **Path dependencies are locked too.** `dep_resolver::resolve()` used to `continue`
+  past any dep absent from the registry index, writing a lock with zero
+  `[[package]]` entries. `lockfile::in_sync()` then compared 0 locked packages
+  against N declared deps and re-resolved on every single command. Local/path
+  deps are now recorded with `registry = "local"` plus their declared path
+  (and version, when `owl.toml` pins one), read back via
+  `dep_resolver::declared_dep_field()`.
+- **Entry format is column-aligned to width 8** and the reader depends on it:
+  `lockfile::packages()` searches for `\nname     = "` and `get_field()` for
+  `\npath     = "`, `\nversion  = "`, `\nregistry = "`. Writers in
+  `dep_resolver` (both the entry writer and the "is it already locked?" search
+  key) must emit that alignment or the lookup silently finds nothing.
+
+### `[c] sources`
+- Only C translation units belong in `[c] sources`. A `.mire` module listed
+  there is handed to the C compiler and fails with
+  `Could not publish C object ... No such file or directory`.
 
 ### Local dependency records
 

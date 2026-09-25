@@ -279,7 +279,7 @@ pub fn check_version: (name :&str constraint :&str) {
 }
 
 pub fn cache_resolution: (name :&str constraint :&str version :&str) {
-    set cache_file = use! util::owl_home_cache_resolution()
+    set cache_file = use! util::owl_home_cache_resolution_file()
     set n = use! util::trim(name)
     set c = use! util::trim(constraint)
     set v = use! util::trim(version)
@@ -289,7 +289,7 @@ pub fn cache_resolution: (name :&str constraint :&str version :&str) {
 }
 
 pub fn get_cached_resolution: (name :&str constraint :&str) :str {
-    set cache_file = use! util::owl_home_cache_resolution()
+    set cache_file = use! util::owl_home_cache_resolution_file()
     set result = "" :str mut
     if fs::exists(cache_file) {
         set content = fs::read(cache_file)

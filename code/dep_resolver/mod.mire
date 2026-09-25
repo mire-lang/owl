@@ -1,0 +1,368 @@
+module dep_resolver
+
+load mire::vec
+load! /code/util
+load! /code/lockfile
+
+/! 
+  Pure dependency resolver. Takes declared deps from owl.toml, existing lockfile,
+  and registry index; returns resolution plan.
+  
+  No side effects - just computes what should be installed/updated.
+  Uses flat data structures instead of structs due to compiler limitations.
+!/
+
+/! Read declared deps from owl.toml [dependencies] section !/
+pub fn read_declared_deps: () :vec[str] {
+    set result = [] :vec[str] mut
+    set content = fs::read("owl.toml")
+    set marker = "[dependencies]"
+    set sec_start = strings::index(content marker)
+    if sec_start < 0 { return result }
+    set start_pos = sec_start + len(marker)
+    set after = strings::substr(content start_pos 9999)
+    set next_sec = strings::index(after "\n[")
+    set section = if next_sec >= 0 { strings::substr(after 0 next_sec) } else { after }
+    set lines = strings::split(section "\n")
+    set i = 0 :i64 mut
+    while i < len(lines) {
+        set line = use! util::trim(use! util::list_get(lines i))
+        if line != "" && !use! util::startswith(line "#") && !use! util::startswith(line "[") {
+            set eq = strings::index(line "=")
+            if eq > 0 {
+                set name = use! util::trim(strings::substr(line 0 eq))
+                set result = vec::push::str(result name)
+            }
+        }
+        set i += 1
+    }
+    return result
+}
+
+/! Read a raw field (path/version) declared for a dep in owl.toml.
+   Local helper: avoids depending on /code/deps (which loads us) and keeps
+   path deps lockable. Returns "" when the field is absent. !/
+pub fn declared_dep_field: (pkg_name :str field :str) :str {
+    set content = fs::read("owl.toml")
+    set marker = "[dependencies]"
+    set sec_start = strings::index(content marker)
+    if sec_start < 0 { return "" }
+    set start_pos = sec_start + len(marker)
+    set after = strings::substr(content start_pos 9999)
+    set next_sec = strings::index(after "\n[")
+    set section = if next_sec >= 0 { strings::substr(after 0 next_sec) } else { after }
+    set lines = strings::split(section "\n")
+    set i = 0 :i64 mut
+    while i < len(lines) {
+        set line = use! util::trim(use! util::list_get(lines i))
+        set eq = strings::index(line "=")
+        if eq > 0 {
+            set name = use! util::trim(strings::substr(line 0 eq))
+            if name == pkg_name {
+                set rhs = use! util::trim(strings::substr(line eq + 1 9999))
+                set fkey = field + " = \""
+                set fp = strings::index(rhs fkey)
+                if fp >= 0 {
+                    set rest = strings::substr(rhs fp + len(fkey) 9999)
+                    set q = strings::index(rest "\"")
+                    if q > 0 { return strings::substr(rest 0 q) }
+                }
+                return ""
+            }
+        }
+        set i += 1
+    }
+    return ""
+}
+
+/! Find package info in registry index.toml
+   Returns a flat string with fields separated by |:
+   name|version|registry|path|method|tarball|sha256|sha512|repo|tag|asset|ref_val|commit
+!/
+pub fn find_in_registry: (pkg_name :str reg_dir :str) :str {
+    set idx_path = reg_dir + "/" + pkg_name + "/index.toml"
+    if !fs::exists(idx_path) {
+        return pkg_name + "|||||||||||"
+    }
+    set idx_content = fs::read(idx_path)
+    set glines = strings::split(idx_content "\n")
+    set gnl = len(glines)
+    set gi = 0 :i64 mut
+    set in_pkg = false :bool mut
+    
+    /! Collect all fields in local vars first !/
+    set dep_version = "" :str mut
+    set dep_registry = pkg_name :str mut
+    set dep_path = "" :str mut
+    set dep_method = "" :str mut
+    set dep_tarball = "" :str mut
+    set dep_sha256 = "" :str mut
+    set dep_sha512 = "" :str mut
+    set dep_repo = "" :str mut
+    set dep_tag = "" :str mut
+    set dep_asset = "" :str mut
+    set dep_ref_val = "" :str mut
+    set dep_commit = "" :str mut
+    
+    while gi < gnl {
+        set gline = use! util::trim(use! util::list_get(glines gi))
+        set eq = strings::index(gline "=")
+        if eq > 0 {
+            set after = strings::substr(gline eq + 1 9999) :str mut
+            set after = use! util::trim(after)
+            if use! util::startswith(after "\"") && use! util::endswith(after "\"") {
+                set after = strings::substr(after 1 strings::len(after) - 2)
+            } else {
+                if use! util::startswith(after "\"") { set after = strings::substr(after 1 9999) }
+            }
+            if use! util::startswith(gline "name = ") {
+                if after == pkg_name { set in_pkg = true } else { set in_pkg = false }
+            }
+            if in_pkg {
+                if use! util::startswith(gline "version = ") { set dep_version = after }
+                if use! util::startswith(gline "tarball = ") { set dep_tarball = after }
+                if use! util::startswith(gline "sha256 = ") { set dep_sha256 = after }
+                if use! util::startswith(gline "sha512 = ") { set dep_sha512 = after }
+                if use! util::startswith(gline "method = ") { set dep_method = after }
+                if use! util::startswith(gline "repo = ") { set dep_repo = after }
+                if use! util::startswith(gline "tag = ") { set dep_tag = after }
+                if use! util::startswith(gline "asset = ") { set dep_asset = after }
+                if use! util::startswith(gline "ref = ") { set dep_ref_val = after }
+                if use! util::startswith(gline "commit = ") { set dep_commit = after }
+            }
+        }
+        set gi += 1
+    }
+    /! Return flat string with | separator !/
+    return pkg_name + "|" + dep_version + "|" + dep_registry + "|" + dep_path + "|" + dep_method + "|" + dep_tarball + "|" + dep_sha256 + "|" + dep_sha512 + "|" + dep_repo + "|" + dep_tag + "|" + dep_asset + "|" + dep_ref_val + "|" + dep_commit
+}
+
+/! Parse a flat dep string into individual fields !/
+pub fn parse_dep: (dep_str :str) :vec[str] {
+    return strings::split(dep_str "|")
+}
+
+/! Compute resolution plan from declared deps, lockfile, and registries !/
+pub fn resolve: () :str {
+    set declared = use! dep_resolver::read_declared_deps()
+    set reg_dir = use! util::owl_home_registries()
+    set lock_exists = fs::exists("owl.lock")
+    
+    set to_install = [] :vec[str] mut
+    set to_update = [] :vec[str] mut
+    set lock_content = "" :str mut
+    set local_entries = "" :str mut
+    
+    /! Check each declared dep !/
+    set i = 0 :i64 mut
+    while i < len(declared) {
+        set dep_str = use! dep_resolver::find_in_registry(use! util::list_get(declared i) strings::copy(reg_dir))
+        set fields = use! dep_resolver::parse_dep(strings::copy(dep_str))
+        set version = use! util::list_get(fields 1)
+        if version == "" {
+            /! Not in any registry - a local/path dep. It still has to be
+               recorded in the lockfile, otherwise the lock never matches
+               owl.toml and every command re-resolves forever. !/
+            set dn = use! util::list_get(declared i)
+            set dpath = use! dep_resolver::declared_dep_field(strings::copy(dn) "path")
+            set dver = use! dep_resolver::declared_dep_field(strings::copy(dn) "version")
+            set local_entries = local_entries + "[[package]]\nname     = \"" + dn + "\"\n"
+            if dver != "" { set local_entries = local_entries + "version  = \"" + dver + "\"\n" }
+            set local_entries = local_entries + "path     = \"" + dpath + "\"\nregistry = \"local\"\n\n"
+            set i += 1
+            continue
+        }
+        /! Check if in lockfile !/
+        set in_lock = false :bool mut
+        if lock_exists {
+            set lock_content = fs::read("owl.lock")
+            set parts = [] :vec[str] mut
+            set parts = vec::push::str(parts "name     = \"")
+            set nm = use! util::list_get(declared i)
+            set parts = vec::push::str(parts nm)
+            set parts = vec::push::str(parts "\"")
+            set search = strings::join(parts "")
+            if strings::contains(lock_content search) {
+                set in_lock = true
+                set locked_ver = use! lockfile::get_field(use! util::list_get(declared i) "version")
+                if locked_ver != version {
+                    set to_update = vec::push::str(to_update strings::copy(dep_str))
+                }
+            }
+        }
+        if !in_lock {
+            set to_install = vec::push::str(to_install dep_str)
+        }
+        set i += 1
+    }
+    
+    /! Generate new lockfile content !/
+    set sha = use! util::sha256sum_hex("owl.toml")
+    set lock_content = "# Generated by owl dep_resolver - do not edit manually\n\n[lock]\nmanifest-sha256 = \"" + sha + "\"\n\n"
+    set j = 0 :i64 mut
+    while j < len(to_install) {
+        set dep_str = use! util::list_get(to_install j) :str mut
+        set fields = use! dep_resolver::parse_dep(dep_str)
+        set d_name = use! util::list_get(fields 0)
+        set d_version = use! util::list_get(fields 1)
+        set d_registry = use! util::list_get(fields 2)
+        set lock_content = lock_content + "[[package]]\nname     = \"" + d_name + "\"\nversion  = \"" + d_version + "\"\npath     = \"" + use! util::owl_home_lib_versioned(d_name d_version) + "\"\nregistry = \"" + d_registry + "\"\nabi      = " + use! util::abi_version() + "\n\n"
+        set j += 1
+    }
+    set lock_content = lock_content + local_entries
+    set k = 0 :i64 mut
+    while k < len(to_update) {
+        set dep_str = use! util::list_get(to_update k) :str mut
+        set fields = use! dep_resolver::parse_dep(dep_str)
+        set d_name = use! util::list_get(fields 0)
+        set d_version = use! util::list_get(fields 1)
+        set d_registry = use! util::list_get(fields 2)
+        set lock_content = lock_content + "[[package]]\nname     = \"" + d_name + "\"\nversion  = \"" + d_version + "\"\npath     = \"" + use! util::owl_home_lib_versioned(d_name d_version) + "\"\nregistry = \"" + d_registry + "\"\nabi      = " + use! util::abi_version() + "\n\n"
+        set k += 1
+    }
+    
+    /! Return flat plan string: install_count|update_count|lock_content !/
+    return use! util::i64_to_string(len(to_install)) + "|" + use! util::i64_to_string(len(to_update)) + "|" + lock_content
+}
+
+/! Execute resolution plan - install/update packages !/
+pub fn execute_plan: (plan_str :str) :bool {
+    set parts = strings::split(plan_str "|") :vec[str] mut
+    set install_count = use! util::string_to_i64(use! util::list_get(parts 0))
+    set update_count = use! util::string_to_i64(use! util::list_get(parts 1))
+    set lock_content = use! util::list_get(parts 2)
+    
+    /! Reconstruct to_install and to_update from the plan string !/
+    /! For simplicity, we'll re-resolve here !/
+    set declared = use! dep_resolver::read_declared_deps()
+    set reg_dir = use! util::owl_home_registries()
+    
+    /! Install new packages !/
+    set i = 0 :i64 mut
+while i < len(declared) {
+        set dep_str = use! dep_resolver::find_in_registry(use! util::list_get(declared i) strings::copy(reg_dir)) :str mut
+        set fields = strings::split(dep_str "|") :vec[str] mut
+        set version = use! util::list_get(fields 1)
+        if version == "" {
+            set i += 1
+            continue
+        }
+        
+        /! Check if this dep should be installed (not in lock) !/
+        set in_lock = false :bool mut
+        if fs::exists("owl.lock") {
+            set lc = fs::read("owl.lock")
+            set parts = [] :vec[str] mut
+            set parts = vec::push::str(parts "name     = \"")
+            set nm = use! util::list_get(declared i)
+            set parts = vec::push::str(parts nm)
+            set parts = vec::push::str(parts "\"")
+            set search = strings::join(parts "")
+            if strings::contains(lc search) {
+                set in_lock = true
+            }
+        }
+        
+        if !in_lock {
+            /! Install this package !/
+        set dep_str = use! dep_resolver::find_in_registry(use! util::list_get(declared i) strings::copy(reg_dir))
+            set fields = strings::split(dep_str "|") :vec[str] mut
+            set d_name = use! util::list_get(fields 0)
+            set d_version = use! util::list_get(fields 1)
+            set d_registry = use! util::list_get(fields 2)
+            set d_method = use! util::list_get(fields 4)
+            set d_tarball = use! util::list_get(fields 5)
+            set d_sha256 = use! util::list_get(fields 6)
+            set d_sha512 = use! util::list_get(fields 7)
+            set d_repo = use! util::list_get(fields 8)
+            set d_tag = use! util::list_get(fields 9)
+            set d_asset = use! util::list_get(fields 10)
+            set d_ref_val = use! util::list_get(fields 11)
+            set d_commit = use! util::list_get(fields 12)
+            
+            set ver_dir = use! util::owl_home_lib_versioned(strings::copy(d_name) strings::copy(d_version))
+            use! util::mkdir_p(strings::copy(ver_dir))
+            
+            /! Download tarball !/
+            set tarball_url = "" :str mut
+            if d_repo != "" && d_tag != "" && d_asset != "" {
+                if use! util::startswith(d_repo "http") {
+                    set tarball_url = d_repo + "/releases/download/" + d_tag + "/" + d_asset
+                } else {
+                    set tarball_url = "https://github.com/" + d_repo + "/releases/download/" + d_tag + "/" + d_asset
+                }
+            } else {
+                /! reg_dir already declared at function scope !/
+                if fs::exists(strings::copy(reg_dir) + "/" + d_registry + "/registry.json") {
+                    set reg_content = fs::read(strings::copy(reg_dir) + "/" + d_registry + "/registry.json")
+                    set reg_url = use! util::json_get_str(reg_content "url") :str mut
+                    if reg_url == "" { set reg_url = use! util::json_get_str(reg_content "name") }
+                    set tarball_url = reg_url + "/" + d_tarball
+                }
+            }
+            
+            set tarball_file = use! util::owl_home() + "/cache/tarballs/" + d_name + "-" + d_version + ".tar.zst"
+            use! util::mkdir_p(use! util::owl_home() + "/cache/tarballs")
+            set curl_args = [] :vec[str] mut
+            set curl_args = vec::push::str(curl_args "-sL")
+            set curl_args = vec::push::str(curl_args "--fail")
+            set curl_args = vec::push::str(curl_args "-o")
+            set curl_args = vec::push::str(curl_args strings::copy(tarball_file))
+            set curl_args = vec::push::str(curl_args strings::copy(tarball_url))
+            set out = rt_proc_capture_argv("curl" curl_args)
+            
+            if !fs::exists(strings::copy(tarball_file)) { return false }
+            
+            /! Verify checksums !/
+            if d_sha256 != "" {
+                set actual = use! util::sha256sum_hex(strings::copy(tarball_file))
+                if actual != d_sha256 { return false }
+            }
+            if d_sha512 != "" {
+                set actual = use! util::sha512sum_hex(strings::copy(tarball_file))
+                if actual != d_sha512 { return false }
+            }
+            
+            /! Extract !/
+            if owl_archive_extract(strings::copy(tarball_file) strings::copy(ver_dir)) != 0 { return false }
+            
+            /! Write meta.toml !/
+            set meta_path = strings::copy(ver_dir) + "/meta.toml"
+            if !fs::exists(meta_path) {
+                set meta = "[package]\nname = \"" + strings::copy(d_name) + "\"\nversion = \"" + strings::copy(d_version) + "\"\ncompiler = \"" + use! util::compiler_cmd() + "\"\nabi = " + use! util::abi_version() + "\nlanguage = \"" + use! util::language_version() + "\"\n"
+                use fs::write(meta_path meta)
+            }
+            
+            /! Make readonly + symlink !/
+            use! util::fs_make_readonly(ver_dir)
+            set active_link = use! util::owl_home_lib_active(strings::copy(d_name))
+            if fs::exists(active_link) { fs::remove(active_link) }
+            set ln_args = [] :vec[str] mut
+            set ln_args = vec::push::str(ln_args "-sf")
+            set ln_args = vec::push::str(ln_args d_name + "@" + d_version)
+            set ln_args = vec::push::str(ln_args active_link)
+            use rt_proc_capture_argv("ln" ln_args)
+        }
+        
+        set i += 1
+    }
+    
+    /! Write final lockfile !/
+    use fs::write("owl.lock" lock_content)
+    
+    /! Write canonical cache copy !/
+    set sha = use! util::sha256sum_hex("owl.toml")
+    if sha != "" {
+        set res_dir = use! util::owl_home_cache_resolution(sha)
+        use! util::mkdir_p(res_dir)
+        use fs::write(res_dir + "/lock.toml" lock_content)
+    }
+    
+    return true
+}
+
+/! High-level resolve and execute !/
+pub fn resolve_and_execute: () :bool {
+    set plan = use! dep_resolver::resolve()
+    return use! dep_resolver::execute_plan(plan)
+}

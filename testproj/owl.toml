@@ -1,0 +1,21 @@
+[project]
+name = "testproj"
+version = "0.1.0"
+description = "A Mire project"
+entry = "code/main.mire"
+
+[build]
+compiler = "mire"
+profile = "debug"
+opt-level = "0"
+
+[paths]
+sources = "code"
+tests = "tests"
+output = "bin"
+cache = "bin/.cache"
+
+[dependencies]
+mire = { path = "~/.owl/libs/mire", version = "0.1.0" }
+["owl@lock"]
+version = "3"

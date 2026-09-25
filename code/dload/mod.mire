@@ -1,5 +1,6 @@
 module dload
 
+load mire::vec
 load! /code/util
 load! /code/registry
 load! /code/deps
@@ -23,7 +24,7 @@ pub fn url: (args :&vec[str]) {
 }
 
 pub fn dependency: (args :&vec[str]) {
-    set n = rt_vec_len(args)
+    set n = vec::len(args)
     set proceed = true :bool mut
     if n < 3 {
         use dasu("usage: owl load <name> [--path <path>]")
@@ -37,11 +38,11 @@ pub fn dependency: (args :&vec[str]) {
         set has_path = false :bool mut
         set path_val = "" :str mut
         while i < n {
-            set arg = rt_vec_get_str(args i)
+            set arg = vec::get::str(args i)
             if arg == "--path" || arg == "-p" {
                 set has_path = true
                 set i2 = i + 1
-                if i2 < n { set path_val = rt_vec_get_str(args i2) }
+                if i2 < n { set path_val = vec::get::str(args i2) }
             } else {
                 if name_arg == "" { set name_arg = arg }
             }

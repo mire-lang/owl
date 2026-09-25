@@ -1,17 +1,16 @@
 module args
 
+load mire::vec
 load! /code/util
-
-extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
-extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
+load! /code/_externs
 
 pub fn flag: () {
 pub fn has: (args :&vec[str], flag :&str) :bool {
-    set n = rt_vec_len(args)
+    set n = vec::len(args)
     set result = false :bool mut
     set i = 0 :i64 mut
     while i < n {
-        set a = rt_vec_get_str(args i)
+        set a = vec::get::str(args i)
         if a == flag { set result = true }
         set i += 1
     }
@@ -19,14 +18,14 @@ pub fn has: (args :&vec[str], flag :&str) :bool {
 }
 
 pub fn value: (args :&vec[str], flag :&str) :str {
-    set n = rt_vec_len(args)
+    set n = vec::len(args)
     set result = "" :str mut
     set i = 0 :i64 mut
     while i < n {
-        set a = rt_vec_get_str(args i)
+        set a = vec::get::str(args i)
         if a == flag {
             set next = i + 1
-            if next < n { set result = rt_vec_get_str(args next) }
+            if next < n { set result = vec::get::str(args next) }
         }
         set i += 1
     }
@@ -35,15 +34,109 @@ pub fn value: (args :&vec[str], flag :&str) :str {
 
 }
 
+/! Map of subcommand -> allowed flags (short and long) !/
+pub fn allowed_flags: (subcmd :&str) :vec[str] {
+    set result = [] :vec[str] mut
+    if subcmd == "build" || subcmd == "run" {
+        set result = vec::push::str(result "--release")
+        set result = vec::push::str(result "-r")
+        set result = vec::push::str(result "--no-analysis-cache")
+        set result = vec::push::str(result "--lib-dir")
+        set result = vec::push::str(result "-L")
+    } elif subcmd == "install" {
+        set result = vec::push::str(result "--list")
+        set result = vec::push::str(result "-l")
+        set result = vec::push::str(result "--target")
+        set result = vec::push::str(result "-t")
+        set result = vec::push::str(result "--no-verify")
+        set result = vec::push::str(result "-f")
+        set result = vec::push::str(result "--force")
+        set result = vec::push::str(result "--yes")
+        set result = vec::push::str(result "-y")
+    } elif subcmd == "new" {
+        /! no flags yet !/
+    } elif subcmd == "check" || subcmd == "checkup" {
+        set result = vec::push::str(result "--cache")
+        set result = vec::push::str(result "--deps")
+        set result = vec::push::str(result "--loads")
+        set result = vec::push::str(result "--fix")
+        set result = vec::push::str(result "--help")
+        set result = vec::push::str(result "-h")
+    } elif subcmd == "install" || subcmd == "load" {
+        set result = vec::push::str(result "--lock")
+        set result = vec::push::str(result "-l")
+        set result = vec::push::str(result "--no-verify")
+        set result = vec::push::str(result "-f")
+        set result = vec::push::str(result "--force")
+    } elif subcmd == "reg" {
+        set result = vec::push::str(result "--sync")
+        set result = vec::push::str(result "--add")
+    } elif subcmd == "deps" {
+        set result = vec::push::str(result "--prune")
+    } elif subcmd == "gc" {
+        set result = vec::push::str(result "--yes")
+        set result = vec::push::str(result "-y")
+    } elif subcmd == "upgrade" {
+        /! no flags yet !/
+    } elif subcmd == "export" {
+        set result = vec::push::str(result "--dry-run")
+    } elif subcmd == "info" {
+        /! no flags yet !/
+    } elif subcmd == "profile" {
+        set result = vec::push::str(result "--json")
+    } elif subcmd == "clean" {
+        set result = vec::push::str(result "--cache")
+        set result = vec::push::str(result "--bin")
+        set result = vec::push::str(result "--all")
+        set result = vec::push::str(result "--global")
+    }
+    return result
+}
+
+/! Validate args for a subcommand, print tree-style error on unknown flags !/
+pub fn validate: (subcmd :&str, args :&vec[str]) :bool {
+    set allowed = use! args::allowed_flags(subcmd)
+    set n = vec::len(args)
+    set i = 0 :i64 mut
+    while i < n {
+        set a = vec::get::str(args i)
+        if use! util::startswith(a "-") {
+            set known = false :bool mut
+            set j = 0 :i64 mut
+            set alen = vec::len(allowed)
+            while j < alen {
+                if vec::get::str(allowed j) == a { set known = true }
+                set j += 1
+            }
+            if known == false {
+                /! Print tree-style error !/
+                use dasu("error[E0012] CLI Error")
+                use dasu("+--[E0012: Unknown flag " + a + "]")
+                use dasu(strings::concat("|   flag '" + a + "' not recognized for subcommand '" subcmd "'"))
+                use dasu("|   available flags:")
+                set j = 0 :i64 mut
+                while j < alen {
+                    use dasu("|   - " + vec::get::str(allowed j))
+                    set j += 1
+                }
+                use dasu(strings::concat("|   run 'owl " subcmd " --help' for usage"))
+                return false
+            }
+        }
+        set i += 1
+    }
+    return true
+}
+
 pub fn position: () {
 pub fn get: (args :&vec[str], nth :i64) :str {
-    set n = rt_vec_len(args)
+    set n = vec::len(args)
     set result = "" :str mut
     set found = 0 :i64 mut
     set skipped_cmd = false :bool mut
     set i = 1 :i64 mut
     while i < n {
-        set a = rt_vec_get_str(args i)
+        set a = vec::get::str(args i)
         if !use! util::startswith(a "-") && a != "" {
             if skipped_cmd == false {
                 set skipped_cmd = true

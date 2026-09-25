@@ -1,4 +1,19 @@
 module util
+load mire::vec
+load mire::map
+load kioto::strings
+load kioto::time
+load kioto::fs
+load kioto::env
+load kioto::async
+load kioto::mem
+load kioto::cpu
+load kioto::math
+load kioto::net
+load kioto::log
+load kioto::cli
+load kioto::crypto
+load! /code/_externs
 
 // NOTE: 9999 is used as "rest of string" length in strings::substr calls
 // throughout the codebase. It works because substr clamps to string bounds.
@@ -185,7 +200,7 @@ pub fn toml_set: (file :str section :str key :str value :str) :bool {
 pub fn extract_git_head: (args :vec[str] dest :&str) :str {
     // Execute git rev-parse HEAD and return the commit hash
     // This replaces util::trim_command("git" args) with native string parsing
-    set output = proc::run::output("git" args)
+    set output = rt_proc_capture_argv("git" args)
     set head = strings::trim(output)
     // Validate it's a valid hex commit hash (40 chars)
     if len(head) == 40 { return head }
@@ -200,7 +215,7 @@ pub fn extract_install_status: (output :&str) :bool {
 }
 
 /! Filesystem operations !/
-pub fn mkdir_p: (path :str) {
+pub fn mkdir_p: (path :&str) {
     if path == "" || path == "." { return }
     set absolute = use! util::startswith(path "/")
     set parts = strings::split(path "/")
@@ -399,12 +414,36 @@ pub fn owl_home_cache_tarballs: () :str {
     return use! util::owl_home() + "/cache/tarballs"
 }
 
-pub fn owl_home_cache_resolution: () :str {
-    return use! util::owl_home() + "/cache/registry/resolution.toml"
-}
-
 pub fn owl_home_keys: () :str {
     return use! util::owl_home() + "/keys"
+}
+
+pub fn owl_home_cache_reg: () :str {
+    return use! util::owl_home() + "/cache/reg"
+}
+
+pub fn owl_home_cache_index: () :str {
+    return use! util::owl_home() + "/cache/index"
+}
+
+pub fn owl_home_cache_project: (name :str) :str {
+    return use! util::owl_home() + "/cache/project/" + name
+}
+
+pub fn owl_home_lib_versioned: (name :str, ver :str) :str {
+    return use! util::owl_home_libs() + "/" + name + "@" + ver
+}
+
+pub fn owl_home_lib_active: (name :str) :str {
+    return use! util::owl_home_libs() + "/" + name
+}
+
+pub fn owl_home_cache_resolution: (sha :str) :str {
+    return use! util::owl_home() + "/cache/resolution/" + sha
+}
+
+pub fn owl_home_cache_resolution_file: () :str {
+    return use! util::owl_home() + "/cache/resolution.toml"
 }
 
 /! Version and compiler info !/
@@ -414,7 +453,7 @@ pub fn owl_version: () :str {
 
 pub fn compiler_version: () :str {
     set ver = "" :str mut
-    set v = proc::run::output(use! util::compiler_cmd() ["--version"])
+    set v = rt_proc_capture_argv(use! util::compiler_cmd() ["--version"])
     if v != "" {
         set ver = v
     } else {
@@ -460,7 +499,6 @@ pub fn compiler_cmd: () :str {
         /! CI may provide an explicit compiler location without modifying a
            project manifest. This is read-only environment configuration, not
            shell evaluation; the resulting path is passed as argv[0]. !/
-        set home = env::var("HOME")
         set configured = env::var("MIRE_COMPILER")
         if configured != "" && fs::exists(configured) {
             set cmd = strings::copy(configured)
@@ -469,24 +507,10 @@ pub fn compiler_cmd: () :str {
             if mire_home != "" && fs::exists(mire_home + "/bin/mire") {
                 set cmd = mire_home + "/bin/mire"
             } else {
-                /! Priority: project-configured path > MIRE_HOME > owl-installed > cargo-installed
-                   The cargo-installed binary is a build artifact, not a deployment target.
-                   If no project config and no MIRE_HOME, fall back to "mire" which relies
-                   on the caller's PATH being set up by the CI/workflow, not by end users. !/
-                set c1 = strings::concat(home "/.cargo/bin/mire")
-                set c2 = strings::concat(home "/.local/bin/mire")
-                if fs::exists(c1) && fs::exists(strings::concat(home "/.owl")) {
-                    /! Only use cargo-installed mire if owl is also installed (indicates
-                       a development environment, not a production deployment). !/
-                    set cmd = c1
-                } elif fs::exists(c2) && fs::exists(strings::concat(home "/.owl")) {
-                    set cmd = c2
-                } else {
-                    /! Portable CI fallback. proc::run::output performs a
-                       direct executable lookup through PATH; no shell is
-                       created and no command string is interpreted. !/
-                    set cmd = "mire"
-                }
+                /! Portable CI fallback. use! _externs::rt_proc_capture_argv performs a
+                   direct executable lookup through PATH; no shell is
+                   created and no command string is interpreted. !/
+                set cmd = "mire"
             }
         }
     } else {
@@ -511,7 +535,8 @@ pub fn compiler_cmd: () :str {
    passes only the compiler arguments. !/
 pub fn run_compiler: (args :vec[str]) :str {
     set mire = use! util::compiler_cmd()
-    return proc::run::output(mire args)
+    use dasu("[DEBUG] run_compiler: mire=" + mire + " args=" + strings::join(args " "))
+    return rt_proc_capture_argv(mire args)
 }
 
 pub fn config_required: (section :str key :str) :str {
@@ -537,19 +562,19 @@ pub fn config_required: (section :str key :str) :str {
    build policies like ``[build] runtime`` that must not hardcode
    avenys' fallback tier. !/
 pub fn config_default: (section :str key :str default :str) :str {
-    use! kioto::fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: section=" + section + " key=" + key + " default=" + default + " has_project=" + (if use! util::has_project() { "true" } else { "false" }))
+    use! fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: section=" + section + " key=" + key + " default=" + default + " has_project=" + (if use! util::has_project() { "true" } else { "false" }))
     set val = default :str mut
     if use! util::has_project() {
-        use! kioto::fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: has_project=true")
+        use! fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: has_project=true")
         set s = section
         set k = key
         set v = use! util::toml_get("owl.toml" s k)
-        use! kioto::fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: toml_get returned=[" + v + "]")
+        use! fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT: toml_get returned=[" + v + "]")
         if v != "" {
             set val = v
         }
     }
-    use! kioto::fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT returning: [" + val + "]")
+    use! fs::write("/tmp/config_default_debug.txt" "CONFIG_DEFAULT returning: [" + val + "]")
     return val
 }
 
@@ -557,26 +582,25 @@ pub fn config_default: (section :str key :str default :str) :str {
 // compiler-facing options that must be represented in the normalized Mire
 // configuration instead of being appended ambiguously to a command string.
 pub fn arg_value: (args :&vec[str], flag :&str) :str {
-    set n = rt_vec_len(args)
+    set n = vec::len(args)
     set result = "" :str mut
     set i = 0 :i64 mut
     while i < n {
-        set item = rt_vec_get_str(args i)
+        set item = vec::get::str(args i)
         if item == flag && i + 1 < n {
-            set result = rt_vec_get_str(args i + 1)
+            set result = vec::get::str(args i + 1)
         }
         set i += 1
     }
     return result
 }
 
-// Writes the closed configuration contract consumed by Avenys 4.0.0. The
-// file is generated inside Owl's cache and overwritten on every build, so the
-// compiler never needs to rediscover owl.toml or the dependency graph.
 pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :str runtime :str target :str output :str cache :str libs :str) :bool {
+    use fs::write("/tmp/mire_write_mire_config_called.txt" "write_mire_config called with path=[" + path + "]\n")
     set artifact_copy = strings::copy(artifact)
-    use dasu("[DEBUG] write_mire_config: artifact=[" + artifact_copy + "]")
+    use dasu("[DEBUG] write_mire_config: artifact=[" + artifact_copy + "] path=[" + path + "]")
     use! util::mkdir_p(strings::copy(fs::path::dir(path)))
+    use fs::write("write_mire_config_debug.txt" "write_mire_config called with path=[" + path + "]\n")
 
     set proj_name = use! util::toml_get("owl.toml" "project" "name") :str mut
     if proj_name == "" { set proj_name = "owl-managed" }
@@ -640,10 +664,17 @@ pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :
     // linker `-l` entries. Owl's own archive bridge is the one exception: it
     // is a deliberate development-time C bridge to libarchive, not a Mire
     // runtime dependency.
-    if fs::exists("native/archive.c") {
-        set c_sources = vec::push::str(c_sources "native/archive.c")
-        set c_libs = vec::push::str(c_libs "archive")
+    /! Only add archive bridge if not already declared in owl.toml !/
+    set has_archive_src = false :bool mut
+    set i = 0 :i64 mut
+    while i < vec::len(c_sources) {
+        if vec::get::str(c_sources i) == "native/archive.c" {
+            set has_archive_src = true
+        }
+        set i += 1
     }
+    /! Do not add "archive" to libs - it's not a system library.
+       The native/archive.c source will be compiled and linked automatically. !/
     set config = config + "libs = " + use! util::toml_array_literal(c_libs) + "\n"
     set config = config + "sources = " + use! util::toml_array_literal(c_sources) + "\n"
     set config = config + "link-dirs = []\nfeatures = []\ndefines = []\n"
@@ -669,7 +700,7 @@ pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :
         set sec_externs = [] :vec[str] mut
         set sec_externs = vec::push::str(sec_externs "rt_*")
         set sec_externs = vec::push::str(sec_externs "pal_*")
-        set sec_externs = vec::push::str(sec_externs "exit")
+        set sec_externs = vec::push::str(sec_externs "_externs::exit")
         set sec_externs = vec::push::str(sec_externs "owl_archive_*")
     }
 
@@ -780,16 +811,12 @@ pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :
     set config = config + "allow-unsafe = " + sec_allow_unsafe + "\n"
 
     fs::write(path config)
+    set config_len = len(config) :i64 mut
+    use fs::write("/tmp/write_mire_config_result.txt" "write_mire_config: path=[" + path + "] exists=[" + (if fs::exists(path) { "true" } else { "false" }) + "] config_len=[" + use! util::i64_to_string(config_len) + "]\n")
     return fs::exists(path)
 }
 
 /! Kioto wrappers !/
-extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
-extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
-extern fn rt_string_to_i64: (value :str) :i64 lib "c"
-extern fn rt_i64_to_string: (value :i64) :str lib "c"
-extern fn exit: (code :i64) lib "c"
-
 pub fn trim: (s :&str) :str { return strings::trim(s) }
 pub fn split: (s :&str, sep :&str) :vec[str] { return strings::split(s sep) }
 pub fn contains: (s :&str, sub :&str) :bool { return rt_strings_contains(s sub) }
@@ -803,8 +830,8 @@ pub fn path_exists: (path :&str) :bool { return fs::exists(path) }
 pub fn copy_value: (value :&str) :str { return strings::copy(value) }
 pub fn trim_value: (value :str) :str { return strings::trim(value) }
 pub fn str_equals: (a :&str, b :&str) :bool { return a == b }
-pub fn read_line_trim: () :str { return strings::trim(proc::run::read_line()) }
-pub fn read_line: () :str { return proc::run::read_line() }
+pub fn read_line_trim: () :str { return strings::trim(rt_read_tty()) }
+pub fn read_line: () :str { return rt_read_tty() }
 pub fn trim_substr: (s :&str, start :i64, length :i64) :str { return strings::trim(strings::substr(s start length)) }
 pub fn substr_i64: (s :&str, start :i64, length :i64) :i64 { return use! util::string_to_i64(strings::substr(s start length)) }
 
@@ -813,7 +840,7 @@ pub fn substr_i64: (s :&str, start :i64, length :i64) :i64 { return use! util::s
    temp files). Returns "" on any failure. !/
 pub fn sha256sum_hex: (path :&str) :str {
     if !fs::exists(path) { return "" }
-    return use! kioto::crypto::hash::sha256_file(path)
+    return use! crypto::hash::sha256_file(path)
 }
 
 /! Returns the lowercase-hex SHA-512 of a file. The registry may publish
@@ -821,7 +848,7 @@ pub fn sha256sum_hex: (path :&str) :str {
    never trusts a hash copied from publish.toml. !/
 pub fn sha512sum_hex: (path :&str) :str {
     if !fs::exists(path) { return "" }
-    return use! kioto::crypto::hash::sha512_file(path)
+    return use! crypto::hash::sha512_file(path)
 }
 
 /! Returns true if any .mire under code/ or tests/ contains a

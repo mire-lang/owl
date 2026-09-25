@@ -251,6 +251,28 @@ owl install           # Resolve owl.toml and update/install owl.lock
 owl install --lock   # Install all packages from owl.lock
 ```
 
+Every dependency declared in `[dependencies]` gets a `[[package]]` entry,
+**including local `path` dependencies** (they are recorded with
+`registry = "local"` and their declared path). A dependency that is missing
+from the lockfile makes it out of sync with `owl.toml`, which re-triggers
+resolution — so if a project re-resolves on every command, a dep is most
+likely not being written to the lock.
+
+```toml
+[[package]]
+name     = "kioto"
+version  = "2.4.9"
+path     = "~/.owl/libs/kioto"
+registry = "local"
+```
+
+Entries are written column-aligned to width 8 (`name␣␣␣␣␣=`, `version␣␣=`,
+`path␣␣␣␣␣=`, `registry␣=`); the lockfile reader matches on that exact
+alignment, so hand-edited entries must keep it.
+
+Only `[c] sources` may list C files (`.c`). A `.mire` module listed there is
+passed to the C compiler and fails the build.
+
 ## Documentation
 
 - [Changelog](docs/changelog.md) — release history

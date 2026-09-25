@@ -1,6 +1,8 @@
 module deps
 
+load mire::vec
 load! /code/util
+load! /code/dep_resolver
 
 pub fn deps_section: () :str {
     set section = "" :str mut
@@ -270,12 +272,26 @@ pub fn gather_latest_libs: () :str {
     set i = 0 :i64 mut
     set n = len(entries)
     while i < n {
-        set name = rt_vec_get_str(entries i)
+        set name = vec::get::str(entries i)
         if name != "mire" && name != "" {
-            set toml = lib_dir + "/" + name + "/owl.toml"
-            if fs::exists(toml) {
-                set ver = use! util::toml_get(toml "project" "version") :str mut
-                if ver == "" { set ver = "0.1.0" }
+            /! Look for versioned directory <name>@<ver> !/
+            set ver_dir = lib_dir + "/" + name + "@"
+            /! List versioned directories matching this package !/
+            set lib_raw = use! util::list_text(lib_dir)
+            set lib_entries = strings::split(lib_raw "\n")
+            set j = 0 :i64 mut
+            set lib_n = len(lib_entries)
+            set found_ver = "" :str mut
+            while j < lib_n {
+                set lib_name = vec::get::str(lib_entries j)
+                if use! util::startswith(lib_name name + "@") {
+                    set found_ver = strings::substr(lib_name len(name) + 1 9999)
+                    set j = lib_n /! break
+                }
+                set j += 1
+            }
+            if found_ver != "" {
+                set ver = found_ver
                 set line = name + " = { path = \"" + lib_display + "/" + name + "\", version = \"" + ver + "\" }"
                 if out == "" { set out = line } else { set out = out + "\n" + line }
             }
@@ -285,60 +301,20 @@ pub fn gather_latest_libs: () :str {
     return out
 }
 
-/! Prunes `[dependencies]` to only the entries actually used by the
-   project (detected via `load <name>` in code/ and tests/), then
-   regenerates owl.lock from the surviving set. This avoids the
-   lockfile filling up with false-positive entries from auto-deps.
-   Returns true on success.
-!/
-pub fn prune_unused: () :bool {
-    if !use! util::has_project() { return false }
-    set used = use! deps::used_dep_names()
-    set section = use! deps::deps_section()
-    set names = use! deps::get_dep_names()
-    if names == "" { return use! lockfile::generate() }
+pub fn list_contains: (list :&str, item :&str) :bool {
+    if list == "" { return false }
     set pos = 0 :i64 mut
-    set nlen = len(names)
-    set kept = "" :str mut
-    set first = true :bool mut
+    set nlen = len(list)
     while pos < nlen {
-        set remaining = strings::substr(names pos nlen - pos)
-        set nl = strings::index(remaining "\n")
+        set rem = strings::substr(list pos nlen - pos)
+        set nl = strings::index(rem "\n")
         set end = 0 :i64 mut
         if nl < 0 { set end = nlen } else { set end = pos + nl }
-        set name_line = strings::substr(names pos end - pos)
-        set dep_name = use! util::trim(name_line)
+        set line = strings::substr(list pos end - pos)
+        if use! util::trim(line) == *item { return true }
         set pos = end + 1
-        if dep_name != "" {
-            /! `mire` is the compiler's standard library, injected by
-               `owl new`; it must never be pruned even when no source
-               file loads it directly (kioto and tooling load it
-               transitively). !/
-            set dn = dep_name
-            set is_mire = dep_name == "mire" :bool mut
-            set in_used = use! deps::list_contains(used dn)
-            if is_mire || in_used {
-                set dnr = dep_name
-                set raw = use! deps::find_dep_raw(dnr)
-                if !first { set kept = kept + "\n" } else { set first = false }
-                set kept = kept + dep_name + " = " + raw
-            }
-        }
     }
-    set content = fs::read("owl.toml")
-    set marker = "[dependencies]"
-    set sec_pos = strings::index(content marker)
-    if sec_pos < 0 { return false }
-    set insert_pos = sec_pos + len(marker)
-    set before = strings::substr(content 0 insert_pos)
-    set rem = len(content) - insert_pos
-    set after = strings::substr(content insert_pos rem) :str mut
-    /! Strip any trailing [tool.owl.auto-deps] so we only keep deps. !/
-    set next_sec = strings::index(after "\n[")
-    if next_sec < 0 { set after = "" } else { set after = strings::substr(after next_sec len(after) - next_sec) }
-    set new_c = before + "\n" + kept + after
-    use fs::write("owl.toml" new_c)
-    return use! lockfile::generate()
+    return false
 }
 
 /! Returns newline-separated names of dependencies referenced by
@@ -363,7 +339,20 @@ pub fn used_dep_names: () :str {
                 set d1 = dep
                 if use! util::grep_load(d1) {
                     set d2 = dep
-                    if !use! deps::list_contains(found_set d2) {
+                    set in_found = false :bool mut
+                    set flist = found_set :str mut
+                    set fpos = 0 :i64 mut
+                    set flen = len(flist)
+                    while fpos < flen {
+                        set frem = strings::substr(flist fpos flen - fpos)
+                        set fnl = strings::index(frem "\n")
+                        set fend = 0 :i64 mut
+                        if fnl < 0 { set fend = flen } else { set fend = fpos + fnl }
+                        set fline = strings::substr(flist fpos fend - fpos)
+                        if use! util::trim(fline) == d2 { set in_found = true }
+                        set fpos = fend + 1
+                    }
+                    if !in_found {
                         set d3 = dep
                         if found == "" { set found = d3 } else { set found = found + "\n" + d3 }
                         set d4 = dep
@@ -376,18 +365,125 @@ pub fn used_dep_names: () :str {
     return found
 }
 
-pub fn list_contains: (list :&str, item :&str) :bool {
-    if list == "" { return false }
+/! Prunes `[dependencies]` to only the entries actually used by the
+   project (detected via `load <name>` in code/ and tests/), then
+   regenerates owl.lock from the surviving set. This avoids the
+   lockfile filling up with false-positive entries from auto-deps.
+   Returns true on success.
+!/
+pub fn prune_unused: () :bool {
+    if !use! util::has_project() { return false }
+    set used = use! used_dep_names()
+    set section = use! deps::deps_section()
+    set names = use! deps::get_dep_names()
+    if names == "" { return use! lockfile::generate() }
     set pos = 0 :i64 mut
-    set nlen = len(list)
+    set nlen = len(names)
+    set kept = "" :str mut
+    set first = true :bool mut
+    set raw_val = "" :str mut
     while pos < nlen {
-        set rem = strings::substr(list pos nlen - pos)
-        set nl = strings::index(rem "\n")
+        set remaining = strings::substr(names pos nlen - pos)
+        set nl = strings::index(remaining "\n")
         set end = 0 :i64 mut
         if nl < 0 { set end = nlen } else { set end = pos + nl }
-        set line = strings::substr(list pos end - pos)
-        if use! util::trim(line) == *item { return true }
+        set name_line = strings::substr(names pos end - pos)
+        set dep_name = use! util::trim(name_line)
         set pos = end + 1
+        if dep_name != "" {
+            /! `mire` is the compiler's standard library, injected by
+               `owl new`; it must never be pruned even when no source
+               file loads it directly (kioto and tooling load it
+               transitively). !/
+            set dn = dep_name
+            set is_mire = dep_name == "mire" :bool mut
+            set in_used = false :bool mut
+            set ulist = used :str mut
+            set upos = 0 :i64 mut
+            set ulen = len(ulist)
+            while upos < ulen {
+                set urem = strings::substr(ulist upos ulen - upos)
+                set unl = strings::index(urem "\n")
+                set uend = 0 :i64 mut
+                if unl < 0 { set uend = ulen } else { set uend = upos + unl }
+                set uline = strings::substr(ulist upos uend - upos)
+                if use! util::trim(uline) == dn { set in_used = true }
+                set upos = uend + 1
+            }
+            if is_mire || in_used {
+                set dnr = dep_name
+                set raw_val = use! deps::find_dep_raw(dnr)
+                if !first { set kept = kept + "\n" } else { set first = false }
+                set kept = kept + dep_name + " = " + raw_val
+            }
+        }
     }
-    return false
+    set content = fs::read("owl.toml")
+    set marker = "[dependencies]"
+    set sec_pos = strings::index(content marker)
+    if sec_pos < 0 { return false }
+    set insert_pos = sec_pos + len(marker)
+    set before = strings::substr(content 0 insert_pos)
+    set rem = len(content) - insert_pos
+    set after = strings::substr(content insert_pos rem) :str mut
+    /! Strip any trailing [tool.owl.auto-deps] so we only keep deps. !/
+    set next_sec = strings::index(after "\n[")
+    if next_sec < 0 { set after = "" } else { set after = strings::substr(after next_sec len(after) - next_sec) }
+    set new_c = before + "\n" + kept + after
+    use fs::write("owl.toml" new_c)
+    return use! lockfile::generate()
+}
+
+/! Delegate resolution to dep_resolver !/
+pub fn resolve: () :bool {
+    set plan = use! dep_resolver::resolve()
+    return use! dep_resolver::execute_plan(plan)
+}
+
+/! Install/update dependencies based on owl.toml !/
+pub fn install_deps: () :bool {
+    return use! deps::resolve()
+}
+
+pub fn new: (args :&vec[str]) {
+    use dasu("deps new: not implemented")
+}
+
+pub fn clean: (args :&vec[str]) {
+    use dasu("deps clean: not implemented")
+}
+
+pub fn load_cmd: (args :&vec[str]) {
+    use dasu("deps load: not implemented")
+}
+
+pub fn deps: (args :&vec[str]) {
+    use dasu("deps deps: not implemented")
+}
+
+pub fn new: (args :&vec[str]) {
+    use dasu("deps new: not implemented")
+}
+
+pub fn clean: (args :&vec[str]) {
+    /! Remove unused dependencies from owl.toml and regenerate lockfile !/
+    if !use! util::has_project() {
+        use dasu("Error: no owl.toml found")
+        return
+    }
+    set ok = use! deps::prune_unused()
+    if ok {
+        use dasu("  [OK]   unused dependencies pruned and lockfile regenerated")
+    } else {
+        use dasu("  [FAIL] could not prune dependencies")
+    }
+}
+
+pub fn deps: (args :&vec[str]) {
+    /! Print dependency tree !/
+    if !use! util::has_project() {
+        use dasu("Error: no owl.toml found")
+        return
+    }
+    use dasu("deps command not yet implemented")
 }

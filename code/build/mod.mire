@@ -1,14 +1,19 @@
 module build
 
+load mire::vec
 load! /code/util
+load kioto::proc
 load! /code/lockfile
+load kioto::proc
 load! /code/deps
+load kioto::proc
 load! /code/install
+load kioto::proc
 load! /code/args
-    set cfg_lock = use! util::toml_get("owl.toml" "cfg" "lock")
-    if cfg_lock == "0" { return true }
-
-extern fn exit: (code :i64) lib "c"
+load kioto::proc
+load! /code/lockfile
+load kioto::proc
+load! /code/_externs
 
 /! Validate the project environment before compilation. A missing or stale
    lockfile is a dependency-management state, not a compiler error: Owl asks
@@ -91,13 +96,13 @@ if runtime == "" {
 pub fn compile: (args :&vec[str] is_run :bool) {
     use! fs::write("/tmp/build_debug.txt" "COMPILE FUNCTION CALLED")
     use dasu("[DEBUG] compile called, is_run=" + (if is_run { "true" } else { "false" }))
-    set is_proj = use! util::has_project()
+    set is_proj = use! util::has_project() :bool mut
 
-    set n = rt_vec_len(args)
+    set n = vec::len(args) :i64 mut
     set file_idx = 1 :i64 mut
     set fi = 1 :i64 mut
     while fi < n {
-        set fa = rt_vec_get_str(args fi)
+        set fa = vec::get::str(args fi)
         if !use! util::startswith(fa "-") {
             set file_idx = fi
             set fi = n
@@ -113,7 +118,7 @@ pub fn compile: (args :&vec[str] is_run :bool) {
     set run_args = [] :vec[str] mut
     set seen_ddash = false :bool mut
     while i < n {
-        set a = rt_vec_get_str(args i)
+        set a = vec::get::str(args i)
         if a == "--" {
             set seen_ddash = true
         } else {
@@ -130,7 +135,7 @@ pub fn compile: (args :&vec[str] is_run :bool) {
                     } else {
                         if a == "-O" || a == "--opt-level" {
                             set i += 1
-                            if i < n { set cli_opt = rt_vec_get_str(args i) }
+                            if i < n { set cli_opt = vec::get::str(args i) }
                         } else {
                             if use! util::startswith(a "-O") && len(a) > 2 {
                                 set cli_opt = use! util::replace(a "-O" "")
@@ -153,7 +158,7 @@ pub fn compile: (args :&vec[str] is_run :bool) {
 
     if !is_proj {
         if cli_file == "" {
-            if file_idx > 0 && file_idx < n { set cli_file = rt_vec_get_str(args file_idx) }
+            if file_idx > 0 && file_idx < n { set cli_file = vec::get::str(args file_idx) }
         }
         if cli_file == "" {
             use! util::error_line("OWL0002" "no file specified and no owl.toml found")
@@ -250,7 +255,7 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
                 if is_run {
                     set build_out = use! util::run_compiler(argv)
                     use dasu(build_out)
-                    if use proc::run::last_exit() == 0 { 
+                    if use proc::run_last_exit() == 0 { 
                         use! util::record_build() 
                         set name = entry :str mut
                         if cli_file != "" && (fs::exists(cli_file) || use! util::endswith(cli_file ".mire")) { set name = cli_file }
@@ -264,12 +269,12 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
 
                         use dasu("")
                         use dasu("  running " + bin + " ...")
-                        use proc::run::spawn(bin run_args)
+                        use proc::run_spawn(bin run_args)
                     }
                 } else {
                     set out = use! util::run_compiler(argv)
                     use dasu(out)
-                    if use proc::run::last_exit() == 0 { use! util::record_build() }
+                    if use proc::run_last_exit() == 0 { use! util::record_build() }
                 }
             }
         }
@@ -277,13 +282,13 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
 }
 
 pub fn debug: (args :&vec[str]) {
-    set is_proj = use! util::has_project()
-    set n = rt_vec_len(args)
+    set is_proj = use! util::has_project() :bool mut
+    set n = vec::len(args) :i64 mut
 
     set file_idx = 1 :i64 mut
     set fi = 1 :i64 mut
     while fi < n {
-        set fa = rt_vec_get_str(args fi)
+        set fa = vec::get::str(args fi)
         if !use! util::startswith(fa "-") {
             set file_idx = fi
             set fi = n
@@ -294,7 +299,7 @@ pub fn debug: (args :&vec[str]) {
     set extra_flags = "" :str mut
     set i = 1 :i64 mut
     while i < n {
-        set a = rt_vec_get_str(args i)
+        set a = vec::get::str(args i) :str mut
         if a == "--tokens" || a == "-t" {
             set extra_flags = extra_flags + " --tokens"
         } else {
@@ -322,7 +327,7 @@ pub fn debug: (args :&vec[str]) {
     }
 
     set cli_file = "" :str mut
-    if file_idx > 0 && file_idx < n { set cli_file = rt_vec_get_str(args file_idx) }
+    if file_idx > 0 && file_idx < n { set cli_file = vec::get::str(args file_idx) }
 
     if !is_proj {
         if cli_file == "" {
@@ -334,7 +339,9 @@ pub fn debug: (args :&vec[str]) {
         set argv = vec::push::str(argv "debug")
         set argv = vec::push::str(argv strings::copy(cli_file))
         set argv = vec::push::str(argv "--lib-dir")
-        set argv = vec::push::str(argv use! deps::compiler_lib_dirs())
+        set lib_dirs = use! deps::compiler_lib_dirs()
+        use dasu("[DEBUG] lib-dirs: " + lib_dirs)
+        set argv = vec::push::str(argv lib_dirs)
         if extra_flags != "" {
             set toks = strings::split(extra_flags " ")
             set ti = 0 :i64 mut
@@ -366,7 +373,9 @@ pub fn debug: (args :&vec[str]) {
     set argv = vec::push::str(argv "debug")
     set argv = vec::push::str(argv strings::copy(file))
     set argv = vec::push::str(argv "--lib-dir")
-    set argv = vec::push::str(argv use! deps::compiler_lib_dirs())
+    set lib_dirs = use! deps::compiler_lib_dirs()
+    use dasu("[DEBUG] lib-dirs: " + lib_dirs)
+    set argv = vec::push::str(argv lib_dirs)
     if extra_flags != "" {
         set toks = strings::split(extra_flags " ")
         set ti = 0 :i64 mut
