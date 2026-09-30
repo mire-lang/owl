@@ -40,21 +40,21 @@ pub fn run: (args :&vec[str]) {
         set c_val = use! util::toml_get("owl.toml" "paths" "cache") :str mut
         if c_val == "" { set c_val = "?" }
 
-        set arch_val = proc::run_output("uname" ["-m"]) :str mut
-        set kernel_val = proc::run_output("uname" ["-s"]) :str mut
+        set arch_val = proc::run::output("uname" ["-m"]) :str mut
+        set kernel_val = proc::run::output("uname" ["-s"]) :str mut
         if kernel_val != "" { set kernel_val = strings::lower(kernel_val) }
         if arch_val == "" { set arch_val = "?" }
         if kernel_val == "" { set kernel_val = "?" }
     }
 
     set compiler_line = "?" :str mut
-    set compiler_out = proc::run_output("mire" ["--version"])
+    set compiler_out = proc::run::output("mire" ["--version"])
     if compiler_out != "" {
         set clines = use! util::split(compiler_out "\n")
         set compiler_line = use! util::list_get(clines 0)
     }
 
-    set llvm = proc::run_output("llvm-config" ["--version"]) :str mut
+    set llvm = proc::run::output("llvm-config" ["--version"]) :str mut
     if llvm == "" { set llvm = "?" }
 
     set deps_raw = "" :str mut

@@ -42,7 +42,7 @@ pub fn run: (args :&vec[str]) :i64 {
     set clone_args = vec::push::str(clone_args "1")
     set clone_args = vec::push::str(clone_args strings::copy(remote_url))
     set clone_args = vec::push::str(clone_args strings::copy(tmp_dir))
-    set clone_out = use! proc::run_output("git" clone_args)
+    set clone_out = use! proc::run::output("git" clone_args)
     set clone_ok = clone_out
     if strings::index(clone_ok "fatal") >= 0 || strings::index(clone_ok "error") >= 0 {
         use dasu("error: git clone failed")
@@ -60,14 +60,14 @@ pub fn run: (args :&vec[str]) :i64 {
     set ln_args = vec::push::str(ln_args "-sfn")
     set ln_args = vec::push::str(ln_args owl_home + "/lib/kioto")
     set ln_args = vec::push::str(ln_args tmp_dir + "/../kioto")
-    use proc::run_output("ln" ln_args)
+    use proc::run::output("ln" ln_args)
 
     set build_args = [] :vec[str] mut
     set build_args = vec::push::str(build_args "build")
     set build_args = vec::push::str(build_args "code/main.mire")
     set build_args = vec::push::str(build_args "--release")
     set build_cwd = strings::copy(tmp_dir)
-    set build_out = proc::run_output_cwd("mire" build_args build_cwd true)
+    set build_out = proc::run::output_cwd("mire" build_args build_cwd true)
     if !fs::exists(new_bin) {
         use dasu("error: build failed")
         use dasu(build_out)
@@ -89,7 +89,7 @@ pub fn run: (args :&vec[str]) :i64 {
     set inst_args = vec::push::str(inst_args "0755")
     set inst_args = vec::push::str(inst_args strings::copy(new_bin))
     set inst_args = vec::push::str(inst_args strings::copy(owl_bin))
-    set inst_out = use! proc::run_output("install" inst_args)
+    set inst_out = use! proc::run::output("install" inst_args)
     set install_ok = use! util::extract_install_status(inst_out)
     if !install_ok {
         use dasu("error: install failed - permission denied or path not found")

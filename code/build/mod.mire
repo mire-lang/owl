@@ -262,7 +262,7 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
                 if is_run {
                     set build_out = use! util::run_compiler(argv)
                     use dasu(build_out)
-                    if use proc::run_last_exit() == 0 { 
+                    if use proc::run::last_exit() == 0 { 
                         use! util::record_build() 
                         set name = entry :str mut
                         if cli_file != "" && (fs::exists(cli_file) || use! util::endswith(cli_file ".mire")) { set name = cli_file }
@@ -276,12 +276,12 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
 
                         use dasu("")
                         use dasu("  running " + bin + " ...")
-                        use proc::run_spawn(bin run_args)
+                        use proc::run::spawn(bin run_args)
                     }
                 } else {
                     set out = use! util::run_compiler(argv)
                     use dasu(out)
-                    if use proc::run_last_exit() == 0 { use! util::record_build() }
+                    if use proc::run::last_exit() == 0 { use! util::record_build() }
                 }
             }
         }

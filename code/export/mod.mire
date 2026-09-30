@@ -80,7 +80,7 @@ pub fn run: (args :&vec[str]) {
                              set gk_args = vec::push::str(gk_args "ed25519")
                              set gk_args = vec::push::str(gk_args "-out")
                              set gk_args = vec::push::str(gk_args strings::copy(priv_key))
-                             use proc::run_output("openssl" gk_args)
+                             use proc::run::output("openssl" gk_args)
                              set pk_args = [] :vec[str] mut
                              set pk_args = vec::push::str(pk_args "pkey")
                              set pk_args = vec::push::str(pk_args "-in")
@@ -88,7 +88,7 @@ pub fn run: (args :&vec[str]) {
                              set pk_args = vec::push::str(pk_args "-pubout")
                              set pk_args = vec::push::str(pk_args "-out")
                              set pk_args = vec::push::str(pk_args strings::copy(pub_key))
-                             use proc::run_output("openssl" pk_args)
+                             use proc::run::output("openssl" pk_args)
                              if !fs::exists(priv_key) {
                                  use dasu("  error: failed to generate signing key (openssl required)")
                                  set proceed = false
@@ -117,7 +117,7 @@ pub fn run: (args :&vec[str]) {
                                  set sign_args = vec::push::str(sign_args strings::copy(archive))
                                  set sign_args = vec::push::str(sign_args "-out")
                                  set sign_args = vec::push::str(sign_args strings::copy(sig_file))
-                                 use proc::run_output("openssl" sign_args)
+                                 use proc::run::output("openssl" sign_args)
 
                                  set sig_b64 = "" :str mut
                                  if fs::exists(sig_file) {
@@ -132,7 +132,7 @@ pub fn run: (args :&vec[str]) {
                                      set cp_args = [] :vec[str] mut
                                      set cp_args = vec::push::str(cp_args strings::copy(pub_key))
                                      set cp_args = vec::push::str(cp_args strings::copy(pub_file))
-                                     use proc::run_output("cp" cp_args)
+                                     use proc::run::output("cp" cp_args)
 
                                      set publish = "[package]\n" :str mut
                                      set publish = publish + "name = \"" + name + "\"\n"

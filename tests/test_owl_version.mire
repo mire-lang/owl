@@ -11,17 +11,17 @@ pub fn main: () {
     set va = [] :vec[str] mut
     set va = vec::push::str(va "--version")
     set va = vec::push::str(va "version")
-    set v1 = proc::run_output(owl_bin va)
+    set v1 = proc::run::output(owl_bin va)
 
     set sa = [] :vec[str] mut
     set sa = vec::push::str(sa "-V")
     set sa = vec::push::str(sa "version")
-    set v2 = proc::run_output(owl_bin sa)
+    set v2 = proc::run::output(owl_bin sa)
 
     set ha = [] :vec[str] mut
     set ha = vec::push::str(ha "--help")
     set ha = vec::push::str(ha "help")
-    set v3 = proc::run_output(owl_bin ha)
+    set v3 = proc::run::output(owl_bin ha)
 
     testlib.assert_true(strings::starts::with(strings::trim(v1) "Owl v"))
     testlib.assert_true(strings::starts::with(strings::trim(v2) "Owl v"))

@@ -121,11 +121,11 @@ pub fn target: (target_val :str named :str) {
             set cp_args = [] :vec[str] mut
             set cp_args = vec::push::str(cp_args strings::copy(named))
             set cp_args = vec::push::str(cp_args strings::copy(use! util::owl_home() + "/bin"))
-            use proc::run_output("cp" cp_args)
+            use proc::run::output("cp" cp_args)
             set chmod_args = [] :vec[str] mut
             set chmod_args = vec::push::str(chmod_args "+x")
             set chmod_args = vec::push::str(chmod_args strings::copy(named))
-            use proc::run_output("chmod" chmod_args)
+            use proc::run::output("chmod" chmod_args)
             use dasu("  installed to owl cache")
         }
     } else {
@@ -154,7 +154,7 @@ pub fn target: (target_val :str named :str) {
                         set cp_args = [] :vec[str] mut
                         set cp_args = vec::push::str(cp_args strings::copy(bin_path + "/" + fname))
                         set cp_args = vec::push::str(cp_args strings::copy(dest_bin))
-                        use proc::run_output("cp" cp_args)
+                        use proc::run::output("cp" cp_args)
                     }
                     set j += 1
                 }
