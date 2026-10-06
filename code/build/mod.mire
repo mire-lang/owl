@@ -4,6 +4,8 @@ load mire::vec
 load! /code/util
 load kioto::proc
 load! /code/lockfile
+load! /code/cache
+load kioto::env
 load kioto::proc
 load! /code/deps
 load kioto::proc
@@ -229,25 +231,30 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
                 set output = out_dir
                 use! util::mkdir_p(strings::copy(cache))
                 use! util::mkdir_p(strings::copy(output))
+                use! util::mkdir_p(strings::copy(output))
 
                 set out_dir2 = use! util::config_required("paths" "output")
                 set compiler_output = output + "/" + profile
-                set mire_config = cache + "/mire-config.toml"
-                if !use! util::write_mire_config(strings::copy(mire_config) strings::copy(file) strings::copy(profile) strings::copy(opt) strings::copy(artifact) strings::copy(runtime) strings::copy(target) strings::copy(compiler_output) strings::copy(cache) use! deps::compiler_lib_dirs()) {
-                    use! util::error_line("OWL0005" "could not write normalized Mire configuration")
-                    exit(1)
-                }
 
                 set argv = [] :vec[str] mut
                 set argv = vec::push::str(argv "build")
                 set argv = vec::push::str(argv strings::copy(file))
-                set argv = vec::push::str(argv "--config")
-                set argv = vec::push::str(argv strings::copy(mire_config))
                 if profile == "release" { set argv = vec::push::str(argv "--release") } else { set argv = vec::push::str(argv "--debug") }
                 set argv = vec::push::str(argv "-O")
                 set argv = vec::push::str(argv strings::copy(opt))
+                set argv = vec::push::str(argv "--runtime")
+                set argv = vec::push::str(argv strings::copy(runtime))
+                set argv = vec::push::str(argv "--artifact")
+                set argv = vec::push::str(argv strings::copy(artifact))
+                set argv = vec::push::str(argv "--target")
+                set argv = vec::push::str(argv strings::copy(target))
+                set argv = vec::push::str(argv "--output-dir")
+                set argv = vec::push::str(argv strings::copy(compiler_output))
+                set argv = vec::push::str(argv "--cache-dir")
+                set argv = vec::push::str(argv strings::copy(cache))
                 set argv = vec::push::str(argv "--lib-dir")
                 set argv = vec::push::str(argv use! deps::compiler_lib_dirs())
+                set argv = use! build::append_c_and_security_flags(argv)
                 if extra_flags != "" {
                     set toks = strings::split(extra_flags " ")
                     set ti = 0 :i64 mut
@@ -419,4 +426,102 @@ pub fn new: (name :str) {
         use fs::write(name + "/tests/smoke.mire" "@[test]\npub fn test_smoke: () :bool {\n    return true\n}\n")
         use dasu("Project created: " + name)
     }
+}
+
+/! Append the [c] and [security] sections to the compiler argv as flags.
+    This replaces the generated `mire-config.toml`: the compiler now accepts
+    every field as a flag, so owl reads its own manifest and passes the values
+    across. Nothing is written into the project's cache directory any more.
+    Every flag is repeated rather than joined, because a cflag or a source path
+    may legitimately contain a space. !/
+fn append_c_and_security_flags: (argv :vec[str]) :vec[str] {
+    set out = argv :vec[str] mut
+
+    // ── [c] ──
+    set c_sources = use! util::toml_get_array("owl.toml" "c" "sources")
+    set si = 0 :i64 mut
+    while si < vec::len(c_sources) {
+        set src = use! util::list_get(c_sources si)
+        if src != "" {
+            set out = vec::push::str(out "--c-source")
+            set out = vec::push::str(out strings::copy(src))
+        }
+        set si = si + 1
+    }
+    set c_include = use! util::toml_get_array("owl.toml" "c" "include")
+    set ci = 0 :i64 mut
+    while ci < vec::len(c_include) {
+        set inc = use! util::list_get(c_include ci)
+        if inc != "" {
+            set out = vec::push::str(out "--c-include")
+            set out = vec::push::str(out strings::copy(inc))
+        }
+        set ci = ci + 1
+    }
+    set c_cflags = use! util::toml_get_array("owl.toml" "c" "cflags")
+    set cf = 0 :i64 mut
+    while cf < vec::len(c_cflags) {
+        set flag = use! util::list_get(c_cflags cf)
+        if flag != "" {
+            set out = vec::push::str(out "--cflag")
+            set out = vec::push::str(out strings::copy(flag))
+        }
+        set cf = cf + 1
+    }
+    set c_libs = use! util::toml_get_array("owl.toml" "c" "libs")
+    set cl = 0 :i64 mut
+    while cl < vec::len(c_libs) {
+        set lib_name = use! util::list_get(c_libs cl)
+        if lib_name != "" {
+            set out = vec::push::str(out "--c-lib")
+            set out = vec::push::str(out strings::copy(lib_name))
+        }
+        set cl = cl + 1
+    }
+
+    // ── [security] ──
+    set sec_mode = use! util::toml_get("owl.toml" "security" "mode")
+    // Only forwarded when the manifest states a mode. The compiler already
+    // defaults to open when no mode is given, and omitting the flag also avoids
+    // having to write the word "open" here, which cannot be a string literal
+    // because `open` is a module keyword.
+    if sec_mode != "" {
+        set out = vec::push::str(out "--security-mode")
+        set out = vec::push::str(out strings::copy(sec_mode))
+    }
+
+    set sec_externs = use! util::toml_get_array("owl.toml" "security" "externs")
+    set se = 0 :i64 mut
+    while se < vec::len(sec_externs) {
+        set pattern = use! util::list_get(sec_externs se)
+        if pattern != "" {
+            set out = vec::push::str(out "--extern")
+            set out = vec::push::str(out strings::copy(pattern))
+        }
+        set se = se + 1
+    }
+    set sec_libs = use! util::toml_get_array("owl.toml" "security" "extern-libs")
+    set sl = 0 :i64 mut
+    while sl < vec::len(sec_libs) {
+        set lib_name = use! util::list_get(sec_libs sl)
+        if lib_name != "" {
+            set out = vec::push::str(out "--extern-lib")
+            set out = vec::push::str(out strings::copy(lib_name))
+        }
+        set sl = sl + 1
+    }
+    set sec_macros = use! util::toml_get_array("owl.toml" "security" "macros")
+    set sm = 0 :i64 mut
+    while sm < vec::len(sec_macros) {
+        set mac = use! util::list_get(sec_macros sm)
+        if mac != "" {
+            set out = vec::push::str(out "--allow-macro")
+            set out = vec::push::str(out strings::copy(mac))
+        }
+        set sm = sm + 1
+    }
+    if use! util::toml_get("owl.toml" "security" "allow-unsafe") == "true" {
+        set out = vec::push::str(out "--allow-unsafe")
+    }
+    return out
 }

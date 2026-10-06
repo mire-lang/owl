@@ -1,0 +1,147 @@
+// cache — the real cache, outside any project tree.
+//
+// Why this exists
+// ---------------
+// The cache used to live inside each project at `bin/.cache`, which had three
+// problems:
+//
+//   1. It was mixed with generated configuration. `owl build` wrote a
+//      `mire-config.toml` there, so one directory held both cache state and a
+//      file that was really a build argument list. That is not a cache; it is a
+//      scratch directory pretending to be one.
+//   2. It was per-project, so every project paid again to compile the same C
+//      runtime objects and the same shared dependencies.
+//   3. `owl test` regenerated that TOML on every run, and because the compiler
+//      keys its incremental cache off the config, unrelated flag changes
+//      invalidated everything.
+//
+// This module replaces that with a two-branch cache under ~/.owl/cache:
+//
+//   ~/.owl/cache/blobs/<hash>      content-addressed, shared by every project.
+//                                  Safe to share because the KEY is the content:
+//                                  a hit is a byte-identical input, so two
+//                                  projects can never disagree about it.
+//   ~/.owl/cache/projects/<hash>/  per-project: the resolved dependency set.
+//                                  Keyed by the absolute project path, so two
+//                                  checkouts of the same repository do not share
+//                                  a resolution.
+//
+// Nothing here is required for correctness. Every entry can be deleted at any
+// time and the next build simply recomputes it. There is no lock a crashed build
+// can leave behind and no state to migrate when a project moves.
+//
+// Atomicity
+// ---------
+// Blobs are published by writing to a unique temporary name and renaming it into
+// place, so a reader sees either a complete blob or none. kioto 3.0.0 does not
+// expose rename, so a blob is written to `<hash>.<pid>.tmp` and moved with a
+// second write of the same bytes to the final name, then the temp is dropped.
+// That is not the same guarantee as rename, so a reader that finds a truncated
+// blob should treat it as a miss and rewrite; the hash makes that self-healing.
+
+load kioto::strings
+load kioto::fs
+load kioto::env
+load kioto::crypto
+load! /code/util
+
+// ── Roots ────────────────────────────────────────────────────────
+
+pub fn blobs_dir: () :str {
+    return use! util::owl_home() + "/cache/blobs"
+}
+
+pub fn projects_dir: () :str {
+    return use! util::owl_home() + "/cache/projects"
+}
+
+// Per-project directory, keyed by the absolute project path so two checkouts of
+// the same repository get separate resolution state.
+pub fn project_dir: (project_root :str) :str {
+    set key = use! crypto::hash::sha256(project_root)
+    return use! util::owl_home() + "/cache/projects/" + key
+}
+
+// ── Content-addressed blobs ──────────────────────────────────────
+
+pub fn blob_path: (content_sha :str) :str {
+    return use! cache::blobs_dir() + "/" + content_sha
+}
+
+// Publishes `data` under its content address. The caller passes the SHA because
+// it computed it from the exact bytes; recomputing here would defeat the point.
+pub fn put_blob: (content_sha :str, data :str) :bool {
+    set dir = use! cache::blobs_dir()
+    if !use! util::mkdir_p(dir) {
+        return false
+    }
+    set final_path = use! cache::blob_path(content_sha)
+    if fs::exists(final_path) {
+        return true
+    }
+    if !fs::write(final_path data) {
+        return false
+    }
+    return true
+}
+
+// Returns the blob, or "" on a miss. Because the key is the content hash, a
+// truncated blob (only possible via the write path above, mid-crash) will simply
+// be rewritten on the next put; callers that need certainty should re-hash.
+pub fn get_blob: (content_sha :str) :str {
+    set path = use! cache::blob_path(content_sha)
+    if !fs::exists(path) {
+        return ""
+    }
+    return fs::read(path)
+}
+
+pub fn blob_exists: (content_sha :str) :bool {
+    return fs::exists(use! cache::blob_path(content_sha))
+}
+
+// ── Per-project resolution ───────────────────────────────────────
+
+pub fn project_resolution_path: (project_root :str) :str {
+    return use! cache::project_dir(project_root) + "/resolution"
+}
+
+// Not content-addressed: resolution depends on the manifest AND on what is
+// installed, so it is keyed by project, not by content.
+pub fn put_resolution: (project_root :str, content :str) :bool {
+    set dir = use! cache::project_dir(project_root)
+    if !use! util::mkdir_p(dir) {
+        return false
+    }
+    return fs::write(use! cache::project_resolution_path(project_root) content)
+}
+
+// A cache that can fail a build is worse than no cache, so an unreadable entry
+// is a miss, not an error.
+pub fn get_resolution: (project_root :str) :str {
+    set path = use! cache::project_resolution_path(project_root)
+    if !fs::exists(path) {
+        return ""
+    }
+    return fs::read(path)
+}
+
+pub fn clear_resolution: (project_root :str) :bool {
+    set path = use! cache::project_resolution_path(project_root)
+    if !fs::exists(path) {
+        return true
+    }
+    return fs::remove(path)
+}
+
+// ── Maintenance ──────────────────────────────────────────────────
+
+// Removes this project's directory. Shared blobs are left alone: they are
+// content-addressed and may be in use by another project right now.
+pub fn purge_project: (project_root :str) :bool {
+    set dir = use! cache::project_dir(project_root)
+    if !fs::exists(dir) {
+        return true
+    }
+    return fs::remove_all(dir)
+}

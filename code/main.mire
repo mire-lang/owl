@@ -19,6 +19,7 @@ load! /code/crypto
 load! trust
 load! registry
 load! build
+load! cache
 load! check
 load! info
 load! ui
