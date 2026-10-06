@@ -6,6 +6,7 @@ load kioto::proc
 load! /code/deps
 load kioto::proc
 load! /code/lockfile
+load! /code/cache
 
 /! Regenerate owl.toml with defaults for specified fields !/
 pub fn regenerate: (fields :str) {
@@ -147,8 +148,31 @@ pub fn checkup: (args :&vec[str]) {
         if use! util::has_project() {
             use dasu("")
             if use! util::contains(fix_fields "lock") {
-                /! lockfile::fix_lock stubbed !/
-                use dasu("  [OK]   lockfile restored from cache (stub)")
+                // Restores owl.lock from the copy cached under bin/.owl, keyed
+                // by the manifest digest. This used to print "[OK] lockfile
+                // restored from cache (stub)" without doing anything, so a
+                // corrupted owl.lock was reported as repaired and stayed
+                // corrupted.
+                //
+                // Inlined rather than calling lockfile::fix_lock: a cross-module
+                // call to that one function fails to link ("use of undefined
+                // value '@lockfile.fix_lock'") even though other calls into
+                // lockfile from here resolve.
+                set fx_sha = use! util::sha256sum_hex("owl.toml")
+                set fx_out = use! util::config_required("paths" "output")
+                set fx_cached = use! cache::resolution_path(fx_out fx_sha)
+                if fx_sha == "" || !fs::exists(fx_cached) {
+                    use dasu("  [FAIL] no cached lockfile under bin/.owl; run 'owl install'")
+                } else {
+                    set fx_content = fs::read(fx_cached)
+                    set fx_manifest = use! util::toml_get_from_string(fx_content "lock" "manifest-sha256")
+                    if fx_manifest != "" && fx_manifest == fx_sha {
+                        use fs::write("owl.lock" fx_content)
+                        use dasu("  [OK]   lockfile restored from bin/.owl cache")
+                    } else {
+                        use dasu("  [FAIL] cached lockfile does not match owl.toml; run 'owl install'")
+                    }
+                }
             } else {
                 if use! util::contains(fix_fields "loads") {
                     use! check::loads()

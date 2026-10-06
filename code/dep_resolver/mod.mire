@@ -2,6 +2,7 @@ module dep_resolver
 
 load mire::vec
 load! /code/util
+load! /code/cache
 load! /code/lockfile
 
 /! 
@@ -350,12 +351,16 @@ while i < len(declared) {
     /! Write final lockfile !/
     use fs::write("owl.lock" lock_content)
     
-    /! Write canonical cache copy !/
+    // Cache a copy under bin/.owl, keyed by the manifest digest, so
+    // `owl checkup --fix lock` can restore owl.lock after it is lost or
+    // corrupted. This used to write to ~/.owl/cache/resolution/<sha>/lock.toml,
+    // which the sandbox denies: an absolute path outside the project root is
+    // refused by pal_sbx_permit, so mkdir and the write both failed silently and
+    // the directory was created empty.
     set sha = use! util::sha256sum_hex("owl.toml")
     if sha != "" {
-        set res_dir = use! util::owl_home_cache_resolution(sha)
-        use! util::mkdir_p(res_dir)
-        use fs::write(res_dir + "/lock.toml" lock_content)
+        set out_dir_res = use! util::config_required("paths" "output")
+        use! cache::put_resolution(out_dir_res sha lock_content)
     }
     
     return true
