@@ -97,6 +97,11 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
         set result = vec::push::str(result "--add")
     } elif subcmd == "deps" {
         set result = vec::push::str(result "--prune")
+    } elif subcmd == "clean-cache" {
+        /! --keep lists what would be removed without touching it. !/
+        set result = vec::push::str(result "--keep")
+        set result = vec::push::str(result "--help")
+        set result = vec::push::str(result "-h")
     } elif subcmd == "gc" {
         set result = vec::push::str(result "--yes")
         set result = vec::push::str(result "-y")

@@ -20,6 +20,7 @@ load! trust
 load! registry
 load! build
 load! cache
+load! /code/cache/clean
 load! check
 load! info
 load! ui
@@ -106,6 +107,7 @@ pub fn main: () {
         "export" { use! export::run(args) }
         "reg" { use! registry::sync() }
         "deps" { use deps_tree() }
+        "clean-cache" { use! clean::run(args) }
         "gc" { use! gc::run(args) }
         "upgrade" { use! upgrade::run(args) }
         "help" { use! ui::help() }

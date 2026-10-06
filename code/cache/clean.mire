@@ -1,0 +1,55 @@
+// cache clean — remove the project's owl cache (bin/.owl).
+//
+// Separate from `owl clean`, which removes installed packages from
+// ~/.owl/libs. This one only touches the current project's cache, so it is safe
+// to run without thinking about it. The compiler's bin/.cache is left alone:
+// it is content-addressed and cheap to reuse, and deleting it makes the next
+// build recompile the runtime from scratch.
+//
+//   owl clean-cache            remove bin/.owl
+//   owl clean-cache --keep     only report what would be removed
+
+load kioto::strings
+load kioto::fs
+load! /code/util
+load! /code/cache
+
+pub fn run: (args :&vec[str]) {
+    if !use! util::has_project() {
+        use! util::error_line("OWL0002" "no owl.toml in this directory")
+        return
+    }
+    set out_dir = use! util::config_required("paths" "output")
+    set dir = use! cache::root(out_dir)
+
+    if !fs::exists(dir) {
+        use dasu("  nothing to clean (no " + dir + ")")
+        return
+    }
+
+    set keep = use! args::flag::has(args "--keep")
+    if keep {
+        use dasu("  would remove " + dir)
+        set entries = use! util::list_text(strings::copy(dir))
+        if entries != "" {
+            set names = use! util::split(entries "\n")
+            set ni = vec::len(names)
+            set i = 0 :i64 mut
+            while i < ni {
+                set name = use! util::trim(use! util::list_get(names i))
+                if name != "" {
+                    use dasu("    " + name + "/")
+                }
+                set i = i + 1
+            }
+        }
+        use dasu("  (dry run; pass without --keep to remove)")
+        return
+    }
+
+    if use! cache::purge(out_dir) {
+        use dasu("  [OK]   removed " + dir)
+    } else {
+        use dasu("  [FAIL] could not remove " + dir)
+    }
+}
