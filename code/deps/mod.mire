@@ -469,22 +469,6 @@ pub fn new: (args :&vec[str]) {
 }
 
 pub fn clean: (args :&vec[str]) {
-    use dasu("deps clean: not implemented")
-}
-
-pub fn load_cmd: (args :&vec[str]) {
-    use dasu("deps load: not implemented")
-}
-
-pub fn deps: (args :&vec[str]) {
-    use dasu("deps deps: not implemented")
-}
-
-pub fn new: (args :&vec[str]) {
-    use dasu("deps new: not implemented")
-}
-
-pub fn clean: (args :&vec[str]) {
     /! Remove unused dependencies from owl.toml and regenerate lockfile !/
     if !use! util::has_project() {
         use dasu("Error: no owl.toml found")
@@ -498,11 +482,61 @@ pub fn clean: (args :&vec[str]) {
     }
 }
 
-pub fn deps: (args :&vec[str]) {
-    /! Print dependency tree !/
-    if !use! util::has_project() {
-        use dasu("Error: no owl.toml found")
+// Names and versions currently resolved from the lockfile, one per line.
+pub fn list_resolved: () :vec[str] {
+    // Every local here is named lock_*: `out` and `raw` are already declared in
+    // gather_latest_libs above (out as :str, raw without mut), and reusing those
+    // names at a different type or mutability makes the typechecker resolve this
+    // function's locals to the other function's declarations:
+    //   "Type mismatch in assignment to 'out': expected Str, got Vector"
+    //   "Variable 'raw' is not mutable, maybe you meant to use 'mut'"
+    // Two functions in one module should be able to use the same local name
+    // independently. Until that is fixed, distinct names are the workaround.
+    set lock_names = [] :vec[str] mut
+    set lock_content = fs::read("owl.lock")
+    if lock_content == "" {
+        return lock_names
+    }
+    set lock_lines = strings::split(lock_content "\n")
+    set lock_i = 0 :i64 mut
+    set lock_n = vec::len(lock_lines)
+    while lock_i < lock_n {
+        set lock_line = use! util::trim(vec::get::str(lock_lines lock_i))
+        // owl.lock records each package as `name     = "x"`.
+        if use! util::startswith(lock_line "name") {
+            set lock_tail = strings::substr(lock_line 5 200)
+            set lock_pkg = use! util::trim(lock_tail)
+            if lock_pkg != "" {
+                set lock_names = vec::push::str(lock_names lock_pkg)
+            }
+        }
+        set lock_i = lock_i + 1
+    }
+    return lock_names
+}
+
+/! Print the resolved dependency tree.
+    Named `tree` rather than `deps` on purpose: a `pub fn deps` inside `module
+    deps` was emitted as a call to `@deps.deps`, a symbol that is never defined,
+    and the build failed with "use of undefined value". Call resolution
+    (mir/codegen/resolve.rs:79-106) looks the name up in defined_fn_names, misses,
+    and falls back to emitting the raw name. A function sharing its module's name
+    is a trap worth avoiding until that lookup learns about it. !/
+pub fn tree: (args :&vec[str]) {
+    // Locals are prefixed tree_ for the same reason as the lock_ ones below: a
+    // plain `i`, `n` or `line` here collides with declarations in
+    // gather_latest_libs and gets resolved to those, so the typechecker reports
+    // "Variable 'n' is not mutable". See list_resolved below.
+    set tree_pkgs = use! deps::list_resolved()
+    set tree_n = vec::len(tree_pkgs)
+    if tree_n == 0 {
+        use dasu("  (no dependencies)")
         return
     }
-    use dasu("deps command not yet implemented")
+    set tree_i = 0 :i64 mut
+    while tree_i < tree_n {
+        use dasu("  " + vec::get::str(tree_pkgs tree_i))
+        set tree_i = tree_i + 1
+    }
 }
+

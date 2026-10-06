@@ -22,7 +22,7 @@ load! build
 load! check
 load! info
 load! ui
-load! deps
+load! /code/deps
 load! args
 load! lockfile
 load! dload
@@ -32,6 +32,51 @@ load! gc
 load! profile
 load! upgrade
 load! /code/new
+
+/! Print the resolved dependency tree.
+    Implemented here rather than as deps::tree in /code/deps: every call from the
+    ENTRY module into /code/deps fails to link with "use of undefined value
+    '@deps.<fn>'", while the same calls from build and util (41 of them) link
+    fine. Call resolution (mir/codegen/resolve.rs:79-106) looks the name up in
+    defined_fn_names, does not find it, and falls back to emitting the bare name.
+    Keeping this self-contained avoids depending on that. Move it back once the
+    entry module resolves like the others. !/
+fn deps_tree: () {
+    if !use! util::has_project() {
+        use dasu("Error: no owl.toml found")
+        return
+    }
+    set lock_text = fs::read("owl.lock")
+    if lock_text == "" {
+        use dasu("  (no lockfile; run a build first)")
+        return
+    }
+    set lock_lines = strings::split(lock_text "\n")
+    set tree_i = 0 :i64 mut
+    set tree_n = vec::len(lock_lines)
+    set tree_any = false :bool mut
+    while tree_i < tree_n {
+        set tree_line = use! util::trim(vec::get::str(lock_lines tree_i))
+        // owl.lock writes `name     = "kioto"`; take the value after '='.
+        if use! util::startswith(tree_line "name") {
+            set tree_eq = strings::index(tree_line "=")
+            if tree_eq >= 0 {
+                set tree_from = tree_eq + 1
+                set tree_slice = strings::substr(tree_line tree_from 200)
+                set tree_val = use! util::trim(tree_slice)
+                // The value keeps the quotes owl writes around it: stripping
+                // them needs strings::substr on a length-derived bound, and
+                // that form does not typecheck here. `"kioto"` is unambiguous.
+                use dasu("  " + tree_val)
+                set tree_any = true
+            }
+        }
+        set tree_i = tree_i + 1
+    }
+    if !tree_any {
+        use dasu("  (no dependencies)")
+    }
+}
 
 pub fn main: () {
     set args = env_args()
@@ -54,12 +99,12 @@ pub fn main: () {
         "checkup" { use! check::checkup(args) }
         "profile" { use! profile::run(args) }
         "new" { use! new::run(args) }
-        "clean" { use dasu("clean command not yet implemented") }
+        "clean" { use! gc::run(args) }
         "load" { use dasu("load command not yet implemented") }
-        "install" { use dasu("install command not yet implemented") }
+        "install" { use! install::run_simple(args) }
         "export" { use! export::run(args) }
         "reg" { use! registry::sync() }
-        "deps" { use dasu("deps command not yet implemented") }
+        "deps" { use deps_tree() }
         "gc" { use! gc::run(args) }
         "upgrade" { use! upgrade::run(args) }
         "help" { use! ui::help() }
