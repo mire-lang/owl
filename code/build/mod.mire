@@ -231,7 +231,6 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
                 set output = out_dir
                 use! util::mkdir_p(strings::copy(cache))
                 use! util::mkdir_p(strings::copy(output))
-                use! util::mkdir_p(strings::copy(output))
 
                 set out_dir2 = use! util::config_required("paths" "output")
                 set compiler_output = output + "/" + profile
@@ -264,13 +263,6 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
                         set ti += 1
                     }
                 }
-                set dbg = "" :str mut
-                set di = 0 :i64 mut
-                while di < vec::len(argv) {
-                    set dbg = dbg + vec::get::str(argv di) + " "
-                    set di += 1
-                }
-                use dasu("DEBUG argv: " + dbg)
 
                 if is_run {
                     set build_out = use! util::run_compiler(argv)
@@ -512,17 +504,44 @@ fn append_c_and_security_flags: (argv :vec[str]) :vec[str] {
     // dashed form silently produced an empty allowlist, so every extern lib was
     // rejected and the build failed with "extern lib 'c' is not allowed in
     // [security].extern_libs" while the manifest plainly allowed it.
-    set sec_libs = use! util::toml_get_array("owl.toml" "security" "extern-libs")
-    if vec::len(sec_libs) == 0 {
-        set sec_libs = use! util::toml_get_array("owl.toml" "security" "extern_libs")
+    // Read both spellings into one list. Real manifests use `extern_libs` with an
+    // underscore, because that is what the compiler config struct calls it,
+    // while the older generated config emitted the dashed `extern-libs`. Looking
+    // up only the dashed form produced an empty allowlist, so every extern lib
+    // was rejected and the build failed with "extern lib 'c' is not allowed in
+    // [security].extern_libs" while the manifest plainly allowed it.
+    //
+    // Assembled into a fresh list rather than reassigning one local from
+    // another: `set x = <vec[str] expr>` over an existing vec[str] local is
+    // rejected by the typechecker, so the fallback cannot be a plain reassignment.
+    set lib_src = [] :vec[str] mut
+    set lib_dashed = use! util::toml_get_array("owl.toml" "security" "extern-libs")
+    set lib_dashed_n = vec::len(lib_dashed)
+    set li = 0 :i64 mut
+    while li < lib_dashed_n {
+        set lib_d = use! util::list_get(lib_dashed li)
+        if lib_d != "" {
+            set lib_src = vec::push::str(lib_src strings::copy(lib_d))
+        }
+        set li = li + 1
+    }
+    if vec::len(lib_src) == 0 {
+        set lib_under = use! util::toml_get_array("owl.toml" "security" "extern_libs")
+        set lib_under_n = vec::len(lib_under)
+        set lj = 0 :i64 mut
+        while lj < lib_under_n {
+            set lib_u = use! util::list_get(lib_under lj)
+            if lib_u != "" {
+                set lib_src = vec::push::str(lib_src strings::copy(lib_u))
+            }
+            set lj = lj + 1
+        }
     }
     set sl = 0 :i64 mut
-    while sl < vec::len(sec_libs) {
-        set lib_name = use! util::list_get(sec_libs sl)
-        if lib_name != "" {
-            set out = vec::push::str(out "--extern-lib")
-            set out = vec::push::str(out strings::copy(lib_name))
-        }
+    while sl < vec::len(lib_src) {
+        set lib_name = use! util::list_get(lib_src sl)
+        set out = vec::push::str(out "--extern-lib")
+        set out = vec::push::str(out strings::copy(lib_name))
         set sl = sl + 1
     }
     set sec_macros = use! util::toml_get_array("owl.toml" "security" "macros")
