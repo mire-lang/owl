@@ -120,7 +120,14 @@ pub fn get_dep_names: () :str {
             if nl >= 0 { set real_nl = pos + nl }
             set line = strings::substr(content pos real_nl - pos)
             set trimmed = use! util::trim(line)
-            if trimmed != "" && !use! util::startswith(trimmed "[") {
+            // A comment is not a dependency. Without this, a `#` line that
+            // happens to contain an `=` is parsed as `name = ...`, and the
+            // dependency list grows a phantom entry per comment. That is how a
+            // three-line comment in mire/owl.toml turned into two bogus deps
+            // and made `owl check` report "0/3 packages loadable" while every
+            // real load succeeded.
+            set is_comment = use! util::startswith(trimmed "#")
+            if trimmed != "" && !is_comment && !use! util::startswith(trimmed "[") {
                 set eq_pos = strings::index(trimmed "=")
                 if eq_pos >= 0 {
                     set key = use! util::trim_substr(trimmed 0 eq_pos)

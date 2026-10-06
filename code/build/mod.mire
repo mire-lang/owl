@@ -264,7 +264,13 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
                         set ti += 1
                     }
                 }
-                use dasu("  [" + profile + " -O" + opt + "]")
+                set dbg = "" :str mut
+                set di = 0 :i64 mut
+                while di < vec::len(argv) {
+                    set dbg = dbg + vec::get::str(argv di) + " "
+                    set di += 1
+                }
+                use dasu("DEBUG argv: " + dbg)
 
                 if is_run {
                     set build_out = use! util::run_compiler(argv)
@@ -500,7 +506,16 @@ fn append_c_and_security_flags: (argv :vec[str]) :vec[str] {
         }
         set se = se + 1
     }
+    // Read both spellings. Real manifests use `extern_libs` with an underscore,
+    // because that is what the compiler config struct calls it, while the older
+    // generated config emitted `extern-libs` with a dash. Looking up only the
+    // dashed form silently produced an empty allowlist, so every extern lib was
+    // rejected and the build failed with "extern lib 'c' is not allowed in
+    // [security].extern_libs" while the manifest plainly allowed it.
     set sec_libs = use! util::toml_get_array("owl.toml" "security" "extern-libs")
+    if vec::len(sec_libs) == 0 {
+        set sec_libs = use! util::toml_get_array("owl.toml" "security" "extern_libs")
+    }
     set sl = 0 :i64 mut
     while sl < vec::len(sec_libs) {
         set lib_name = use! util::list_get(sec_libs sl)
