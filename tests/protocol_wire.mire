@@ -153,6 +153,9 @@ pub fn main: () {
     set malformed_nested_request = use! wire::write_varint_field(1 1) mut
     set malformed_nested_request = strings::concat(malformed_nested_request use! wire::write_bytes_field(5 invalid_source_entry))
     testlib::assert_false((use! messages::decode_compile_request(malformed_nested_request)).valid)
+    set invalid_manifest_entries = [] :vec[str] mut
+    set invalid_manifest_entries = vec::push::str(invalid_manifest_entries invalid_source_entry)
+    testlib::assert_eq_str("" use! messages::encode_compile_request(1 "r1" "main" request_load_policy invalid_manifest_entries request_artifacts request_security request_flags "bin" "" "cache" "out"))
     testlib::assert_eq_str("r1" use! messages::read_string_field(response_payload 1))
     testlib::assert_eq(1 use! messages::read_varint_field(response_payload 2))
     testlib::assert_eq_str("out/main" use! messages::read_string_field(response_payload 3))

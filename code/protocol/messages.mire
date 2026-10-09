@@ -201,6 +201,22 @@ pub fn encode_security_policy: (mode :&str, externs :&vec[str], external_librari
 pub fn encode_compile_request: (protocol_version :i64, request_id :&str, entry :&str, load_policy :&str, manifest_entries :&vec[str], c_artifacts :&vec[str], security_policy :&str, flags :&vec[str], artifact :&str, target :&str, cache_directory :&str, output_directory :&str) :str {
     if protocol_version != 1 { return "" }
     if use! wire::is_valid_utf8(request_id) == false || use! wire::is_valid_utf8(entry) == false || use! wire::is_valid_utf8(artifact) == false || use! wire::is_valid_utf8(target) == false || use! wire::is_valid_utf8(cache_directory) == false || use! wire::is_valid_utf8(output_directory) == false || use! messages::strings_are_valid_utf8(flags) == false { return "" }
+    set load_policy_value = use! messages::decode_load_policy(load_policy)
+    if load_policy_value.valid == false { return "" }
+    set security_policy_value = use! messages::decode_security_policy(security_policy)
+    if security_policy_value.valid == false { return "" }
+    set validation_index = 0 mut
+    while validation_index < vec::len(manifest_entries) {
+        set manifest_value = use! messages::decode_source_entry(vec::get::str(manifest_entries validation_index))
+        if manifest_value.valid == false { return "" }
+        set validation_index = validation_index + 1
+    }
+    set validation_index = 0
+    while validation_index < vec::len(c_artifacts) {
+        set artifact_value = use! messages::decode_c_artifact(vec::get::str(c_artifacts validation_index))
+        if artifact_value.valid == false { return "" }
+        set validation_index = validation_index + 1
+    }
     set payload = use! wire::write_varint_field(1 protocol_version) mut
     if request_id != "" { set payload = strings::concat(payload use! wire::write_string_field(2 request_id)) }
     if entry != "" { set payload = strings::concat(payload use! wire::write_string_field(3 entry)) }
