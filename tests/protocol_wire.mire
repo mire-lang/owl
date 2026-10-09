@@ -12,6 +12,21 @@ fn hexadecimal_digit_value: (character_code :i64) :i64 {
     return -1
 }
 
+fn decode_hexadecimal_payload: (hexadecimal_text :&str) :str {
+    set payload = "" :str mut
+    set text_offset = 0 mut
+    if strings::len(hexadecimal_text) % 2 != 0 { return "" }
+    while text_offset < strings::len(hexadecimal_text) {
+        set high_nibble = hexadecimal_digit_value(strings::char_at(hexadecimal_text text_offset))
+        set low_nibble = hexadecimal_digit_value(strings::char_at(hexadecimal_text text_offset + 1))
+        if high_nibble < 0 || low_nibble < 0 { return "" }
+        set decoded_byte = (high_nibble << 4) | low_nibble
+        set payload = use! wire::append_byte(payload decoded_byte)
+        set text_offset = text_offset + 2
+    }
+    return payload
+}
+
 pub fn main: () {
     set encoded = use! wire::encode_varint(300)
     testlib::assert_eq(2 strings::len(encoded))
@@ -39,6 +54,14 @@ pub fn main: () {
     testlib::assert_eq(2 strings::char_at(frame 0))
     testlib::assert_eq(0 strings::char_at(frame 1))
     testlib::assert_eq(255 strings::char_at(frame 2))
+    testlib::assert_eq_str(payload use! wire::decode_frame_payload(frame 0))
+    testlib::assert_eq(3 use! wire::decode_frame_next_offset(frame 0))
+    set close_frame = use! wire::encode_frame("")
+    testlib::assert_eq(1 use! wire::decode_frame_next_offset(close_frame 0))
+    testlib::assert_eq_str("" use! wire::decode_frame_payload(close_frame 0))
+    set oversized_frame_length = use! wire::encode_varint(67108865)
+    testlib::assert_eq(-1 use! wire::decode_frame_next_offset(oversized_frame_length 0))
+    testlib::assert_eq_str("" use! wire::decode_frame_payload(oversized_frame_length 0))
 
     // Canonical field golden: field 1 varint 7, field 2 string "owl".
     set golden_varint = use! wire::write_varint_field(1 7)
@@ -58,49 +81,20 @@ pub fn main: () {
     set response_warnings = vec::push::str(response_warnings "unused value")
     set response_errors = [] :vec[str]
     set response_payload = use! messages::encode_compile_response("r1" 1 "out/main" response_errors response_warnings)
-    set response_golden_bytes = [] :vec[i64] mut
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 10)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 2)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 114)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 49)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 16)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 1)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 26)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 8)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 111)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 117)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 116)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 47)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 109)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 97)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 105)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 110)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 42)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 12)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 117)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 110)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 117)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 115)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 101)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 100)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 32)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 118)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 97)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 108)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 117)
-    set response_golden_bytes = vec::push::i64(response_golden_bytes 101)
-    set encoded_response_golden = "" :str mut
-    set golden_byte_index = 0 mut
-    while golden_byte_index < vec::len(response_golden_bytes) {
-        set encoded_response_golden = use! wire::append_byte(encoded_response_golden vec::get::i64(response_golden_bytes golden_byte_index))
-        set golden_byte_index = golden_byte_index + 1
-    }
+    set response_golden_hex = "0a02723110011a086f75742f6d61696e2a0c756e757365642076616c7565"
+    set encoded_response_golden = decode_hexadecimal_payload(response_golden_hex)
     testlib::assert_eq_str(encoded_response_golden response_payload)
     // Decode the shared Avenys golden independently of the Owl encoder.
     testlib::assert_eq_str("r1" use! messages::read_string_field(encoded_response_golden 1))
     testlib::assert_eq(1 use! messages::read_varint_field(encoded_response_golden 2))
     testlib::assert_eq_str("out/main" use! messages::read_string_field(encoded_response_golden 3))
     testlib::assert_eq_str("unused value" use! messages::read_string_field(encoded_response_golden 5))
+    set decoded_response = use! messages::decode_compile_response(encoded_response_golden)
+    testlib::assert_true(decoded_response.valid)
+    testlib::assert_eq_str("r1" decoded_response.request_id)
+    testlib::assert_eq(1 decoded_response.status)
+    testlib::assert_eq_str("out/main" decoded_response.output_path)
+    testlib::assert_eq(1 vec::len(decoded_response.warnings))
 
     // This CompileReq payload is the same full nested golden emitted by the
     // Avenys Rust codec. Decode the hex fixture and compare exact wire bytes.
@@ -123,21 +117,41 @@ pub fn main: () {
     set request_load_policy = use! messages::encode_load_policy("/work/p" 1 1)
     set request_payload = use! messages::encode_compile_request(1 "r1" "src/main.mire" request_load_policy request_manifest request_artifacts request_security request_flags "bin" "x86_64-unknown-linux-gnu" "cache" "out")
     set request_golden_hex = "0801120272311a0d7372632f6d61696e2e6d697265220d0a072f776f726b2f70100118012a230a046d61696e12112f776f726b2f702f6d61696e2e6d6972651a046162636420032801321c0a056c69622e6f1204626565661a066f626a6563742205656e7472793a1e0a06737472696374120472745f2a1a01632204746573742a03616273300142032d4f3342092d2d72656c656173654a0362696e52187838365f36342d756e6b6e6f776e2d6c696e75782d676e755a05636163686562036f7574"
-    set decoded_request_golden = "" :str mut
-    set request_hex_offset = 0 mut
-    while request_hex_offset < strings::len(request_golden_hex) {
-        set high_nibble = hexadecimal_digit_value(strings::char_at(request_golden_hex request_hex_offset))
-        set low_nibble = hexadecimal_digit_value(strings::char_at(request_golden_hex request_hex_offset + 1))
-        if high_nibble < 0 || low_nibble < 0 {
-            set decoded_request_golden = ""
-            set request_hex_offset = strings::len(request_golden_hex)
-        } else {
-            set decoded_byte = (high_nibble << 4) | low_nibble
-            set decoded_request_golden = use! wire::append_byte(decoded_request_golden decoded_byte)
-            set request_hex_offset = request_hex_offset + 2
-        }
-    }
+    set decoded_request_golden = decode_hexadecimal_payload(request_golden_hex)
     testlib::assert_eq_str(decoded_request_golden request_payload)
+    set decoded_request = use! messages::decode_compile_request(decoded_request_golden)
+    testlib::assert_true(decoded_request.valid)
+    testlib::assert_eq(1 decoded_request.protocol_version)
+    testlib::assert_eq_str("r1" decoded_request.request_id)
+    testlib::assert_eq_str("src/main.mire" decoded_request.entry)
+    testlib::assert_eq(1 vec::len(decoded_request.manifest_entries))
+    testlib::assert_eq(2 vec::len(decoded_request.flags))
+    set decoded_load_policy = use! messages::decode_load_policy(decoded_request.load_policy_payload)
+    testlib::assert_true(decoded_load_policy.valid)
+    testlib::assert_eq_str("/work/p" decoded_load_policy.project_root)
+    testlib::assert_true(decoded_load_policy.descend_only)
+    set decoded_source_entry = use! messages::decode_source_entry(vec::get::str(decoded_request.manifest_entries 0))
+    testlib::assert_true(decoded_source_entry.valid)
+    testlib::assert_eq_str("main" decoded_source_entry.source_id)
+    testlib::assert_eq(3 decoded_source_entry.size)
+    set decoded_c_artifact = use! messages::decode_c_artifact(vec::get::str(decoded_request.c_artifacts 0))
+    testlib::assert_true(decoded_c_artifact.valid)
+    testlib::assert_eq_str("lib.o" decoded_c_artifact.path)
+    set decoded_security = use! messages::decode_security_policy(decoded_request.security_policy_payload)
+    testlib::assert_true(decoded_security.valid)
+    testlib::assert_eq_str("strict" decoded_security.mode)
+    testlib::assert_true(decoded_security.allow_unsafe)
+    testlib::assert_false(decoded_security.allow_assembly)
+    set unsupported_protocol_version = use! wire::write_varint_field(1 2)
+    testlib::assert_false((use! messages::decode_compile_request(unsupported_protocol_version)).valid)
+    set invalid_load_policy = use! wire::write_varint_field(2 2)
+    testlib::assert_false((use! messages::decode_load_policy(invalid_load_policy)).valid)
+    set invalid_source_flags = use! wire::write_varint_field(5 4294967296)
+    testlib::assert_false((use! messages::decode_source_entry(invalid_source_flags)).valid)
+    set invalid_source_entry = use! wire::write_bytes_field(1 strings::from_byte(255))
+    set malformed_nested_request = use! wire::write_varint_field(1 1) mut
+    set malformed_nested_request = strings::concat(malformed_nested_request use! wire::write_bytes_field(5 invalid_source_entry))
+    testlib::assert_false((use! messages::decode_compile_request(malformed_nested_request)).valid)
     testlib::assert_eq_str("r1" use! messages::read_string_field(response_payload 1))
     testlib::assert_eq(1 use! messages::read_varint_field(response_payload 2))
     testlib::assert_eq_str("out/main" use! messages::read_string_field(response_payload 3))
@@ -161,6 +175,13 @@ pub fn main: () {
     testlib::assert_false(use! wire::is_valid_utf8(strings::from_byte(255)))
     testlib::assert_eq_str("" use! wire::write_string_field(1 strings::from_byte(255)))
     testlib::assert_eq_str("" use! messages::read_string_field(invalid_utf8 1))
+    set invalid_response = use! wire::write_bytes_field(1 strings::from_byte(255)) mut
+    set invalid_response = strings::concat(invalid_response use! wire::write_varint_field(2 1))
+    testlib::assert_false((use! messages::decode_compile_response(invalid_response)).valid)
+    set response_without_status = use! wire::write_string_field(1 "r1")
+    testlib::assert_false((use! messages::decode_compile_response(response_without_status)).valid)
+    set response_with_unknown_status = use! wire::write_varint_field(2 99)
+    testlib::assert_false((use! messages::decode_compile_response(response_with_unknown_status)).valid)
     testlib::assert_true(use! wire::is_valid_utf8(strings::concat(strings::from_byte(195) strings::from_byte(169))))
     testlib::assert_false(use! wire::is_valid_utf8(strings::concat(strings::from_byte(192) strings::from_byte(175))))
     testlib::assert_false(use! wire::is_valid_utf8(strings::concat(strings::from_byte(237) strings::concat(strings::from_byte(160) strings::from_byte(128)))))

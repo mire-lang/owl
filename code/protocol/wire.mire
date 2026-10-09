@@ -72,6 +72,24 @@ pub fn encode_frame: (payload :&str) :str {
     return strings::concat(use! wire::encode_varint(strings::len(payload)) payload)
 }
 
+// Return the first byte after a complete frame, or -1 for an incomplete or
+// oversized frame. A zero-length frame is the session-close marker.
+pub fn decode_frame_next_offset: (input :&str, start_offset :i64) :i64 {
+    set frame_length = use! wire::decode_varint_value(input start_offset)
+    set body_offset = use! wire::decode_varint_next_offset(input start_offset)
+    if frame_length < 0 || frame_length > 67108864 || body_offset < 0 { return -1 }
+    if frame_length > strings::len(input) - body_offset { return -1 }
+    return body_offset + frame_length
+}
+
+pub fn decode_frame_payload: (input :&str, start_offset :i64) :str {
+    set frame_length = use! wire::decode_varint_value(input start_offset)
+    set body_offset = use! wire::decode_varint_next_offset(input start_offset)
+    set frame_end = use! wire::decode_frame_next_offset(input start_offset)
+    if frame_length < 0 || frame_end < 0 || frame_length == 0 { return "" }
+    return strings::substr(input body_offset frame_length)
+}
+
 pub fn write_field_key: (field_number :i64, wire_type :i64) :str {
     if field_number <= 0 || field_number > 536870911 { return "" }
     if wire_type != 0 && wire_type != 2 { return "" }
