@@ -61,6 +61,8 @@ pub fn decode_varint_next_offset: (input :&str, start_offset :i64) :i64 {
 }
 
 pub fn encode_frame: (payload :&str) :str {
+    // 64 MiB is the hard frame limit. Reject before constructing the frame.
+    if strings::len(payload) > 67108864 { return "" }
     return strings::concat(use! wire::encode_varint(strings::len(payload)) payload)
 }
 

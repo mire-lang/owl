@@ -21,6 +21,18 @@ pub fn main: () {
     testlib::assert_eq(0 strings::char_at(frame 1))
     testlib::assert_eq(255 strings::char_at(frame 2))
 
+    // Canonical field golden: field 1 varint 7, field 2 string "owl".
+    set golden_varint = use! wire::write_varint_field(1 7)
+    set golden_string = use! wire::write_string_field(2 "owl")
+    set golden_fields = strings::concat(golden_varint golden_string)
+    testlib::assert_eq(8 strings::char_at(golden_fields 0))
+    testlib::assert_eq(7 strings::char_at(golden_fields 1))
+    testlib::assert_eq(18 strings::char_at(golden_fields 2))
+    testlib::assert_eq(3 strings::char_at(golden_fields 3))
+    testlib::assert_eq(111 strings::char_at(golden_fields 4))
+    testlib::assert_eq(119 strings::char_at(golden_fields 5))
+    testlib::assert_eq(108 strings::char_at(golden_fields 6))
+
     set negative_encoding = use! wire::encode_varint(-1)
     set invalid_field_key = use! wire::write_field_key(1 5)
     testlib::assert_eq_str("" negative_encoding)
