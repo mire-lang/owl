@@ -34,11 +34,15 @@ pub fn encode_varint: (value :i64) :str {
 // Return the unsigned varint value, or -1 when the input ended or contained
 // more than ten varint bytes. The protocol rejects negative unsigned values.
 pub fn decode_varint_value: (input :&str, start_offset :i64) :i64 {
+    if start_offset < 0 || start_offset >= strings::len(input) { return -1 }
     set value = 0 :i64 mut
     set offset = start_offset mut
     set byte_count = 0 mut
     while byte_count < 10 && offset < strings::len(input) {
         set byte = strings::char_at(input offset)
+        // The public Mire integer type is signed i64. Values using bit 63 or
+        // above cannot be represented and must not wrap into a negative value.
+        if byte_count == 9 && (byte & 127) != 0 { return -1 }
         set value = value | ((byte & 127) << (byte_count * 7))
         set offset = offset + 1
         set byte_count = byte_count + 1
@@ -49,10 +53,12 @@ pub fn decode_varint_value: (input :&str, start_offset :i64) :i64 {
 
 // Return the first offset after an unsigned varint, or -1 for malformed input.
 pub fn decode_varint_next_offset: (input :&str, start_offset :i64) :i64 {
+    if start_offset < 0 || start_offset >= strings::len(input) { return -1 }
     set offset = start_offset mut
     set byte_count = 0 mut
     while byte_count < 10 && offset < strings::len(input) {
         set byte = strings::char_at(input offset)
+        if byte_count == 9 && (byte & 127) != 0 { return -1 }
         set offset = offset + 1
         set byte_count = byte_count + 1
         if (byte & 128) == 0 { return offset }

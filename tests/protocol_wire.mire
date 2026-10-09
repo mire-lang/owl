@@ -1,6 +1,6 @@
 // Protocol wire primitives: readable Mire implementation of the frozen
 // Owl/Avenys framing rules. Message-specific encoders build on this module.
-load kioto
+load kioto::strings
 load testlib
 load! /code/protocol/wire
 
@@ -14,6 +14,17 @@ pub fn main: () {
     set decoded_offset = use! wire::decode_varint_next_offset(encoded 0)
     testlib::assert_eq(300 decoded_value)
     testlib::assert_eq(2 decoded_offset)
+
+    set overflowing_varint = "" :str mut
+    set overflow_byte_index = 0 mut
+    while overflow_byte_index < 9 {
+        set overflowing_varint = use! wire::append_byte(overflowing_varint 128)
+        set overflow_byte_index = overflow_byte_index + 1
+    }
+    set overflowing_varint = use! wire::append_byte(overflowing_varint 1)
+    testlib::assert_eq(-1 use! wire::decode_varint_value(overflowing_varint 0))
+    testlib::assert_eq(-1 use! wire::decode_varint_next_offset(overflowing_varint 0))
+    testlib::assert_eq(-1 use! wire::decode_varint_value(encoded -1))
 
     set payload = strings::concat(strings::from_byte(0) strings::from_byte(255))
     set frame = use! wire::encode_frame(payload)
