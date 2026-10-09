@@ -1,6 +1,7 @@
 // Protocol wire primitives: readable Mire implementation of the frozen
 // Owl/Avenys framing rules. Message-specific encoders build on this module.
 load kioto::strings
+load kioto::fs
 load mire::vec
 load testlib
 load! /code/protocol/wire
@@ -81,7 +82,7 @@ pub fn main: () {
     set response_warnings = vec::push::str(response_warnings "unused value")
     set response_errors = [] :vec[str]
     set response_payload = use! messages::encode_compile_response("r1" 1 "out/main" response_errors response_warnings)
-    set response_golden_hex = "0a02723110011a086f75742f6d61696e2a0c756e757365642076616c7565"
+    set response_golden_hex = strings::trim(fs::read("code/protocol/golden/v1_compile_resp.hex"))
     set encoded_response_golden = decode_hexadecimal_payload(response_golden_hex)
     testlib::assert_eq_str(encoded_response_golden response_payload)
     // Decode the shared Avenys golden independently of the Owl encoder.
@@ -116,7 +117,7 @@ pub fn main: () {
     set request_flags = vec::push::str(request_flags "--release")
     set request_load_policy = use! messages::encode_load_policy("/work/p" 1 1)
     set request_payload = use! messages::encode_compile_request(1 "r1" "src/main.mire" request_load_policy request_manifest request_artifacts request_security request_flags "bin" "x86_64-unknown-linux-gnu" "cache" "out")
-    set request_golden_hex = "0801120272311a0d7372632f6d61696e2e6d697265220d0a072f776f726b2f70100118012a230a046d61696e12112f776f726b2f702f6d61696e2e6d6972651a046162636420032801321c0a056c69622e6f1204626565661a066f626a6563742205656e7472793a1e0a06737472696374120472745f2a1a01632204746573742a03616273300142032d4f3342092d2d72656c656173654a0362696e52187838365f36342d756e6b6e6f776e2d6c696e75782d676e755a05636163686562036f7574"
+    set request_golden_hex = strings::trim(fs::read("code/protocol/golden/v1_compile_req.hex"))
     set decoded_request_golden = decode_hexadecimal_payload(request_golden_hex)
     testlib::assert_eq_str(decoded_request_golden request_payload)
     set decoded_request = use! messages::decode_compile_request(decoded_request_golden)
