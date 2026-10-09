@@ -11,7 +11,8 @@ pub fn main: () {
     set ts = strings::trim(proc::run::output("date" da))
     set test_base = strings::concat("/tmp/owl_build_test_", ts)
     set proj_dir = strings::concat(test_base, strings::copy("/testbuild"))
-    set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl"))
+    set owl_bin = env::var("OWL_BIN") :str mut
+    if owl_bin == "" { set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl")) }
 
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")
@@ -27,23 +28,27 @@ pub fn main: () {
     set ba = [] :vec[str] mut
     set ba = vec::push::str(ba "build")
     set build_out = proc::run::output_cwd(owl_bin ba proj_dir true)
+    set compiler_exit_code = proc::run::last_exit()
 
     set build_failed = strings::contains(build_out "error")
-    if build_failed {
+    if build_failed || compiler_exit_code != 0 {
         use dasu("  owl build output contains errors:")
         use dasu(build_out)
     } else {
         use dasu("  owl build completed: ok")
     }
 
-    set bin_path = strings::concat(proj_dir, strings::copy("/bin/debug/testbuild"))
-    set bc = "no" :str mut
-    if fs::exists(bin_path) { set bc = "yes" }
-    if bc == "yes" {
+    set binary_args = [] :vec[str] mut
+    set binary_args = vec::push::str(binary_args "-x")
+    set binary_args = vec::push::str(binary_args "bin/debug/main")
+    use proc::run::output_cwd("test" binary_args proj_dir true)
+    set binary_exists = proc::run::last_exit() == 0 :bool mut
+    if binary_exists {
         use dasu("  binary created: ok")
     } else {
         use dasu("  binary NOT created")
     }
+    testlib.assert_msg(!build_failed && compiler_exit_code == 0 && binary_exists, "owl build must exit successfully and create bin/debug/main")
 
     set rm = [] :vec[str] mut
     set rm = vec::push::str(rm "-rf")

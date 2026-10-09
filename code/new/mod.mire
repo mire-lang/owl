@@ -10,6 +10,7 @@ pub fn minimal_owl_toml: (name :str) :str {
     set toml = toml + "name = \"" + name + "\"\n"
     set toml = toml + "version = \"0.1.0\"\n"
     set toml = toml + "description = \"\"\n\n"
+    set toml = toml + "entry = \"./src/main.mire\"\n\n"
     set toml = toml + "[build]\n"
     set toml = toml + "main = \"./src/main.mire\"\n"
     set toml = toml + "bin = \"" + name + "\"\n\n"
@@ -25,6 +26,7 @@ pub fn minimal_owl_toml: (name :str) :str {
     set toml = toml + "[paths]\n"
     set toml = toml + "source = \"./src/\"\n"
     set toml = toml + "target = \"./bin/\"\n"
+    set toml = toml + "output = \"./bin/\"\n"
     set toml = toml + "cache = \"./bin/.cache\"\n\n"
     set toml = toml + "[cfg]\n"
     set toml = toml + "deps = \"~/.owl/libs\"\n"
@@ -40,49 +42,51 @@ pub fn minimal_main: (name :str) :str {
 
 pub fn run: (args :&vec[str]) :i64 {
     set n = vec::len(args)
-    if n == 0 {
+    if n < 3 {
         use dasu("Usage: owl new <project-name>")
         return 1
     }
     /! Get project name fresh for each use to avoid ownership issues !/
-    if vec::get::str(args 0) == "" {
+    if vec::get::str(args 2) == "" {
         use dasu("Error: project name cannot be empty")
         return 1
     }
-    if fs::exists(vec::get::str(args 0)) {
-        use dasu(strings::concat("Error: directory '" vec::get::str(args 0) "' already exists"))
+    if fs::exists(vec::get::str(args 2)) {
+        use dasu(strings::concat("Error: directory '" vec::get::str(args 2) "' already exists"))
         return 1
     }
 
     /! Create project structure !/
-    set bin_dir = strings::concat(vec::get::str(args 0) "/bin")
-    use! util::mkdir_p(strings::concat(vec::get::str(args 0) "/src"))
+    set bin_dir = strings::concat(vec::get::str(args 2) "/bin")
+    use! util::mkdir_p(strings::concat(vec::get::str(args 2) "/src"))
     use! util::mkdir_p(bin_dir)
 
     /! Write owl.toml !/
-    set owl_toml = strings::concat(vec::get::str(args 0) "/owl.toml")
-    set toml_content = use! new::minimal_owl_toml(vec::get::str(args 0))
-    if !fs::write(owl_toml toml_content) {
+    set owl_toml = strings::concat(vec::get::str(args 2) "/owl.toml")
+    set toml_content = use! new::minimal_owl_toml(vec::get::str(args 2))
+    use! fs::write(owl_toml toml_content)
+    if !fs::exists(owl_toml) {
         use dasu("Error: failed to write owl.toml")
         return 1
     }
 
     /! Write src/main.mire !/
-    set main_mire = strings::concat(vec::get::str(args 0) "/src/main.mire")
-    set main_content = use! new::minimal_main(vec::get::str(args 0))
-    if !fs::write(main_mire main_content) {
+    set main_mire = strings::concat(vec::get::str(args 2) "/src/main.mire")
+    set main_content = use! new::minimal_main(vec::get::str(args 2))
+    use! fs::write(main_mire main_content)
+    if !fs::exists(main_mire) {
         use dasu("Error: failed to write src/main.mire")
         return 1
     }
 
-    use dasu(strings::concat("Created project '" vec::get::str(args 0) "':"))
-    use dasu(strings::concat("  " vec::get::str(args 0) "/"))
+    use dasu(strings::concat("Created project '" vec::get::str(args 2) "':"))
+    use dasu(strings::concat("  " vec::get::str(args 2) "/"))
     use dasu("  ├── owl.toml")
     use dasu("  ├── bin/")
     use dasu("  └── src/")
     use dasu("      └── main.mire")
     use dasu("")
-    use dasu("Run 'cd " + vec::get::str(args 0) + " && owl build' to build")
-    use dasu("Run 'cd " + vec::get::str(args 0) + " && owl run' to execute")
+    use dasu("Run 'cd " + vec::get::str(args 2) + " && owl build' to build")
+    use dasu("Run 'cd " + vec::get::str(args 2) + " && owl run' to execute")
     return 0
 }

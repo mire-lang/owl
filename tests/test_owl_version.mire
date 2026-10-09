@@ -6,7 +6,8 @@ load testlib
 pub fn main: () {
     use dasu("--- test: owl --version / -V / --help ---")
 
-    set owl_bin = strings::concat(env::var("HOME") "/.local/bin/owl")
+    set owl_bin = env::var("OWL_BIN") :str mut
+    if owl_bin == "" { set owl_bin = strings::concat(env::var("HOME") "/.local/bin/owl") }
 
     set va = [] :vec[str] mut
     set va = vec::push::str(va "--version")

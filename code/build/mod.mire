@@ -433,7 +433,14 @@ pub fn new: (name :str) {
     Every flag is repeated rather than joined, because a cflag or a source path
     may legitimately contain a space. !/
 fn append_c_and_security_flags: (argv :vec[str]) :vec[str] {
-    set out = argv :vec[str] mut
+    // Return fresh storage. Returning an alias of argv makes the assignment at
+    // the call site release the same vector that the new binding still uses.
+    set out = [] :vec[str] mut
+    set argument_index = 0 :i64 mut
+    while argument_index < vec::len(argv) {
+        set out = vec::push::str(out strings::copy(vec::get::str(argv argument_index)))
+        set argument_index += 1
+    }
 
     // ── [c] ──
     set c_sources = use! util::toml_get_array("owl.toml" "c" "sources")

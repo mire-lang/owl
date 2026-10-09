@@ -11,7 +11,8 @@ pub fn main: () {
     set ts = strings::trim(proc::run::output("date" da))
     set test_base = strings::concat("/tmp/owl_check_test_", ts)
     set proj_dir = strings::concat(test_base, strings::copy("/testcheck"))
-    set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl"))
+    set owl_bin = env::var("OWL_BIN") :str mut
+    if owl_bin == "" { set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl")) }
 
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")

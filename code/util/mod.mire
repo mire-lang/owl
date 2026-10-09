@@ -506,11 +506,16 @@ pub fn compiler_cmd: () :str {
            project manifest. This is read-only environment configuration, not
            shell evaluation; the resulting path is passed as argv[0]. !/
         set configured = env::var("MIRE_COMPILER")
-        if configured != "" && fs::exists(configured) {
+        if configured != "" {
+            set configured_is_absolute = use! util::startswith(configured "/")
+            if !configured_is_absolute {
+                use! util::error_line("OWL0004" "MIRE_COMPILER must be an absolute executable path")
+                exit(1)
+            }
             set cmd = strings::copy(configured)
         } else {
             set mire_home = strings::copy(env::var("MIRE_HOME"))
-            if mire_home != "" && fs::exists(mire_home + "/bin/mire") {
+            if mire_home != "" {
                 set cmd = mire_home + "/bin/mire"
             } else {
                 /! Portable CI fallback. use! _externs::rt_proc_capture_argv performs a
@@ -541,7 +546,14 @@ pub fn compiler_cmd: () :str {
    passes only the compiler arguments. !/
 pub fn run_compiler: (args :vec[str]) :str {
     set mire = use! util::compiler_cmd()
-    return rt_proc_capture_argv(mire args)
+    // Compiler diagnostics are commonly written to stderr. Merge both output
+    // streams so a failed build never looks like a successful silent build.
+    set output = rt_proc_capture_argv2(mire args "" 1) :str mut
+    set exit_code = use proc::run::last_exit() :i64 mut
+    if exit_code != 0 {
+        use dasu("Error: compiler '" + mire + "' exited with status " + use! util::i64_to_string(exit_code))
+    }
+    return output
 }
 
 pub fn config_required: (section :str key :str) :str {
