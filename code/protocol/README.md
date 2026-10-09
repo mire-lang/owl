@@ -1,6 +1,6 @@
 # Owl/Avenys Protocol Codec
 
-The protocol is defined by the workspace-level `protocol/owl_avenys.proto`. Owl implements
+The protocol is defined by Avenys' tracked `protocol/owl_avenys.proto`. Owl implements
 the version-one protobuf payload codec in `wire.mire` and `messages.mire`.
 Transport framing is separate from message payload encoding so the same
 messages can use private FIFOs during bootstrap and Unix-domain sockets later.
@@ -40,7 +40,17 @@ MIRE_LIB_DIR=/path/to/pinned/mire-libraries \
 
 The script creates a temporary exchange directory under `tests/` so Owl's
 project-root filesystem sandbox can access it, then removes that directory on
-exit. The cross-decode gate passes on the current Avenys/Owl branches. Schema
-syntax validation with `protoc` remains outstanding because neither `protoc`
-nor `buf` is installed in the current environment; do not treat the cross-
-decode result as proof that an external protobuf compiler accepts the schema.
+exit. The cross-decode gate passes on the current Avenys/Owl branches. The
+schema passed syntax validation with `protoc 36.1`.
+
+The repository-owned schema is `Avenys/protocol/owl_avenys.proto` in the
+workspace. The validator also checks that the optional workspace mirror has
+the same compiled descriptor. Run from the Avenys repository root:
+
+```sh
+./scripts/validate-protocol-schema.sh /tmp/owl_avenys_schema.pb
+```
+
+The Avenys CI and release-validation jobs install `protobuf-compiler` for this
+check. End-user installers intentionally do not install it: the codecs have
+no protobuf runtime dependency.

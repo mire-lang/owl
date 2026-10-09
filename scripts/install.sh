@@ -3,6 +3,8 @@ set -euo pipefail
 
 # Owl & Mire installer
 # Builds both from source: mire (Rust) → owl (Mire compiled by mire)
+# Protocol schema validation uses protoc in Avenys CI only; the manual codecs
+# have no protobuf runtime dependency, so installing Owl does not install protoc.
 
 PREFIX="${PREFIX:-$HOME/.local}"
 BIN_DIR="${BIN_DIR:-$PREFIX/bin}"
