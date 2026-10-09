@@ -1,0 +1,89 @@
+module wire
+
+load kioto::strings
+
+// The Owl/Avenys protocol uses only protobuf wire types 0 and 2.
+// This module deliberately returns binary-safe strings: a string is a byte
+// sequence here, not necessarily UTF-8. Message-specific encoders will build
+// on these primitives and keep field numbers in the frozen .proto order.
+
+pub fn append_byte: (output :&str, byte_value :i64) :str {
+    return strings::concat(output strings::from_byte(byte_value & 255))
+}
+
+// Return an unsigned varint. A negative value is invalid for protocol fields
+// that are declared unsigned, so the empty string is returned as an error.
+pub fn encode_varint: (value :i64) :str {
+    if value < 0 { return "" }
+    set remaining = value mut
+    set output = "" :str mut
+    set finished = false mut
+    while finished == false {
+        set current = remaining & 127
+        set remaining = remaining >> 7
+        if remaining == 0 {
+            set output = use! wire::append_byte(output current)
+            set finished = true
+        } else {
+            set output = use! wire::append_byte(output current | 128)
+        }
+    }
+    return output
+}
+
+// Return the unsigned varint value, or -1 when the input ended or contained
+// more than ten varint bytes. The protocol rejects negative unsigned values.
+pub fn decode_varint_value: (input :&str, start_offset :i64) :i64 {
+    set value = 0 :i64 mut
+    set offset = start_offset mut
+    set byte_count = 0 mut
+    while byte_count < 10 && offset < strings::len(input) {
+        set byte = strings::char_at(input offset)
+        set value = value | ((byte & 127) << (byte_count * 7))
+        set offset = offset + 1
+        set byte_count = byte_count + 1
+        if (byte & 128) == 0 { return value }
+    }
+    return -1
+}
+
+// Return the first offset after an unsigned varint, or -1 for malformed input.
+pub fn decode_varint_next_offset: (input :&str, start_offset :i64) :i64 {
+    set offset = start_offset mut
+    set byte_count = 0 mut
+    while byte_count < 10 && offset < strings::len(input) {
+        set byte = strings::char_at(input offset)
+        set offset = offset + 1
+        set byte_count = byte_count + 1
+        if (byte & 128) == 0 { return offset }
+    }
+    return -1
+}
+
+pub fn encode_frame: (payload :&str) :str {
+    return strings::concat(use! wire::encode_varint(strings::len(payload)) payload)
+}
+
+pub fn write_field_key: (field_number :i64, wire_type :i64) :str {
+    if field_number <= 0 || field_number > 536870911 { return "" }
+    if wire_type != 0 && wire_type != 2 { return "" }
+    return use! wire::encode_varint((field_number << 3) | wire_type)
+}
+
+pub fn write_varint_field: (field_number :i64, value :i64) :str {
+    set key = use! wire::write_field_key(field_number 0)
+    set encoded_value = use! wire::encode_varint(value)
+    if key == "" || encoded_value == "" { return "" }
+    return strings::concat(key encoded_value)
+}
+
+pub fn write_bytes_field: (field_number :i64, value :&str) :str {
+    set key = use! wire::write_field_key(field_number 2)
+    if key == "" { return "" }
+    set length = use! wire::encode_varint(strings::len(value))
+    return strings::concat(strings::concat(key length) value)
+}
+
+pub fn write_string_field: (field_number :i64, value :&str) :str {
+    return use! wire::write_bytes_field(field_number value)
+}

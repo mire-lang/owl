@@ -1,0 +1,29 @@
+// Protocol wire primitives: readable Mire implementation of the frozen
+// Owl/Avenys framing rules. Message-specific encoders build on this module.
+load kioto
+load testlib
+load! /code/protocol/wire
+
+pub fn main: () {
+    set encoded = use! wire::encode_varint(300)
+    testlib::assert_eq(2 strings::len(encoded))
+    testlib::assert_eq(172 strings::char_at(encoded 0))
+    testlib::assert_eq(2 strings::char_at(encoded 1))
+
+    set decoded_value = use! wire::decode_varint_value(encoded 0)
+    set decoded_offset = use! wire::decode_varint_next_offset(encoded 0)
+    testlib::assert_eq(300 decoded_value)
+    testlib::assert_eq(2 decoded_offset)
+
+    set payload = strings::concat(strings::from_byte(0) strings::from_byte(255))
+    set frame = use! wire::encode_frame(payload)
+    testlib::assert_eq(2 strings::char_at(frame 0))
+    testlib::assert_eq(0 strings::char_at(frame 1))
+    testlib::assert_eq(255 strings::char_at(frame 2))
+
+    set negative_encoding = use! wire::encode_varint(-1)
+    set invalid_field_key = use! wire::write_field_key(1 5)
+    testlib::assert_eq_str("" negative_encoding)
+    testlib::assert_eq_str("" invalid_field_key)
+    use dasu("protocol wire primitives: ok")
+}
