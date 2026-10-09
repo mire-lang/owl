@@ -42,6 +42,8 @@ The script creates a temporary exchange directory under `tests/` so Owl's
 project-root filesystem sandbox can access it, then removes that directory on
 exit. The cross-decode gate passes on the current Avenys/Owl branches. The
 schema passed syntax validation with `protoc 36.1`.
+`.github/workflows/protocol.yml` runs the same two-way cross-decode test for
+protocol pull requests and supports an explicit Avenys ref for manual checks.
 
 The repository-owned schema is `Avenys/protocol/owl_avenys.proto` in the
 workspace. The validator also checks that the optional workspace mirror has

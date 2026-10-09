@@ -3,7 +3,8 @@ set -eu
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 owl_directory=$(CDPATH= cd -- "$script_directory/.." && pwd)
-avenys_directory=$(CDPATH= cd -- "$owl_directory/../avenys" && pwd)
+avenys_directory=${AVENYS_DIR:-"$owl_directory/../avenys"}
+avenys_directory=$(CDPATH= cd -- "$avenys_directory" && pwd)
 
 : "${MIRE_LIB_DIR:?Set MIRE_LIB_DIR to the pinned Mire library directory}"
 mire_binary=${MIRE_BIN:-mire}

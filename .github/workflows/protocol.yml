@@ -1,0 +1,72 @@
+name: Owl/Avenys Protocol
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/protocol.yml'
+      - 'code/protocol/**'
+      - 'scripts/verify-protocol-cross-decode.sh'
+      - 'tests/protocol_wire.mire'
+  workflow_dispatch:
+    inputs:
+      avenys_ref:
+        description: Avenys branch, tag, or commit to verify against
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  cross-decode:
+    name: Cross-decode Owl and Avenys payloads
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out Owl
+        uses: actions/checkout@v4
+
+      - name: Check out Avenys
+        uses: actions/checkout@v4
+        with:
+          repository: mire-lang/Avenys-rust
+          ref: ${{ inputs.avenys_ref || 'main' }}
+          path: avenys-src
+
+      - name: Install Avenys native build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential pkg-config libsodium-dev zlib1g-dev libzstd-dev libarchive-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
+          sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Check out pinned Kioto and Mire libraries
+        run: |
+          git clone --depth 1 -b pr/2.5.0 \
+            https://github.com/Evelynx-Dev/Kioto-1.git kioto-src
+          git clone --depth 1 -b pr/1.0.0 \
+            https://github.com/mire-lang/mire-lib.git mire-src
+          mkdir -p "$HOME/.owl/libs-beta"
+          cp -a kioto-src "$HOME/.owl/libs-beta/kioto"
+          cp -a mire-src "$HOME/.owl/libs-beta/mire"
+          cp -a testlib "$HOME/.owl/libs-beta/testlib"
+
+      - name: Build Avenys
+        env:
+          LLVM_CONFIG_PATH: /usr/lib/llvm-22/bin/llvm-config
+        run: cargo build --locked --release -j 2 --manifest-path avenys-src/Cargo.toml
+
+      - name: Cross-decode both directions
+        env:
+          AVENYS_DIR: ${{ github.workspace }}/avenys-src
+          MIRE_BIN: ${{ github.workspace }}/avenys-src/target/release/mire
+          MIRE_LIB_DIR: ${{ runner.temp }}/owl-mire-libraries
+          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
+        run: |
+          mkdir -p "$MIRE_LIB_DIR"
+          cp -a "$HOME/.owl/libs-beta/kioto" "$MIRE_LIB_DIR/kioto"
+          cp -a "$HOME/.owl/libs-beta/mire" "$MIRE_LIB_DIR/mire"
+          cp -a "$HOME/.owl/libs-beta/testlib" "$MIRE_LIB_DIR/testlib"
+          scripts/verify-protocol-cross-decode.sh
