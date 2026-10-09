@@ -92,6 +92,66 @@ pub fn write_bytes_field: (field_number :i64, value :&str) :str {
     return strings::concat(strings::concat(key length) value)
 }
 
+// Validate UTF-8 without treating arbitrary byte fields as text.
+pub fn is_valid_utf8: (value :&str) :bool {
+    set offset = 0 mut
+    set byte_length = strings::len(value)
+    while offset < byte_length {
+        set first_byte = strings::char_at(value offset)
+        if first_byte >= 0 && first_byte <= 127 {
+            set offset = offset + 1
+        } elif first_byte >= 194 && first_byte <= 223 {
+            if offset + 1 >= byte_length { return false }
+            set second_byte = strings::char_at(value offset + 1)
+            if second_byte < 128 || second_byte > 191 { return false }
+            set offset = offset + 2
+        } elif first_byte == 224 {
+            if offset + 2 >= byte_length { return false }
+            set second_byte = strings::char_at(value offset + 1)
+            set third_byte = strings::char_at(value offset + 2)
+            if second_byte < 160 || second_byte > 191 || third_byte < 128 || third_byte > 191 { return false }
+            set offset = offset + 3
+        } elif (first_byte >= 225 && first_byte <= 236) || (first_byte >= 238 && first_byte <= 239) {
+            if offset + 2 >= byte_length { return false }
+            set second_byte = strings::char_at(value offset + 1)
+            set third_byte = strings::char_at(value offset + 2)
+            if second_byte < 128 || second_byte > 191 || third_byte < 128 || third_byte > 191 { return false }
+            set offset = offset + 3
+        } elif first_byte == 237 {
+            if offset + 2 >= byte_length { return false }
+            set second_byte = strings::char_at(value offset + 1)
+            set third_byte = strings::char_at(value offset + 2)
+            if second_byte < 128 || second_byte > 159 || third_byte < 128 || third_byte > 191 { return false }
+            set offset = offset + 3
+        } elif first_byte == 240 {
+            if offset + 3 >= byte_length { return false }
+            set second_byte = strings::char_at(value offset + 1)
+            set third_byte = strings::char_at(value offset + 2)
+            set fourth_byte = strings::char_at(value offset + 3)
+            if second_byte < 144 || second_byte > 191 || third_byte < 128 || third_byte > 191 || fourth_byte < 128 || fourth_byte > 191 { return false }
+            set offset = offset + 4
+        } elif first_byte >= 241 && first_byte <= 243 {
+            if offset + 3 >= byte_length { return false }
+            set second_byte = strings::char_at(value offset + 1)
+            set third_byte = strings::char_at(value offset + 2)
+            set fourth_byte = strings::char_at(value offset + 3)
+            if second_byte < 128 || second_byte > 191 || third_byte < 128 || third_byte > 191 || fourth_byte < 128 || fourth_byte > 191 { return false }
+            set offset = offset + 4
+        } elif first_byte == 244 {
+            if offset + 3 >= byte_length { return false }
+            set second_byte = strings::char_at(value offset + 1)
+            set third_byte = strings::char_at(value offset + 2)
+            set fourth_byte = strings::char_at(value offset + 3)
+            if second_byte < 128 || second_byte > 143 || third_byte < 128 || third_byte > 191 || fourth_byte < 128 || fourth_byte > 191 { return false }
+            set offset = offset + 4
+        } else {
+            return false
+        }
+    }
+    return true
+}
+
 pub fn write_string_field: (field_number :i64, value :&str) :str {
+    if use! wire::is_valid_utf8(value) == false { return "" }
     return use! wire::write_bytes_field(field_number value)
 }

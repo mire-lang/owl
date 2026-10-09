@@ -1,8 +1,16 @@
 // Protocol wire primitives: readable Mire implementation of the frozen
 // Owl/Avenys framing rules. Message-specific encoders build on this module.
 load kioto::strings
+load mire::vec
 load testlib
 load! /code/protocol/wire
+load! /code/protocol/messages
+
+fn hexadecimal_digit_value: (character_code :i64) :i64 {
+    if character_code >= 48 && character_code <= 57 { return character_code - 48 }
+    if character_code >= 97 && character_code <= 102 { return character_code - 87 }
+    return -1
+}
 
 pub fn main: () {
     set encoded = use! wire::encode_varint(300)
@@ -43,6 +51,122 @@ pub fn main: () {
     testlib::assert_eq(111 strings::char_at(golden_fields 4))
     testlib::assert_eq(119 strings::char_at(golden_fields 5))
     testlib::assert_eq(108 strings::char_at(golden_fields 6))
+
+    // This is the canonical CompileResp golden also used by the Avenys Rust
+    // codec: request_id=r1, status=DONE, output_path=out/main, one warning.
+    set response_warnings = [] :vec[str] mut
+    set response_warnings = vec::push::str(response_warnings "unused value")
+    set response_errors = [] :vec[str]
+    set response_payload = use! messages::encode_compile_response("r1" 1 "out/main" response_errors response_warnings)
+    set response_golden_bytes = [] :vec[i64] mut
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 10)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 2)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 114)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 49)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 16)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 1)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 26)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 8)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 111)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 117)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 116)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 47)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 109)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 97)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 105)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 110)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 42)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 12)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 117)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 110)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 117)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 115)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 101)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 100)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 32)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 118)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 97)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 108)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 117)
+    set response_golden_bytes = vec::push::i64(response_golden_bytes 101)
+    set encoded_response_golden = "" :str mut
+    set golden_byte_index = 0 mut
+    while golden_byte_index < vec::len(response_golden_bytes) {
+        set encoded_response_golden = use! wire::append_byte(encoded_response_golden vec::get::i64(response_golden_bytes golden_byte_index))
+        set golden_byte_index = golden_byte_index + 1
+    }
+    testlib::assert_eq_str(encoded_response_golden response_payload)
+    // Decode the shared Avenys golden independently of the Owl encoder.
+    testlib::assert_eq_str("r1" use! messages::read_string_field(encoded_response_golden 1))
+    testlib::assert_eq(1 use! messages::read_varint_field(encoded_response_golden 2))
+    testlib::assert_eq_str("out/main" use! messages::read_string_field(encoded_response_golden 3))
+    testlib::assert_eq_str("unused value" use! messages::read_string_field(encoded_response_golden 5))
+
+    // This CompileReq payload is the same full nested golden emitted by the
+    // Avenys Rust codec. Decode the hex fixture and compare exact wire bytes.
+    set request_manifest = [] :vec[str] mut
+    set request_manifest = vec::push::str(request_manifest use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1))
+    set request_artifacts = [] :vec[str] mut
+    set request_artifacts = vec::push::str(request_artifacts use! messages::encode_c_artifact("lib.o" "beef" "object" "entry"))
+    set request_externs = [] :vec[str] mut
+    set request_externs = vec::push::str(request_externs "rt_*")
+    set request_libraries = [] :vec[str] mut
+    set request_libraries = vec::push::str(request_libraries "c")
+    set request_macros = [] :vec[str] mut
+    set request_macros = vec::push::str(request_macros "test")
+    set request_builtins = [] :vec[str] mut
+    set request_builtins = vec::push::str(request_builtins "abs")
+    set request_security = use! messages::encode_security_policy("strict" request_externs request_libraries request_macros request_builtins 1 0)
+    set request_flags = [] :vec[str] mut
+    set request_flags = vec::push::str(request_flags "-O3")
+    set request_flags = vec::push::str(request_flags "--release")
+    set request_load_policy = use! messages::encode_load_policy("/work/p" 1 1)
+    set request_payload = use! messages::encode_compile_request(1 "r1" "src/main.mire" request_load_policy request_manifest request_artifacts request_security request_flags "bin" "x86_64-unknown-linux-gnu" "cache" "out")
+    set request_golden_hex = "0801120272311a0d7372632f6d61696e2e6d697265220d0a072f776f726b2f70100118012a230a046d61696e12112f776f726b2f702f6d61696e2e6d6972651a046162636420032801321c0a056c69622e6f1204626565661a066f626a6563742205656e7472793a1e0a06737472696374120472745f2a1a01632204746573742a03616273300142032d4f3342092d2d72656c656173654a0362696e52187838365f36342d756e6b6e6f776e2d6c696e75782d676e755a05636163686562036f7574"
+    set decoded_request_golden = "" :str mut
+    set request_hex_offset = 0 mut
+    while request_hex_offset < strings::len(request_golden_hex) {
+        set high_nibble = hexadecimal_digit_value(strings::char_at(request_golden_hex request_hex_offset))
+        set low_nibble = hexadecimal_digit_value(strings::char_at(request_golden_hex request_hex_offset + 1))
+        if high_nibble < 0 || low_nibble < 0 {
+            set decoded_request_golden = ""
+            set request_hex_offset = strings::len(request_golden_hex)
+        } else {
+            set decoded_byte = (high_nibble << 4) | low_nibble
+            set decoded_request_golden = use! wire::append_byte(decoded_request_golden decoded_byte)
+            set request_hex_offset = request_hex_offset + 2
+        }
+    }
+    testlib::assert_eq_str(decoded_request_golden request_payload)
+    testlib::assert_eq_str("r1" use! messages::read_string_field(response_payload 1))
+    testlib::assert_eq(1 use! messages::read_varint_field(response_payload 2))
+    testlib::assert_eq_str("out/main" use! messages::read_string_field(response_payload 3))
+    testlib::assert_eq_str("unused value" use! messages::read_string_field(response_payload 5))
+    set decoded_warnings = use! messages::read_repeated_string_fields(response_payload 5)
+    testlib::assert_eq(1 vec::len(decoded_warnings))
+    testlib::assert_eq_str("unused value" vec::get::str(decoded_warnings 0))
+    set duplicate_status = strings::concat(response_payload use! wire::write_varint_field(2 2))
+    testlib::assert_eq(2 use! messages::read_varint_field(duplicate_status 2))
+
+    set malformed_length = use! wire::append_byte("" 10) mut
+    set malformed_length = use! wire::append_byte(malformed_length 5)
+    set malformed_length = use! wire::append_byte(malformed_length 65)
+    testlib::assert_eq_str("" use! messages::read_bytes_field(malformed_length 1))
+    testlib::assert_eq(-1 use! messages::read_varint_field(malformed_length 2))
+    set unsupported_wire_type = use! wire::append_byte("" 13)
+    testlib::assert_eq(-1 use! messages::read_varint_field(unsupported_wire_type 1))
+    set invalid_utf8 = use! wire::append_byte("" 10) mut
+    set invalid_utf8 = use! wire::append_byte(invalid_utf8 1)
+    set invalid_utf8 = use! wire::append_byte(invalid_utf8 255)
+    testlib::assert_false(use! wire::is_valid_utf8(strings::from_byte(255)))
+    testlib::assert_eq_str("" use! wire::write_string_field(1 strings::from_byte(255)))
+    testlib::assert_eq_str("" use! messages::read_string_field(invalid_utf8 1))
+    testlib::assert_true(use! wire::is_valid_utf8(strings::concat(strings::from_byte(195) strings::from_byte(169))))
+    testlib::assert_false(use! wire::is_valid_utf8(strings::concat(strings::from_byte(192) strings::from_byte(175))))
+    testlib::assert_false(use! wire::is_valid_utf8(strings::concat(strings::from_byte(237) strings::concat(strings::from_byte(160) strings::from_byte(128)))))
+    set invalid_warnings = [] :vec[str] mut
+    set invalid_warnings = vec::push::str(invalid_warnings strings::from_byte(255))
+    testlib::assert_eq_str("" use! messages::encode_compile_response("r1" 1 "out/main" response_errors invalid_warnings))
 
     set negative_encoding = use! wire::encode_varint(-1)
     set invalid_field_key = use! wire::write_field_key(1 5)

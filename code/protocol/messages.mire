@@ -1,0 +1,253 @@
+module messages
+
+load kioto::strings
+load mire::vec
+load! /code/protocol/wire
+
+// Version-one CompileReq and CompileResp payloads from the frozen schema.
+// These codecs operate on protobuf payloads only; Transport adds framing.
+
+pub fn strings_are_valid_utf8: (values :&vec[str]) :bool {
+    set item_index = 0 mut
+    while item_index < vec::len(values) {
+        if use! wire::is_valid_utf8(vec::get::str(values item_index)) == false { return false }
+        set item_index = item_index + 1
+    }
+    return true
+}
+
+pub fn encode_load_policy: (project_root :&str, descend_only :i64, reject_symlink_escape :i64) :str {
+    if (descend_only != 0 && descend_only != 1) || (reject_symlink_escape != 0 && reject_symlink_escape != 1) { return "" }
+    if use! wire::is_valid_utf8(project_root) == false { return "" }
+    set payload = "" :str mut
+    if project_root != "" { set payload = strings::concat(payload use! wire::write_string_field(1 project_root)) }
+    if descend_only != 0 { set payload = strings::concat(payload use! wire::write_varint_field(2 descend_only)) }
+    if reject_symlink_escape != 0 { set payload = strings::concat(payload use! wire::write_varint_field(3 reject_symlink_escape)) }
+    return payload
+}
+
+pub fn encode_source_entry: (source_id :&str, path :&str, sha256 :&str, size :i64, flags :i64) :str {
+    if size < 0 || flags < 0 || flags > 4294967295 { return "" }
+    if use! wire::is_valid_utf8(source_id) == false || use! wire::is_valid_utf8(path) == false || use! wire::is_valid_utf8(sha256) == false { return "" }
+    set payload = "" :str mut
+    if source_id != "" { set payload = strings::concat(payload use! wire::write_string_field(1 source_id)) }
+    if path != "" { set payload = strings::concat(payload use! wire::write_string_field(2 path)) }
+    if sha256 != "" { set payload = strings::concat(payload use! wire::write_string_field(3 sha256)) }
+    if size != 0 { set payload = strings::concat(payload use! wire::write_varint_field(4 size)) }
+    if flags != 0 { set payload = strings::concat(payload use! wire::write_varint_field(5 flags)) }
+    return payload
+}
+
+pub fn encode_c_artifact: (path :&str, sha256 :&str, artifact_kind :&str, symbol :&str) :str {
+    if use! wire::is_valid_utf8(path) == false || use! wire::is_valid_utf8(sha256) == false || use! wire::is_valid_utf8(artifact_kind) == false || use! wire::is_valid_utf8(symbol) == false { return "" }
+    set payload = "" :str mut
+    if path != "" { set payload = strings::concat(payload use! wire::write_string_field(1 path)) }
+    if sha256 != "" { set payload = strings::concat(payload use! wire::write_string_field(2 sha256)) }
+    if artifact_kind != "" { set payload = strings::concat(payload use! wire::write_string_field(3 artifact_kind)) }
+    if symbol != "" { set payload = strings::concat(payload use! wire::write_string_field(4 symbol)) }
+    return payload
+}
+
+pub fn encode_security_policy: (mode :&str, externs :&vec[str], external_libraries :&vec[str], macros :&vec[str], allowed_builtins :&vec[str], allow_unsafe :i64, allow_assembly :i64) :str {
+    if (allow_unsafe != 0 && allow_unsafe != 1) || (allow_assembly != 0 && allow_assembly != 1) { return "" }
+    if use! wire::is_valid_utf8(mode) == false || use! messages::strings_are_valid_utf8(externs) == false || use! messages::strings_are_valid_utf8(external_libraries) == false || use! messages::strings_are_valid_utf8(macros) == false || use! messages::strings_are_valid_utf8(allowed_builtins) == false { return "" }
+    set payload = "" :str mut
+    if mode != "" { set payload = strings::concat(payload use! wire::write_string_field(1 mode)) }
+
+    set item_index = 0 mut
+    while item_index < vec::len(externs) {
+        set item = vec::get::str(externs item_index)
+        set payload = strings::concat(payload use! wire::write_string_field(2 item))
+        set item_index = item_index + 1
+    }
+    set item_index = 0
+    while item_index < vec::len(external_libraries) {
+        set item = vec::get::str(external_libraries item_index)
+        set payload = strings::concat(payload use! wire::write_string_field(3 item))
+        set item_index = item_index + 1
+    }
+    set item_index = 0
+    while item_index < vec::len(macros) {
+        set item = vec::get::str(macros item_index)
+        set payload = strings::concat(payload use! wire::write_string_field(4 item))
+        set item_index = item_index + 1
+    }
+    set item_index = 0
+    while item_index < vec::len(allowed_builtins) {
+        set item = vec::get::str(allowed_builtins item_index)
+        set payload = strings::concat(payload use! wire::write_string_field(5 item))
+        set item_index = item_index + 1
+    }
+    if allow_unsafe != 0 { set payload = strings::concat(payload use! wire::write_varint_field(6 allow_unsafe)) }
+    if allow_assembly != 0 { set payload = strings::concat(payload use! wire::write_varint_field(7 allow_assembly)) }
+    return payload
+}
+
+pub fn encode_compile_request: (protocol_version :i64, request_id :&str, entry :&str, load_policy :&str, manifest_entries :&vec[str], c_artifacts :&vec[str], security_policy :&str, flags :&vec[str], artifact :&str, target :&str, cache_directory :&str, output_directory :&str) :str {
+    if protocol_version != 1 { return "" }
+    if use! wire::is_valid_utf8(request_id) == false || use! wire::is_valid_utf8(entry) == false || use! wire::is_valid_utf8(artifact) == false || use! wire::is_valid_utf8(target) == false || use! wire::is_valid_utf8(cache_directory) == false || use! wire::is_valid_utf8(output_directory) == false || use! messages::strings_are_valid_utf8(flags) == false { return "" }
+    set payload = use! wire::write_varint_field(1 protocol_version) mut
+    if request_id != "" { set payload = strings::concat(payload use! wire::write_string_field(2 request_id)) }
+    if entry != "" { set payload = strings::concat(payload use! wire::write_string_field(3 entry)) }
+
+    // Empty nested messages still carry presence in the canonical Rust codec.
+    set payload = strings::concat(payload use! wire::write_bytes_field(4 load_policy))
+    set item_index = 0 mut
+    while item_index < vec::len(manifest_entries) {
+        set nested_message = vec::get::str(manifest_entries item_index)
+        set payload = strings::concat(payload use! wire::write_bytes_field(5 nested_message))
+        set item_index = item_index + 1
+    }
+    set item_index = 0
+    while item_index < vec::len(c_artifacts) {
+        set nested_message = vec::get::str(c_artifacts item_index)
+        set payload = strings::concat(payload use! wire::write_bytes_field(6 nested_message))
+        set item_index = item_index + 1
+    }
+    set payload = strings::concat(payload use! wire::write_bytes_field(7 security_policy))
+    set item_index = 0
+    while item_index < vec::len(flags) {
+        set flag = vec::get::str(flags item_index)
+        set payload = strings::concat(payload use! wire::write_string_field(8 flag))
+        set item_index = item_index + 1
+    }
+    if artifact != "" { set payload = strings::concat(payload use! wire::write_string_field(9 artifact)) }
+    if target != "" { set payload = strings::concat(payload use! wire::write_string_field(10 target)) }
+    if cache_directory != "" { set payload = strings::concat(payload use! wire::write_string_field(11 cache_directory)) }
+    if output_directory != "" { set payload = strings::concat(payload use! wire::write_string_field(12 output_directory)) }
+    return payload
+}
+
+pub fn encode_compile_response: (request_id :&str, status :i64, output_path :&str, errors :&vec[str], warnings :&vec[str]) :str {
+    if status != 1 && status != 2 { return "" }
+    if use! wire::is_valid_utf8(request_id) == false || use! wire::is_valid_utf8(output_path) == false || use! messages::strings_are_valid_utf8(errors) == false || use! messages::strings_are_valid_utf8(warnings) == false { return "" }
+
+    set payload = "" :str mut
+    if request_id != "" {
+        set payload = strings::concat(payload use! wire::write_string_field(1 request_id))
+    }
+    set payload = strings::concat(payload use! wire::write_varint_field(2 status))
+    if output_path != "" {
+        set payload = strings::concat(payload use! wire::write_string_field(3 output_path))
+    }
+
+    set error_index = 0 mut
+    while error_index < vec::len(errors) {
+        set error_message = vec::get::str(errors error_index)
+        set payload = strings::concat(payload use! wire::write_string_field(4 error_message))
+        set error_index = error_index + 1
+    }
+
+    set warning_index = 0 mut
+    while warning_index < vec::len(warnings) {
+        set warning_message = vec::get::str(warnings warning_index)
+        set payload = strings::concat(payload use! wire::write_string_field(5 warning_message))
+        set warning_index = warning_index + 1
+    }
+    return payload
+}
+
+// Return the offset after an encoded field value, or -1 for malformed input.
+pub fn skip_field_value: (payload :&str, value_offset :i64, wire_type :i64) :i64 {
+    if wire_type == 0 {
+        return use! wire::decode_varint_next_offset(payload value_offset)
+    }
+    if wire_type == 2 {
+        set byte_length = use! wire::decode_varint_value(payload value_offset)
+        set body_offset = use! wire::decode_varint_next_offset(payload value_offset)
+        if byte_length < 0 || byte_length > 67108864 || body_offset < 0 { return -1 }
+        if byte_length > strings::len(payload) - body_offset { return -1 }
+        return body_offset + byte_length
+    }
+    return -1
+}
+
+// Find a scalar varint field. -1 means absent or malformed; v1 fields are
+// non-negative and therefore cannot collide with a valid result.
+pub fn read_varint_field: (payload :&str, requested_field_number :i64) :i64 {
+    if requested_field_number <= 0 { return -1 }
+    set field_offset = 0 mut
+    set found_value = -1 :i64 mut
+    while field_offset < strings::len(payload) {
+        set field_key = use! wire::decode_varint_value(payload field_offset)
+        set value_offset = use! wire::decode_varint_next_offset(payload field_offset)
+        if field_key < 0 || value_offset < 0 { return -1 }
+        set field_number = field_key >> 3
+        set wire_type = field_key & 7
+        if field_number <= 0 { return -1 }
+        if field_number == requested_field_number {
+            if wire_type != 0 { return -1 }
+            set found_value = use! wire::decode_varint_value(payload value_offset)
+            if found_value < 0 { return -1 }
+            set field_offset = use! wire::decode_varint_next_offset(payload value_offset)
+        } else {
+            set field_offset = use! messages::skip_field_value(payload value_offset wire_type)
+        }
+        if field_offset < 0 { return -1 }
+    }
+    return found_value
+}
+
+// Find a length-delimited field. An empty result represents an absent field or
+// malformed payload; callers use required scalar fields to distinguish errors.
+pub fn read_bytes_field: (payload :&str, requested_field_number :i64) :str {
+    if requested_field_number <= 0 { return "" }
+    set field_offset = 0 mut
+    set found_value = "" :str mut
+    while field_offset < strings::len(payload) {
+        set field_key = use! wire::decode_varint_value(payload field_offset)
+        set value_offset = use! wire::decode_varint_next_offset(payload field_offset)
+        if field_key < 0 || value_offset < 0 { return "" }
+        set field_number = field_key >> 3
+        set wire_type = field_key & 7
+        if field_number <= 0 { return "" }
+        if field_number == requested_field_number {
+            if wire_type != 2 { return "" }
+            set byte_length = use! wire::decode_varint_value(payload value_offset)
+            set body_offset = use! wire::decode_varint_next_offset(payload value_offset)
+            if byte_length < 0 || byte_length > 67108864 || body_offset < 0 { return "" }
+            if byte_length > strings::len(payload) - body_offset { return "" }
+            set found_value = strings::substr(payload body_offset byte_length)
+            set field_offset = body_offset + byte_length
+        } else {
+            set field_offset = use! messages::skip_field_value(payload value_offset wire_type)
+        }
+        if field_offset < 0 { return "" }
+    }
+    return found_value
+}
+
+pub fn read_repeated_string_fields: (payload :&str, requested_field_number :i64) :vec[str] {
+    set values = [] :vec[str] mut
+    if requested_field_number <= 0 { return values }
+    set field_offset = 0 mut
+    while field_offset < strings::len(payload) {
+        set field_key = use! wire::decode_varint_value(payload field_offset)
+        set value_offset = use! wire::decode_varint_next_offset(payload field_offset)
+        if field_key < 0 || value_offset < 0 { return [] :vec[str] }
+        set field_number = field_key >> 3
+        set wire_type = field_key & 7
+        if field_number <= 0 { return [] :vec[str] }
+        if field_number == requested_field_number {
+            if wire_type != 2 { return [] :vec[str] }
+            set byte_length = use! wire::decode_varint_value(payload value_offset)
+            set body_offset = use! wire::decode_varint_next_offset(payload value_offset)
+            if byte_length < 0 || byte_length > 67108864 || body_offset < 0 { return [] :vec[str] }
+            if byte_length > strings::len(payload) - body_offset { return [] :vec[str] }
+            set field_value = strings::substr(payload body_offset byte_length)
+            if use! wire::is_valid_utf8(field_value) == false { return [] :vec[str] }
+            set values = vec::push::str(values field_value)
+            set field_offset = body_offset + byte_length
+        } else {
+            set field_offset = use! messages::skip_field_value(payload value_offset wire_type)
+        }
+        if field_offset < 0 { return [] :vec[str] }
+    }
+    return values
+}
+
+pub fn read_string_field: (payload :&str, requested_field_number :i64) :str {
+    set value = use! messages::read_bytes_field(payload requested_field_number)
+    if use! wire::is_valid_utf8(value) == false { return "" }
+    return value
+}
