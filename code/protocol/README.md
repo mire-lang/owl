@@ -27,7 +27,20 @@ compiler and the pinned Kioto library set:
 mire test tests/protocol_wire.mire -j 1 --release --lib-dir "$MIRE_LIB_DIR"
 ```
 
-The protocol milestone is not complete until an automated cross-decode gate
-feeds actual Owl-encoded request and response payloads through the Rust codec,
-and Rust-encoded payloads through Owl's typed decoders. The golden checks
-provide a stable byte contract but do not replace that gate.
+The direct interoperability gate exchanges actual raw request and response
+payloads in both directions: Rust writes its encoded bytes, Owl decodes them
+and writes its own encoded bytes, and Rust then decodes those outputs into the
+expected typed messages. Run it from the Owl repository root:
+
+```sh
+MIRE_BIN=/path/to/branch-built/mire \
+MIRE_LIB_DIR=/path/to/pinned/mire-libraries \
+    scripts/verify-protocol-cross-decode.sh
+```
+
+The script creates a temporary exchange directory under `tests/` so Owl's
+project-root filesystem sandbox can access it, then removes that directory on
+exit. The cross-decode gate passes on the current Avenys/Owl branches. Schema
+syntax validation with `protoc` remains outstanding because neither `protoc`
+nor `buf` is installed in the current environment; do not treat the cross-
+decode result as proof that an external protobuf compiler accepts the schema.

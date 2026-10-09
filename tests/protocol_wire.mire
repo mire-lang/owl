@@ -2,6 +2,7 @@
 // Owl/Avenys framing rules. Message-specific encoders build on this module.
 load kioto::strings
 load kioto::fs
+load kioto::env
 load mire::vec
 load testlib
 load! /code/protocol/wire
@@ -192,6 +193,29 @@ pub fn main: () {
     set invalid_warnings = [] :vec[str] mut
     set invalid_warnings = vec::push::str(invalid_warnings strings::from_byte(255))
     testlib::assert_eq_str("" use! messages::encode_compile_response("r1" 1 "out/main" response_errors invalid_warnings))
+
+    // Optional integration gate: exchange actual raw payloads with Avenys'
+    // Rust codec when the workspace verification script provides a directory.
+    set exchange_directory = env::var("OWL_PROTOCOL_CROSS_DECODE_DIR")
+    if exchange_directory != "" {
+        set rust_request_path = strings::concat(exchange_directory "/rust-compile-req.bin")
+        set rust_response_path = strings::concat(exchange_directory "/rust-compile-resp.bin")
+        set owl_request_path = strings::concat(exchange_directory "/owl-compile-req.bin")
+        set owl_response_path = strings::concat(exchange_directory "/owl-compile-resp.bin")
+        set rust_request = fs::read(rust_request_path)
+        set rust_response = fs::read(rust_response_path)
+        set cross_request = use! messages::decode_compile_request(rust_request)
+        set cross_response = use! messages::decode_compile_response(rust_response)
+        testlib::assert_msg(cross_request.valid "Owl must decode the Rust CompileReq payload")
+        testlib::assert_msg(cross_response.valid "Owl must decode the Rust CompileResp payload")
+        testlib::assert_eq_str("r1" cross_request.request_id)
+        testlib::assert_eq_str("src/main.mire" cross_request.entry)
+        testlib::assert_eq_str("out/main" cross_response.output_path)
+        testlib::assert_eq(1 vec::len(cross_response.warnings))
+        testlib::assert_eq_str("unused value" vec::get::str(cross_response.warnings 0))
+        use! fs::write(owl_request_path request_payload)
+        use! fs::write(owl_response_path response_payload)
+    }
 
     set negative_encoding = use! wire::encode_varint(-1)
     set invalid_field_key = use! wire::write_field_key(1 5)
