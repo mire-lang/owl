@@ -38,11 +38,11 @@ pub fn main: () {
 
     set exists_args = [] :vec[str] mut
     set exists_args = vec::push::str(exists_args "-e")
-    set exists_args = vec::push::str(exists_args "myapp/src/main.mire")
+    set exists_args = vec::push::str(exists_args "myapp/src/main.mr")
     use proc::run::output_cwd("test" exists_args test_base true)
     if proc::run::last_exit() != 0 {
         set all_exist = false
-        use dasu("  MISSING: myapp/src/main.mire")
+        use dasu("  MISSING: myapp/src/main.mr")
     }
 
     set exists_args = [] :vec[str] mut
@@ -54,12 +54,30 @@ pub fn main: () {
         use dasu("  MISSING dir: myapp/src")
     }
 
+    set exists_args = [] :vec[str] mut
+    set exists_args = vec::push::str(exists_args "-d")
+    set exists_args = vec::push::str(exists_args "myapp/bin")
+    use proc::run::output_cwd("test" exists_args test_base true)
+    if proc::run::last_exit() != 0 {
+        set all_exist = false
+        use dasu("  MISSING dir: myapp/bin")
+    }
+
+    set exists_args = [] :vec[str] mut
+    set exists_args = vec::push::str(exists_args "-d")
+    set exists_args = vec::push::str(exists_args "myapp/tests")
+    use proc::run::output_cwd("test" exists_args test_base true)
+    if proc::run::last_exit() == 0 {
+        set all_exist = false
+        use dasu("  UNEXPECTED dir: myapp/tests")
+    }
+
     if all_exist {
         use dasu("  owl new creates correct structure: ok")
     } else {
         use dasu("  owl new structure: FAIL")
     }
-    testlib.assert_msg(all_exist, "owl new must create the manifest and src/main.mire")
+    testlib.assert_msg(all_exist, "owl new must create only the minimal project scaffold")
 
     set rm = [] :vec[str] mut
     set rm = vec::push::str(rm "-rf")
