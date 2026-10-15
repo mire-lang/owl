@@ -1,6 +1,5 @@
-// owl syntax test
+// owl syntax test: functions, recursion and helpers.
 load kioto
-load testlib
 
 fn add: (a :i64 b :i64) :i64 {
     return a + b
@@ -36,33 +35,65 @@ fn sum_range: (lo :i64 hi :i64) :i64 {
     return total
 }
 
-pub fn main: () {
-    use dasu("--- functions ---")
+@[test]
+pub fn basic_function_call: () :bool {
+    if add(2 3) != 5 {
+        return false
+    }
+    return true
+}
 
-    testlib::assert_eq(5 add(2 3))
-    use dasu("  basic function call: ok")
+@[test]
+pub fn recursive_fibonacci: () :bool {
+    if fib(10) != 55 {
+        return false
+    }
+    return true
+}
 
-    testlib::assert_eq(55 fib(10))
-    use dasu("  recursive fibonacci(10): ok")
+@[test]
+pub fn recursive_factorial: () :bool {
+    if fact(5) != 120 {
+        return false
+    }
+    if fact(10) != 3628800 {
+        return false
+    }
+    return true
+}
 
-    testlib::assert_eq(120 fact(5))
-    use dasu("  recursive factorial(5): ok")
+@[test]
+pub fn predicate_function: () :bool {
+    if !is_even(42) {
+        return false
+    }
+    if is_even(7) {
+        return false
+    }
+    return true
+}
 
-    testlib::assert_eq(3628800 fact(10))
-    use dasu("  recursive factorial(10): ok")
+@[test]
+pub fn recursive_gcd: () :bool {
+    if gcd(12 18) != 6 {
+        return false
+    }
+    if gcd(7 13) != 1 {
+        return false
+    }
+    if gcd(42 21) != 21 {
+        return false
+    }
+    return true
+}
 
-    testlib::assert_true(is_even(42))
-    testlib::assert_false(is_even(7))
-    use dasu("  predicate function: ok")
-
-    testlib::assert_eq(6 gcd(12 18))
-    testlib::assert_eq(1 gcd(7 13))
-    testlib::assert_eq(21 gcd(42 21))
-    use dasu("  recursive gcd: ok")
-
-    testlib::assert_eq(55 sum_range(1 10))
-    testlib::assert_eq(0 sum_range(5 3))
-    use dasu("  imperative sum_range: ok")
-
-    use dasu("all function tests passed")
+@[test]
+pub fn imperative_sum_range: () :bool {
+    if sum_range(1 10) != 55 {
+        return false
+    }
+    if sum_range(5 3) != 0 {
+        return false
+    }
+    return true
 }

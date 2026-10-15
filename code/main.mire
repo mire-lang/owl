@@ -34,6 +34,7 @@ load! gc
 load! profile
 load! upgrade
 load! /code/new
+load! server
 
 /! Print the resolved dependency tree.
     Implemented here rather than as deps::tree in /code/deps: every call from the

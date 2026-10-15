@@ -1,52 +1,70 @@
-// owl syntax test
+// owl syntax test: control flow.
 load kioto
-load testlib
 
-fn run_all: () {
-    use dasu("--- control flow ---")
-
+@[test]
+pub fn if_else_branches: () :bool {
+    set taken = false :bool mut
     if true {
-        use dasu("  if true: ok")
+        set taken = true
     } else {
-        testlib::assert(false)
+        return false
     }
-
-    if false {
-        testlib::assert(false)
-    } else {
-        use dasu("  if false else: ok")
-    }
+    if !taken { return false }
 
     set x = 42 :i64
     if x > 40 {
-        use dasu("  if with condition: ok")
+    } else {
+        return false
     }
 
+    set val = 50 :i64
+    if val > 100 {
+        return false
+    } else {
+        if val > 20 {
+        } else {
+            return false
+        }
+    }
+    return true
+}
+
+@[test]
+pub fn while_counting: () :bool {
     set count = 0 :i64 mut
     while count < 5 {
         set count = count + 1
     }
-    testlib::assert_eq(5 count)
-    use dasu("  while loop 0-5: ok")
+    if count != 5 { return false }
+    return true
+}
 
+@[test]
+pub fn while_sum: () :bool {
     set sum = 0 :i64 mut
     set i = 1 :i64 mut
     while i <= 10 {
         set sum = sum + i
         set i = i + 1
     }
-    testlib::assert_eq(55 sum)
-    use dasu("  while loop 1+...+10: ok")
+    if sum != 55 { return false }
+    return true
+}
 
+@[test]
+pub fn while_factorial: () :bool {
     set factorial = 1 :i64 mut
     set j = 5 :i64 mut
     while j > 1 {
         set factorial = factorial * j
         set j = j - 1
     }
-    testlib::assert_eq(120 factorial)
-    use dasu("  while loop factorial 5: ok")
+    if factorial != 120 { return false }
+    return true
+}
 
+@[test]
+pub fn nested_while: () :bool {
     set nested = 0 :i64 mut
     set a = 0 :i64 mut
     while a < 3 {
@@ -57,23 +75,6 @@ fn run_all: () {
         }
         set a = a + 1
     }
-    testlib::assert_eq(12 nested)
-    use dasu("  nested while loops: ok")
-
-    set val = 50 :i64
-    if val > 100 {
-        testlib::assert(false)
-    } else {
-        if val > 20 {
-            use dasu("  else if branch: ok")
-        } else {
-            testlib::assert(false)
-        }
-    }
-
-    use dasu("all control flow tests passed")
-}
-
-pub fn main: () {
-    run_all()
+    if nested != 12 { return false }
+    return true
 }

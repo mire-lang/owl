@@ -1,11 +1,8 @@
 // owl tool test: version and help flags are answered, not rejected
 load kioto
-load kioto::fs
-load testlib
 
-pub fn main: () {
-    use dasu("--- test: owl --version / -V / --help ---")
-
+@[test]
+pub fn version_and_help_flags: () :bool {
     set owl_bin = env::var("OWL_BIN") :str mut
     if owl_bin == "" { set owl_bin = strings::concat(env::var("HOME") "/.local/bin/owl") }
 
@@ -24,17 +21,13 @@ pub fn main: () {
     set ha = vec::push::str(ha "help")
     set v3 = proc::run::output(owl_bin ha)
 
-    testlib.assert_true(strings::starts::with(strings::trim(v1) "Owl v"))
-    testlib.assert_true(strings::starts::with(strings::trim(v2) "Owl v"))
-    testlib.assert_true(strings::contains(v3 "Usage: owl"))
+    if !strings::starts::with(strings::trim(v1) "Owl v") { return false }
+    if !strings::starts::with(strings::trim(v2) "Owl v") { return false }
+    if !strings::contains(v3 "Usage: owl") { return false }
 
     /! None of the three may be answered with the flag-validation error. !/
-    set n1 = strings::contains(v1 "E0012")
-    set n2 = strings::contains(v2 "E0012")
-    set n3 = strings::contains(v3 "E0012")
-    testlib.assert_true(!n1)
-    testlib.assert_true(!n2)
-    testlib.assert_true(!n3)
-
-    use dasu("  --version / -V / --help: ok")
+    if strings::contains(v1 "E0012") { return false }
+    if strings::contains(v2 "E0012") { return false }
+    if strings::contains(v3 "E0012") { return false }
+    return true
 }

@@ -1,45 +1,35 @@
 // owl tool test: owl check validates owl.toml
 load kioto
-load testlib
 
-pub fn main: () {
-    use dasu("--- test: owl check ---")
-    testlib.assert_true(true)
-
+@[test]
+pub fn owl_check_validates_project: () :bool {
     set da = [] :vec[str] mut
-    set da = vec::push::str(da "+%s%N")
+    set da = vec::push::str(da "+%s")
     set ts = strings::trim(proc::run::output("date" da))
-    set test_base = strings::concat("/tmp/owl_check_test_", ts)
-    set proj_dir = strings::concat(test_base, strings::copy("/testcheck"))
+    set test_base = strings::concat(strings::concat(env::var("HOME") "/.owl/tmp/owl_check_test_") ts)
+    set proj_dir = strings::concat(test_base "/testcheck")
     set owl_bin = env::var("OWL_BIN") :str mut
-    if owl_bin == "" { set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl")) }
+    if owl_bin == "" { set owl_bin = strings::concat(env::var("HOME") "/.local/bin/owl") }
 
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")
-    set mk = vec::push::str(mk strings::copy(test_base))
+    set mk = vec::push::str(mk test_base)
     use proc::run::output("mkdir" mk)
 
     set na = [] :vec[str] mut
     set na = vec::push::str(na "new")
     set na = vec::push::str(na "testcheck")
-    set new_out = proc::run::output_cwd(owl_bin na test_base true)
-    use dasu(new_out)
+    use proc::run::output_cwd(owl_bin na test_base true)
 
     set ca = [] :vec[str] mut
     set ca = vec::push::str(ca "check")
     set check_out = proc::run::output_cwd(owl_bin ca proj_dir true)
-
-    set has_pass = strings::contains(check_out "[OK]")
-    if has_pass {
-        use dasu("  owl check on valid project: ok")
-    } else {
-        use dasu("  owl check output:")
-        use dasu(check_out)
-    }
+    set check_ok = strings::contains(check_out "[OK]")
 
     set rm = [] :vec[str] mut
     set rm = vec::push::str(rm "-rf")
-    set rm = vec::push::str(rm strings::copy(test_base))
+    set rm = vec::push::str(rm test_base)
     use proc::run::output("rm" rm)
-    use dasu("test_owl_check complete")
+
+    return check_ok
 }

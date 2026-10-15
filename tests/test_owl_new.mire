@@ -1,29 +1,24 @@
 // owl tool test: owl new creates correct project structure
 load kioto
-load testlib
 
-pub fn main: () {
-    use dasu("--- test: owl new ---")
-    testlib.assert_true(true)
-
+@[test]
+pub fn owl_new_creates_scaffold: () :bool {
     set da = [] :vec[str] mut
-    set da = vec::push::str(da "+%s%N")
+    set da = vec::push::str(da "+%s")
     set ts = strings::trim(proc::run::output("date" da))
-    set test_base = strings::concat("/tmp/owl_tool_test_", ts)
-    set proj_dir = strings::concat(test_base, strings::copy("/myapp"))
+    set test_base = strings::concat(strings::concat(env::var("HOME") "/.owl/tmp/owl_tool_test_") ts)
     set owl_bin = env::var("OWL_BIN") :str mut
-    if owl_bin == "" { set owl_bin = strings::concat(env::var("HOME"), strings::copy("/.local/bin/owl")) }
+    if owl_bin == "" { set owl_bin = strings::concat(env::var("HOME") "/.local/bin/owl") }
 
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")
-    set mk = vec::push::str(mk strings::copy(test_base))
+    set mk = vec::push::str(mk test_base)
     use proc::run::output("mkdir" mk)
 
     set na = [] :vec[str] mut
     set na = vec::push::str(na "new")
     set na = vec::push::str(na "myapp")
-    set new_out = proc::run::output_cwd(owl_bin na test_base true)
-    use dasu(new_out)
+    use proc::run::output_cwd(owl_bin na test_base true)
 
     set all_exist = true :bool mut
 
@@ -31,57 +26,30 @@ pub fn main: () {
     set exists_args = vec::push::str(exists_args "-e")
     set exists_args = vec::push::str(exists_args "myapp/owl.toml")
     use proc::run::output_cwd("test" exists_args test_base true)
-    if proc::run::last_exit() != 0 {
-        set all_exist = false
-        use dasu("  MISSING: myapp/owl.toml")
-    }
+    if proc::run::last_exit() != 0 { set all_exist = false }
 
     set exists_args = [] :vec[str] mut
     set exists_args = vec::push::str(exists_args "-e")
     set exists_args = vec::push::str(exists_args "myapp/src/main.mr")
     use proc::run::output_cwd("test" exists_args test_base true)
-    if proc::run::last_exit() != 0 {
-        set all_exist = false
-        use dasu("  MISSING: myapp/src/main.mr")
-    }
-
-    set exists_args = [] :vec[str] mut
-    set exists_args = vec::push::str(exists_args "-d")
-    set exists_args = vec::push::str(exists_args "myapp/src")
-    use proc::run::output_cwd("test" exists_args test_base true)
-    if proc::run::last_exit() != 0 {
-        set all_exist = false
-        use dasu("  MISSING dir: myapp/src")
-    }
+    if proc::run::last_exit() != 0 { set all_exist = false }
 
     set exists_args = [] :vec[str] mut
     set exists_args = vec::push::str(exists_args "-d")
     set exists_args = vec::push::str(exists_args "myapp/bin")
     use proc::run::output_cwd("test" exists_args test_base true)
-    if proc::run::last_exit() != 0 {
-        set all_exist = false
-        use dasu("  MISSING dir: myapp/bin")
-    }
+    if proc::run::last_exit() != 0 { set all_exist = false }
 
+    /! The scaffold must not create a tests/ directory. !/
     set exists_args = [] :vec[str] mut
     set exists_args = vec::push::str(exists_args "-d")
     set exists_args = vec::push::str(exists_args "myapp/tests")
     use proc::run::output_cwd("test" exists_args test_base true)
-    if proc::run::last_exit() == 0 {
-        set all_exist = false
-        use dasu("  UNEXPECTED dir: myapp/tests")
-    }
-
-    if all_exist {
-        use dasu("  owl new creates correct structure: ok")
-    } else {
-        use dasu("  owl new structure: FAIL")
-    }
-    testlib.assert_msg(all_exist, "owl new must create only the minimal project scaffold")
+    if proc::run::last_exit() == 0 { set all_exist = false }
 
     set rm = [] :vec[str] mut
     set rm = vec::push::str(rm "-rf")
-    set rm = vec::push::str(rm strings::copy(test_base))
+    set rm = vec::push::str(rm test_base)
     use proc::run::output("rm" rm)
-    use dasu("test_owl_new complete")
+    return all_exist
 }

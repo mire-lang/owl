@@ -1,69 +1,92 @@
-// owl syntax test
+// owl syntax test: math helpers.
 //
-// TARGETS KIOTO 2.5.0. The range builders live directly under `math::` here;
-// in kioto 3.0 they move to `math::seq::` and the scalar helpers gain f64
-// overloads. Re-point this file at the 3.0 API when 3.0.0 becomes the base —
-// the assertions are the same, the qualified names are not.
+// Points at the kioto 3.0 API: the scalar helpers that take and return i64
+// live under `math::int`, the range builders under `math::seq`, and the mean
+// under `math::stats`. The top-level `math::abs`/`min`/`max`/`clamp`/`sum`
+// are the f64 variants in 3.0, so integer assertions reach the int module.
 load kioto
-load testlib
 
-pub fn main: () {
-    use dasu("--- math ---")
+fn f64_close: (a :f64 b :f64) :bool {
+    set scale = math::abs(a) :f64 mut
+    if math::abs(b) > scale { set scale = math::abs(b) }
+    if scale == 0.0 { return a == b }
+    return math::abs(a - b) <= math::consts::epsilon() * 4.0 * scale
+}
 
-    // 2.5's `math::abs` is the integer one; the f64 magnitude the tolerance
-    // comparison needs comes from the runtime directly.
+@[test]
+pub fn math_abs: () :bool {
     set abs_f = 0.0 - 5.0 :f64 mut
     if abs_f < 0.0 { set abs_f = 0.0 - abs_f }
-    testlib.assert_eq_f64(5.0 abs_f)
-    testlib.assert_eq(42 math::abs(0 - 42))
-    use dasu("  math.abs: ok")
+    if !f64_close(5.0 abs_f) { return false }
+    if math::int::abs(0 - 42) != 42 { return false }
+    return true
+}
 
-    testlib.assert_eq(3 math::min(3 7))
-    testlib.assert_eq(3 math::min(7 3))
-    use dasu("  math.min: ok")
+@[test]
+pub fn math_min_max: () :bool {
+    if math::int::min(3 7) != 3 { return false }
+    if math::int::min(7 3) != 3 { return false }
+    if math::int::max(3 7) != 7 { return false }
+    if math::int::max(7 3) != 7 { return false }
+    return true
+}
 
-    testlib.assert_eq(7 math::max(3 7))
-    testlib.assert_eq(7 math::max(7 3))
-    use dasu("  math.max: ok")
+@[test]
+pub fn math_clamp: () :bool {
+    if math::int::clamp(1 0 5) != 1 { return false }
+    if math::int::clamp(0 -1 5) != 0 { return false }
+    if math::int::clamp(10 0 5) != 5 { return false }
+    return true
+}
 
-    testlib.assert_eq(1 math::clamp(1 0 5))
-    testlib.assert_eq(0 math::clamp(0 -1 5))
-    testlib.assert_eq(5 math::clamp(10 0 5))
-    use dasu("  math.clamp: ok")
+@[test]
+pub fn math_seq_range: () :bool {
+    set r = math::seq::range(5)
+    if vec::len(r) != 5 { return false }
+    if vec::get::i64(r 0) != 0 { return false }
+    if vec::get::i64(r 4) != 4 { return false }
+    return true
+}
 
-    set r = math::range(5)
-    testlib.assert_eq(5 vec::len(r))
-    testlib.assert_eq(0 vec::get::i64(r 0))
-    testlib.assert_eq(4 vec::get::i64(r 4))
-    use dasu("  math.range: ok")
+@[test]
+pub fn math_seq_between: () :bool {
+    set rb = math::seq::between(2 6)
+    if vec::len(rb) != 4 { return false }
+    if vec::get::i64(rb 0) != 2 { return false }
+    if vec::get::i64(rb 3) != 5 { return false }
+    return true
+}
 
-    set rb = math::between(2 6)
-    testlib.assert_eq(4 vec::len(rb))
-    testlib.assert_eq(2 vec::get::i64(rb 0))
-    testlib.assert_eq(5 vec::get::i64(rb 3))
-    use dasu("  math.between: ok")
+@[test]
+pub fn math_seq_step: () :bool {
+    set rs = math::seq::step(0 10 3)
+    if vec::len(rs) != 4 { return false }
+    if vec::get::i64(rs 0) != 0 { return false }
+    if vec::get::i64(rs 3) != 9 { return false }
+    return true
+}
 
-    set rs = math::step(0 10 3)
-    testlib.assert_eq(4 vec::len(rs))
-    testlib.assert_eq(0 vec::get::i64(rs 0))
-    testlib.assert_eq(9 vec::get::i64(rs 3))
-    use dasu("  math.step: ok")
+@[test]
+pub fn math_seq_between_descending: () :bool {
+    set rd = math::seq::between(6 2)
+    if vec::len(rd) != 4 { return false }
+    if vec::get::i64(rd 0) != 6 { return false }
+    if vec::get::i64(rd 3) != 3 { return false }
+    return true
+}
 
-    // The descending arm is the part a naive port drops.
-    set rd = math::between(6 2)
-    testlib.assert_eq(4 vec::len(rd))
-    testlib.assert_eq(6 vec::get::i64(rd 0))
-    testlib.assert_eq(3 vec::get::i64(rd 3))
-    use dasu("  math.between descending: ok")
-
+@[test]
+pub fn math_minlist_maxlist: () :bool {
     set nums = [5 2 8 1 9] :vec[i64]
-    testlib.assert_eq(1 math::minlist(nums))
-    testlib.assert_eq(9 math::maxlist(nums))
-    use dasu("  math.minlist/max_list: ok")
+    if math::minlist(nums) != 1 { return false }
+    if math::maxlist(nums) != 9 { return false }
+    return true
+}
 
-    testlib.assert_eq(25 math::sum(nums))
-    testlib.assert_eq_f64(5.0 math::mean(nums))
-    use dasu("  math.sum/mean: ok")
-
-    use dasu("all math tests passed")
+@[test]
+pub fn math_sum_mean: () :bool {
+    set nums = [5 2 8 1 9] :vec[i64]
+    if math::int::sum(nums) != 25 { return false }
+    if !f64_close(5.0 math::stats::mean(nums)) { return false }
+    return true
 }

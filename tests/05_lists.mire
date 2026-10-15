@@ -1,6 +1,5 @@
-// owl syntax test
+// owl syntax test: list/vector operations.
 load kioto
-load testlib
 
 fn vec_contains: (v :&vec[i64], target :i64) :bool {
     set i = 0 :i64 mut
@@ -20,7 +19,7 @@ fn vec_index_of: (v :&vec[i64], target :i64) :i64 {
     return -1
 }
 
-fn vec_reverse: (v :vec[i64]) :vec[i64] {
+fn reverse_list: (v :vec[i64]) :vec[i64] {
     set out = [] :vec[i64] mut
     set i = vec::len(v) - 1 :i64 mut
     while i >= 0 {
@@ -30,44 +29,53 @@ fn vec_reverse: (v :vec[i64]) :vec[i64] {
     return out
 }
 
-pub fn main: () {
-    use dasu("--- lists ---")
-
+@[test]
+pub fn list_literal_and_len: () :bool {
     set lst = [1 2 3] :vec[i64]
-    testlib.assert_eq(3 len(lst))
-    use dasu("  list literal + len builtin: ok")
-
-    testlib.assert_eq(1 vec::get::i64(lst 0))
-    testlib.assert_eq(2 vec::get::i64(lst 1))
-    testlib.assert_eq(3 vec::get::i64(lst 2))
-    use dasu("  vec.get: ok")
-
+    if vec::len(lst) != 3 { return false }
+    if vec::get::i64(lst 0) != 1 { return false }
+    if vec::get::i64(lst 1) != 2 { return false }
+    if vec::get::i64(lst 2) != 3 { return false }
     set empty = [] :vec[i64]
-    testlib.assert_eq(0 len(empty))
-    use dasu("  empty list: ok")
+    if vec::len(empty) != 0 { return false }
+    return true
+}
 
-    testlib.assert_true(vec_contains([1 2 3] 2))
-    testlib.assert_false(vec_contains([1 2 3] 5))
-    use dasu("  vec contains: ok")
+@[test]
+pub fn vec_contains_and_index_of: () :bool {
+    if !vec_contains([1 2 3] 2) { return false }
+    if vec_contains([1 2 3] 5) { return false }
+    if vec_index_of([10 20 30] 20) != 1 { return false }
+    if vec_index_of([10 20 30] 99) != -1 { return false }
+    return true
+}
 
-    testlib.assert_eq(1 vec_index_of([10 20 30] 20))
-    testlib.assert_eq(-1 vec_index_of([10 20 30] 99))
-    use dasu("  vec index: ok")
+@[test]
+pub fn vec_first_and_last: () :bool {
+    set lst = [1 2 3] :vec[i64]
+    if vec::get::i64(lst 0) != 1 { return false }
+    if vec::get::i64(lst vec::len(lst) - 1) != 3 { return false }
+    return true
+}
 
-    testlib.assert_eq(1 vec::get::i64(lst 0))
-    testlib.assert_eq(3 vec::get::i64(lst vec::len(lst) - 1))
-    use dasu("  vec first/last: ok")
+@[test]
+pub fn vec_reverse: () :bool {
+    set rev = reverse_list([1 2 3])
+    if vec::get::i64(rev 0) != 3 { return false }
+    if vec::get::i64(rev 1) != 2 { return false }
+    if vec::get::i64(rev 2) != 1 { return false }
+    return true
+}
 
-    set rev = vec_reverse([1 2 3])
-    testlib.assert_eq(3 vec::get::i64(rev 0))
-    testlib.assert_eq(2 vec::get::i64(rev 1))
-    testlib.assert_eq(1 vec::get::i64(rev 2))
-    use dasu("  vec reverse: ok")
+@[test]
+pub fn vec_is_empty: () :bool {
+    if vec::len([] :vec[i64]) != 0 { return false }
+    if vec::len([1] :vec[i64]) == 0 { return false }
+    return true
+}
 
-    testlib.assert_true(vec::len([] :vec[i64]) == 0)
-    testlib.assert_false(vec::len([1] :vec[i64]) == 0)
-    use dasu("  vec.is_empty: ok")
-
+@[test]
+pub fn large_list: () :bool {
     set big = [] :vec[i64] mut
     set i = 0 :i64 mut
     while i < 100 {
@@ -75,8 +83,6 @@ pub fn main: () {
         set big = vec::push::i64(big val)
         set i = i + 1
     }
-    testlib.assert_eq(100 len(big))
-    use dasu("  large list (100 elements): ok")
-
-    use dasu("all list tests passed")
+    if vec::len(big) != 100 { return false }
+    return true
 }

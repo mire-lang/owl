@@ -1,10 +1,7 @@
-// owl syntax test
+// owl syntax test: regression guard for previously-fixed bugs.
 load kioto
-load testlib
 
-pub fn main: () {
-    use dasu("--- regression tests for known bugs ---")
-
-    testlib.assert_true(true)
-    use dasu("  all regressions pass")
+@[test]
+pub fn no_regressions: () :bool {
+    return true
 }

@@ -1,45 +1,53 @@
-// owl syntax test
+// owl syntax test: stress / performance-sensitive paths.
 load kioto
-load testlib
 
 fn fib: (n :i64) :i64 {
     if n <= 1 { return n }
     return fib(n - 1) + fib(n - 2)
 }
 
-pub fn main: () {
-    use dasu("--- stress ---")
-
+@[test]
+pub fn recursive_fib_stress: () :bool {
     set start = time::now::ms() :i64
     set result = fib(35)
     set elapsed = time::now::ms() - start :i64
-    testlib.assert_eq(9227465 result)
-    use dasu("  fib(35) in " + strings::from::i64(elapsed) + "ms: ok")
+    if result != 9227465 { return false }
+    if elapsed < 0 { return false }
 
     set start2 = time::now::ms() :i64
     set result2 = fib(40)
     set elapsed2 = time::now::ms() - start2 :i64
-    testlib.assert_eq(102334155 result2)
-    use dasu("  fib(40) in " + strings::from::i64(elapsed2) + "ms: ok")
+    if result2 != 102334155 { return false }
+    if elapsed2 < 0 { return false }
+    return true
+}
 
+@[test]
+pub fn large_integer_sum: () :bool {
     set sum = 0 :i64 mut
     set i = 0 :i64 mut
     while i < 100000 {
         set sum = sum + i
         set i = i + 1
     }
-    testlib.assert_eq(4999950000 sum)
-    use dasu("  sum 0..99999: ok")
+    if sum != 4999950000 { return false }
+    return true
+}
 
+@[test]
+pub fn large_string_concat: () :bool {
     set big_str = "" :str mut
     set rep = 0 :i64 mut
     while rep < 10000 {
         set big_str = big_str + "x"
         set rep = rep + 1
     }
-    testlib.assert_eq(10000 strings::len(big_str))
-    use dasu("  string concat 10000x: ok")
+    if strings::len(big_str) != 10000 { return false }
+    return true
+}
 
+@[test]
+pub fn large_list_push: () :bool {
     set lst = [] :vec[i64] mut
     set j = 0 :i64 mut
     while j < 5000 {
@@ -47,10 +55,8 @@ pub fn main: () {
         set lst = vec::push::i64(lst val)
         set j = j + 1
     }
-    testlib.assert_eq(5000 len(lst))
-    testlib.assert_eq(0 vec::get::i64(lst 0))
-    testlib.assert_eq(4999 vec::get::i64(lst 4999))
-    use dasu("  5000-element list: ok")
-
-    use dasu("all stress tests passed")
+    if vec::len(lst) != 5000 { return false }
+    if vec::get::i64(lst 0) != 0 { return false }
+    if vec::get::i64(lst 4999) != 4999 { return false }
+    return true
 }

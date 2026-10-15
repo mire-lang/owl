@@ -1,82 +1,95 @@
-// owl syntax test
+// owl syntax test: string operations from the kioto public library.
 load kioto
-load testlib
 
-pub fn main: () {
-    use dasu("--- strings ---")
-
+@[test]
+pub fn string_literals_and_concat: () :bool {
     set s = "hello" :str
-    testlib.assert_eq_str("hello" s)
-    use dasu("  string literal: ok")
-
+    if s != "hello" { return false }
     set s2 = "hello" + " world" :str
-    testlib.assert_eq_str("hello world" s2)
-    use dasu("  string concatenation: ok")
+    if s2 != "hello world" { return false }
+    return true
+}
 
-    testlib.assert_eq(5 strings::len("hello"))
-    testlib.assert_eq(0 strings::len(""))
-    use dasu("  strings.len: ok")
+@[test]
+pub fn strings_len_and_empty: () :bool {
+    if strings::len("hello") != 5 { return false }
+    if strings::len("") != 0 { return false }
+    if !(strings::len("") == 0) { return false }
+    if strings::len("x") == 0 { return false }
+    return true
+}
 
-    testlib.assert_true(strings::len("") == 0)
-    testlib.assert_false(strings::len("x") == 0)
-    use dasu("  strings.empty: ok")
+@[test]
+pub fn strings_case_and_trim: () :bool {
+    if strings::upper("hello") != "HELLO" { return false }
+    if strings::lower("HELLO") != "hello" { return false }
+    if strings::trim("  hello  ") != "hello" { return false }
+    return true
+}
 
-    testlib.assert_eq_str("HELLO" strings::upper("hello"))
-    testlib.assert_eq_str("hello" strings::lower("HELLO"))
-    use dasu("  strings.upper/lower: ok")
+@[test]
+pub fn strings_contains_and_affixes: () :bool {
+    if !strings::contains("hello world" "world") { return false }
+    if strings::contains("hello world" "xyz") { return false }
+    if !strings::starts::with("hello" "he") { return false }
+    if strings::starts::with("hello" "el") { return false }
+    if !strings::ends::with("hello" "lo") { return false }
+    return true
+}
 
-    testlib.assert_eq_str("hello" strings::trim("  hello  "))
-    use dasu("  strings.trim: ok")
+@[test]
+pub fn strings_substr: () :bool {
+    if strings::substr("hello" 0 2) != "he" { return false }
+    if strings::substr("hello" 1 3) != "ell" { return false }
+    if strings::substr("hello" 4 1) != "o" { return false }
+    return true
+}
 
-    testlib.assert_true(strings::contains("hello world" "world"))
-    testlib.assert_false(strings::contains("hello world" "xyz"))
-    use dasu("  strings.contains: ok")
-
-    testlib.assert_true(strings::starts::with("hello" "he"))
-    testlib.assert_false(strings::starts::with("hello" "el"))
-    testlib.assert_true(strings::ends::with("hello" "lo"))
-    use dasu("  strings.startswith/endswith: ok")
-
-    testlib.assert_eq_str("he" strings::substr("hello" 0 2))
-    testlib.assert_eq_str("ell" strings::substr("hello" 1 3))
-    testlib.assert_eq_str("o" strings::substr("hello" 4 1))
-    use dasu("  strings.substr: ok")
-
+@[test]
+pub fn strings_split_and_join: () :bool {
     set parts = strings::split("a,b,c" ",")
-    testlib.assert_eq(3 len(parts))
-    testlib.assert_eq_str("a" vec::get::str(parts 0))
-    testlib.assert_eq_str("b" vec::get::str(parts 1))
-    testlib.assert_eq_str("c" vec::get::str(parts 2))
-    use dasu("  strings.split: ok")
+    if vec::len(parts) != 3 { return false }
+    if vec::get::str(parts 0) != "a" { return false }
+    if vec::get::str(parts 1) != "b" { return false }
+    if vec::get::str(parts 2) != "c" { return false }
+    if strings::join(parts ",") != "a,b,c" { return false }
+    return true
+}
 
-    set joined = strings::join(parts ",")
-    testlib.assert_eq_str("a,b,c" joined)
-    use dasu("  strings.join: ok")
+@[test]
+pub fn strings_replace_and_repeat: () :bool {
+    if strings::replace::all("hello?" "?" "!") != "hello!" { return false }
+    if strings::repeat("ab" 2) != "abab" { return false }
+    if strings::repeat("x" 0) != "" { return false }
+    return true
+}
 
-    testlib.assert_eq_str("hello!" strings::replace::all("hello?" "?" "!"))
-    use dasu("  strings.replace: ok")
+@[test]
+pub fn strings_index: () :bool {
+    if strings::index("hello" "l") != 2 { return false }
+    if strings::index("hello" "z") != -1 { return false }
+    return true
+}
 
-    testlib.assert_eq_str("abab" strings::repeat("ab" 2))
-    testlib.assert_eq_str("" strings::repeat("x" 0))
-    use dasu("  strings.repeat: ok")
+@[test]
+pub fn strings_from_i64: () :bool {
+    if strings::from::i64(42) != "42" { return false }
+    if strings::from::i64(-5) != "-5" { return false }
+    if strings::from::i64(0) != "0" { return false }
+    return true
+}
 
-    testlib.assert_eq(2 strings::index("hello" "l"))
-    testlib.assert_eq(-1 strings::index("hello" "z"))
-    use dasu("  strings.index: ok")
-
-    testlib.assert_eq_str("42" strings::from::i64(42))
-    testlib.assert_eq_str("-5" strings::from::i64(-5))
-    testlib.assert_eq_str("0" strings::from::i64(0))
-    use dasu("  strings.i64: ok")
-
+@[test]
+pub fn empty_string_handling: () :bool {
     set empty = "" :str
-    testlib.assert_eq_str("" empty + "")
-    testlib.assert_eq_str("a" "" + "a")
-    use dasu("  empty string handling: ok")
+    if empty + "" != "" { return false }
+    if "" + "a" != "a" { return false }
+    return true
+}
 
+@[test]
+pub fn large_string: () :bool {
     set long = strings::repeat("x" 1000)
-    testlib.assert_eq(1000 strings::len(long))
-    use dasu("  large string (1000 chars): ok")
-
-    use dasu("all string tests passed")
+    if strings::len(long) != 1000 { return false }
+    return true
 }

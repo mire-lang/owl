@@ -171,7 +171,7 @@ pub fn compiler_lib_dirs: () :str {
                 set path = use! util::expand_home(path) mut
                 /! Avenys treats every --lib-dir as a package directory and
                    appends the dependency name to it. Therefore a dependency
-                   declared as `./testlib` contributes its parent (`.`), not
+                   declared as `./mylib` contributes its parent (`.`), not
                    the package root itself. !/
                 set parent = fs::path::dir(path) mut
                 if parent == "" { set parent = "." }

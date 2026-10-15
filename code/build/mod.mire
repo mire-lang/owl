@@ -119,31 +119,10 @@ pub fn compile: (args :&vec[str] is_run :bool) {
         set fi += 1
     }
 
-    // If the input file has .c extension, compile with libtcc
-    set cli_file = "" :str mut
-    if file_idx > 0 && file_idx < n { set cli_file = vec::get::str(args file_idx) }
-    if cli_file != "" && use! util::endswith(cli_file ".c") {
-        // Compile C file with libtcc and use the output
-        set c_output = use! util::compile_c_with_libtcc(cli_file)
-        use dasu(c_output)
-        // If running, execute the compiled binary
-        if is_run {
-            set argv = [] :vec[str] mut
-            set argv = vec::push::str(argv "run")
-            set argv = vec::push::str(argv cli_file)
-            set argv = vec::push::str(argv "--lib-dir")
-            set argv = vec::push::str(argv use! deps::compiler_lib_dirs())
-            set out = use! util::run_compiler(argv)
-            use dasu(out)
-        } else {
-            use dasu("C file '" + cli_file + "' compiled with libtcc")
-        }
-        return
-    }
-
     set i = 1 :i64 mut
     set cli_profile = "" :str mut
     set cli_opt = "" :str mut
+    set cli_file = "" :str mut
     set extra_flags = "" :str mut
     set run_args = [] :vec[str] mut
     set seen_ddash = false :bool mut

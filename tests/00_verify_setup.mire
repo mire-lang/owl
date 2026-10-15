@@ -1,15 +1,12 @@
-// owl syntax test
+// Verifies the test harness runs and the kioto dependency resolves, using the
+// same public toolkit the other owl tests build on.
 load kioto
-load testlib
 
-pub fn main: () {
-    use dasu("verify: testing testlib assertions...")
-    testlib::assert_eq(1 1)
-    testlib::assert_ne(1 2)
-    testlib::assert_true(true)
-    testlib::assert_false(false)
-    testlib::assert_lt(1 2)
-    testlib::assert_gt(2 1)
-    testlib::assert_eq_str("hello" "hello")
-    use dasu("verify: all assertion helpers work")
+@[test]
+pub fn toolkit_loads: () :bool {
+    if strings::len("hello") != 5 { return false }
+    if !strings::starts::with("hello" "he") { return false }
+    if !strings::ends::with("hello" "lo") { return false }
+    if strings::from::i64(42) != "42" { return false }
+    return true
 }
