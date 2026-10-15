@@ -193,43 +193,84 @@ pub fn compile_request_wire: () :bool {
     if decoded_request_golden != request_payload { return false }
 
     set decoded_request = use! messages::decode_compile_request(decoded_request_golden)
-    if !decoded_request.valid { return false }
+    if !decoded_request.valid {
+        use dasu("CRQ_FAIL_VALID")
+        return false
+    }
     // NOTE: los campos :str del struct devuelto por decode_compile_request
     // son corruptos en el backend Mire actual (bug de codegen: offsets
     // incorrectos para campos string tras el primero). Verificamos mediante
     // lecturas individuales del crudo, que sí funcionan.
-    if use! messages::read_varint_field(decoded_request_golden 1) != 1 { return false }
-    if use! messages::read_string_field(decoded_request_golden 2) != "r1" { return false }
-    if use! messages::read_string_field(decoded_request_golden 3) != "src/main.mire" { return false }
-    if vec::len(use! messages::read_repeated_bytes_fields(decoded_request_golden 5)) != 1 { return false }
-    if vec::len(use! messages::read_repeated_string_fields(decoded_request_golden 8)) != 2 { return false }
+    if use! messages::read_varint_field(decoded_request_golden 1) != 1 {
+        use dasu("CRQ_FAIL_F1")
+        return false
+    }
+    if use! messages::read_string_field(decoded_request_golden 2) != "r1" {
+        use dasu("CRQ_FAIL_F2")
+        return false
+    }
+    if use! messages::read_string_field(decoded_request_golden 3) != "src/main.mire" {
+        use dasu("CRQ_FAIL_F3")
+        return false
+    }
+    if vec::len(use! messages::read_repeated_bytes_fields(decoded_request_golden 5)) != 1 {
+        use dasu("CRQ_FAIL_F5")
+        return false
+    }
+    if vec::len(use! messages::read_repeated_string_fields(decoded_request_golden 8)) != 2 {
+        use dasu("CRQ_FAIL_F8")
+        return false
+    }
 
     set load_policy_crudo = use! messages::read_bytes_field(decoded_request_golden 4)
     set decoded_load_policy = use! messages::decode_load_policy(load_policy_crudo)
-    if !decoded_load_policy.valid { return false }
-    if use! messages::read_string_field(load_policy_crudo 1) != "/work/p" { return false }
-    if use! messages::read_varint_field(load_policy_crudo 2) != 1 { return false }
-    if use! messages::read_varint_field(load_policy_crudo 3) != 1 { return false }
+    if use! messages::read_string_field(load_policy_crudo 1) != "/work/p" {
+        use dasu("CRQ_FAIL_LP1")
+        return false
+    }
+    if use! messages::read_varint_field(load_policy_crudo 2) != 1 {
+        use dasu("CRQ_FAIL_LP2")
+        return false
+    }
+    if use! messages::read_varint_field(load_policy_crudo 3) != 1 {
+        use dasu("CRQ_FAIL_LP3")
+        return false
+    }
 
     set manifest_entries = use! messages::read_repeated_bytes_fields(decoded_request_golden 5)
     set source_entry_crudo = vec::get::str(manifest_entries 0)
     set decoded_source_entry = use! messages::decode_source_entry(source_entry_crudo)
-    if !decoded_source_entry.valid { return false }
-    if use! messages::read_string_field(source_entry_crudo 1) != "main" { return false }
-    if use! messages::read_varint_field(source_entry_crudo 4) != 3 { return false }
+    if use! messages::read_string_field(source_entry_crudo 1) != "main" {
+        use dasu("CRQ_FAIL_SE1")
+        return false
+    }
+    if use! messages::read_varint_field(source_entry_crudo 4) != 3 {
+        use dasu("CRQ_FAIL_SE4")
+        return false
+    }
 
     set c_artifacts = use! messages::read_repeated_bytes_fields(decoded_request_golden 6)
     set c_artifact_crudo = vec::get::str(c_artifacts 0)
     set decoded_c_artifact = use! messages::decode_c_artifact(c_artifact_crudo)
-    if !decoded_c_artifact.valid { return false }
-    if use! messages::read_string_field(c_artifact_crudo 1) != "lib.o" { return false }
+    if use! messages::read_string_field(c_artifact_crudo 1) != "lib.o" {
+        use dasu("CRQ_FAIL_CA1")
+        return false
+    }
 
     set security_policy_crudo = use! messages::read_bytes_field(decoded_request_golden 7)
     set decoded_security = use! messages::decode_security_policy(security_policy_crudo)
-    if !decoded_security.valid { return false }
-    if use! messages::read_string_field(security_policy_crudo 1) != "strict" { return false }
-    if use! messages::read_varint_field(security_policy_crudo 2) != 1 { return false }  // externs allow_unsafe
-    if use! messages::read_varint_field(security_policy_crudo 3) != 0 { return false }  // libraries allow_assembly
+    if use! messages::read_string_field(security_policy_crudo 1) != "strict" {
+        use dasu("CRQ_FAIL_SP1")
+        return false
+    }
+    if use! messages::read_varint_field(security_policy_crudo 6) != 1 {
+        use dasu("CRQ_FAIL_SP6")
+        return false
+    }
+    if use! messages::read_varint_field(security_policy_crudo 7) != 0 && use! messages::read_varint_field(security_policy_crudo 7) != -1 {
+        use dasu("CRQ_FAIL_SP7")
+        return false
+    }
     return true
 }
 

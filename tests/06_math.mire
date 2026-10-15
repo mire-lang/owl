@@ -5,12 +5,17 @@
 // under `math::stats`. The top-level `math::abs`/`min`/`max`/`clamp`/`sum`
 // are the f64 variants in 3.0, so integer assertions reach the int module.
 load kioto
+load kioto::math::consts
+load kioto::math::int
+load kioto::math::seq
+load kioto::math::stats
 
 fn f64_close: (a :f64 b :f64) :bool {
+    set eps = 2.220446049250313e-16 :f64 mut
     set scale = math::abs(a) :f64 mut
     if math::abs(b) > scale { set scale = math::abs(b) }
     if scale == 0.0 { return a == b }
-    return math::abs(a - b) <= math::consts::epsilon() * 4.0 * scale
+    return math::abs(a - b) <= eps * 4.0 * scale
 }
 
 @[test]
@@ -18,30 +23,30 @@ pub fn math_abs: () :bool {
     set abs_f = 0.0 - 5.0 :f64 mut
     if abs_f < 0.0 { set abs_f = 0.0 - abs_f }
     if !f64_close(5.0 abs_f) { return false }
-    if math::int::abs(0 - 42) != 42 { return false }
+    if int::abs(0 - 42) != 42 { return false }
     return true
 }
 
 @[test]
 pub fn math_min_max: () :bool {
-    if math::int::min(3 7) != 3 { return false }
-    if math::int::min(7 3) != 3 { return false }
-    if math::int::max(3 7) != 7 { return false }
-    if math::int::max(7 3) != 7 { return false }
+    if int::min(3 7) != 3 { return false }
+    if int::min(7 3) != 3 { return false }
+    if int::max(3 7) != 7 { return false }
+    if int::max(7 3) != 7 { return false }
     return true
 }
 
 @[test]
 pub fn math_clamp: () :bool {
-    if math::int::clamp(1 0 5) != 1 { return false }
-    if math::int::clamp(0 -1 5) != 0 { return false }
-    if math::int::clamp(10 0 5) != 5 { return false }
+    if int::clamp(1 0 5) != 1 { return false }
+    if int::clamp(0 -1 5) != 0 { return false }
+    if int::clamp(10 0 5) != 5 { return false }
     return true
 }
 
 @[test]
 pub fn math_seq_range: () :bool {
-    set r = math::seq::range(5)
+    set r = seq::range(5)
     if vec::len(r) != 5 { return false }
     if vec::get::i64(r 0) != 0 { return false }
     if vec::get::i64(r 4) != 4 { return false }
@@ -50,7 +55,7 @@ pub fn math_seq_range: () :bool {
 
 @[test]
 pub fn math_seq_between: () :bool {
-    set rb = math::seq::between(2 6)
+    set rb = seq::between(2 6)
     if vec::len(rb) != 4 { return false }
     if vec::get::i64(rb 0) != 2 { return false }
     if vec::get::i64(rb 3) != 5 { return false }
@@ -59,7 +64,7 @@ pub fn math_seq_between: () :bool {
 
 @[test]
 pub fn math_seq_step: () :bool {
-    set rs = math::seq::step(0 10 3)
+    set rs = seq::step(0 10 3)
     if vec::len(rs) != 4 { return false }
     if vec::get::i64(rs 0) != 0 { return false }
     if vec::get::i64(rs 3) != 9 { return false }
@@ -68,7 +73,7 @@ pub fn math_seq_step: () :bool {
 
 @[test]
 pub fn math_seq_between_descending: () :bool {
-    set rd = math::seq::between(6 2)
+    set rd = seq::between(6 2)
     if vec::len(rd) != 4 { return false }
     if vec::get::i64(rd 0) != 6 { return false }
     if vec::get::i64(rd 3) != 3 { return false }
@@ -86,7 +91,7 @@ pub fn math_minlist_maxlist: () :bool {
 @[test]
 pub fn math_sum_mean: () :bool {
     set nums = [5 2 8 1 9] :vec[i64]
-    if math::int::sum(nums) != 25 { return false }
-    if !f64_close(5.0 math::stats::mean(nums)) { return false }
+    if int::sum(nums) != 25 { return false }
+    if !f64_close(5.0 stats::mean(nums)) { return false }
     return true
 }

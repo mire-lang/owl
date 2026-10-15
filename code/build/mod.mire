@@ -202,7 +202,23 @@ pub fn compile: (args :&vec[str] is_run :bool) {
         } else {
             set entry = use! util::config_required("project" "entry")
             set file = entry :str mut
-            if cli_file != "" && fs::exists(cli_file) { set file = cli_file }
+            if cli_file != "" && fs::exists(cli_file) {
+                if use! util::endswith(cli_file ".mire") {
+                    set file = cli_file
+                } else {
+                    // cli_file is a directory: read config from its owl.toml so
+                    // `owl build <project-dir>` works without changing cwd.
+                    set proj_owl_toml = strings::concat(cli_file "/owl.toml")
+                    if fs::exists(proj_owl_toml) {
+                        set dir_entry = use! util::toml_get(proj_owl_toml "project" "entry")
+                        if dir_entry != "" { set file = strings::concat(cli_file "/" dir_entry) }
+                        set dir_output = use! util::toml_get(proj_owl_toml "paths" "output")
+                        if dir_output != "" { set out_dir = dir_output :str mut }
+                        set dir_cache = use! util::toml_get(proj_owl_toml "paths" "cache")
+                        if dir_cache != "" { set cache_dir = dir_cache :str mut }
+                    }
+                }
+            }
 
             set profile = use! util::config_required("build" "profile") :str mut
             set opt = use! util::config_required("build" "opt-level") :str mut
