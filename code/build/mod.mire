@@ -16,6 +16,140 @@ load kioto::proc
 load! /code/lockfile
 load kioto::proc
 load! /code/_externs
+pub fn append_c_and_security_flags: (argv :vec[str]) :vec[str] {
+    // Return fresh storage. Returning an alias of argv makes the assignment at
+    // the call site release the same vector that the new binding still uses.
+    set out = [] :vec[str] mut
+    set argument_index = 0 :i64 mut
+    while argument_index < vec::len(argv) {
+        set out = vec::push::str(out strings::copy(vec::get::str(argv argument_index)))
+        set argument_index += 1
+    }
+
+    // ── [c] ──
+    set c_sources = use! util::toml_get_array("owl.toml" "c" "sources")
+    set si = 0 :i64 mut
+    while si < vec::len(c_sources) {
+        set src = use! util::list_get(c_sources si)
+        if src != "" {
+            set out = vec::push::str(out "--c-source")
+            set out = vec::push::str(out strings::copy(src))
+        }
+        set si = si + 1
+    }
+    set c_include = use! util::toml_get_array("owl.toml" "c" "include")
+    set ci = 0 :i64 mut
+    while ci < vec::len(c_include) {
+        set inc = use! util::list_get(c_include ci)
+        if inc != "" {
+            set out = vec::push::str(out "--c-include")
+            set out = vec::push::str(out strings::copy(inc))
+        }
+        set ci = ci + 1
+    }
+    set c_cflags = use! util::toml_get_array("owl.toml" "c" "cflags")
+    set cf = 0 :i64 mut
+    while cf < vec::len(c_cflags) {
+        set flag = use! util::list_get(c_cflags cf)
+        if flag != "" {
+            set out = vec::push::str(out "--cflag")
+            set out = vec::push::str(out strings::copy(flag))
+        }
+        set cf = cf + 1
+    }
+    set c_libs = use! util::toml_get_array("owl.toml" "c" "libs")
+    set cl = 0 :i64 mut
+    while cl < vec::len(c_libs) {
+        set lib_name = use! util::list_get(c_libs cl)
+        if lib_name != "" {
+            set out = vec::push::str(out "--c-lib")
+            set out = vec::push::str(out strings::copy(lib_name))
+        }
+        set cl = cl + 1
+    }
+
+    // ── [security] ──
+    set sec_mode = use! util::toml_get("owl.toml" "security" "mode")
+    // Only forwarded when the manifest states a mode. The compiler already
+    // defaults to open when no mode is given, and omitting the flag also avoids
+    // having to write the word "open" here, which cannot be a string literal
+    // because `open` is a module keyword.
+    if sec_mode != "" {
+        set out = vec::push::str(out "--security-mode")
+        set out = vec::push::str(out strings::copy(sec_mode))
+    }
+
+    set sec_externs = use! util::toml_get_array("owl.toml" "security" "externs")
+    set se = 0 :i64 mut
+    while se < vec::len(sec_externs) {
+        set pattern = use! util::list_get(sec_externs se)
+        if pattern != "" {
+            set out = vec::push::str(out "--extern")
+            set out = vec::push::str(out strings::copy(pattern))
+        }
+        set se = se + 1
+    }
+    // Read both spellings. Real manifests use `extern_libs` with an underscore,
+    // because that is what the compiler config struct calls it, while the older
+    // generated config emitted `extern-libs` with a dash. Looking up only the
+    // dashed form silently produced an empty allowlist, so every extern lib was
+    // rejected and the build failed with "extern lib 'c' is not allowed in
+    // [security].extern_libs" while the manifest plainly allowed it.
+    // Read both spellings into one list. Real manifests use `extern_libs` with an
+    // underscore, because that is what the compiler config struct calls it,
+    // while the older generated config emitted the dashed `extern-libs`. Looking
+    // up only the dashed form produced an empty allowlist, so every extern lib
+    // was rejected and the build failed with "extern lib 'c' is not allowed in
+    // [security].extern_libs" while the manifest plainly allowed it.
+    //
+    // Assembled into a fresh list rather than reassigning one local from
+    // another: `set x = <vec[str] expr>` over an existing vec[str] local is
+    // rejected by the typechecker, so the fallback cannot be a plain reassignment.
+    set lib_src = [] :vec[str] mut
+    set lib_dashed = use! util::toml_get_array("owl.toml" "security" "extern-libs")
+    set lib_dashed_n = vec::len(lib_dashed)
+    set li = 0 :i64 mut
+    while li < lib_dashed_n {
+        set lib_d = use! util::list_get(lib_dashed li)
+        if lib_d != "" {
+            set lib_src = vec::push::str(lib_src strings::copy(lib_d))
+        }
+        set li = li + 1
+    }
+    if vec::len(lib_src) == 0 {
+        set lib_under = use! util::toml_get_array("owl.toml" "security" "extern_libs")
+        set lib_under_n = vec::len(lib_under)
+        set lj = 0 :i64 mut
+        while lj < lib_under_n {
+            set lib_u = use! util::list_get(lib_under lj)
+            if lib_u != "" {
+                set lib_src = vec::push::str(lib_src strings::copy(lib_u))
+            }
+            set lj = lj + 1
+        }
+    }
+    set sl = 0 :i64 mut
+    while sl < vec::len(lib_src) {
+        set lib_name = use! util::list_get(lib_src sl)
+        set out = vec::push::str(out "--extern-lib")
+        set out = vec::push::str(out strings::copy(lib_name))
+        set sl = sl + 1
+    }
+    set sec_macros = use! util::toml_get_array("owl.toml" "security" "macros")
+    set sm = 0 :i64 mut
+    while sm < vec::len(sec_macros) {
+        set mac = use! util::list_get(sec_macros sm)
+        if mac != "" {
+            set out = vec::push::str(out "--allow-macro")
+            set out = vec::push::str(out strings::copy(mac))
+        }
+        set sm = sm + 1
+    }
+    if use! util::toml_get("owl.toml" "security" "allow-unsafe") == "true" {
+        set out = vec::push::str(out "--allow-unsafe")
+    }
+    return out
+}
 
 /! Validate the project environment before compilation. A missing or stale
    lockfile is a dependency-management state, not a compiler error: Owl asks
@@ -211,7 +345,9 @@ pub fn compile: (args :&vec[str] is_run :bool) {
                     set proj_owl_toml = strings::concat(cli_file "/owl.toml")
                     if fs::exists(proj_owl_toml) {
                         set dir_entry = use! util::toml_get(proj_owl_toml "project" "entry")
-                        if dir_entry != "" { set file = strings::concat(cli_file "/" dir_entry) }
+                        if dir_entry != "" {
+                            set slash = strings::concat(cli_file "/")
+                            set file = strings::concat(slash dir_entry)
                         set dir_output = use! util::toml_get(proj_owl_toml "paths" "output")
                         if dir_output != "" { set out_dir = dir_output :str mut }
                         set dir_cache = use! util::toml_get(proj_owl_toml "paths" "cache")
@@ -270,315 +406,3 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
                 set argv = vec::push::str(argv "--lib-dir")
                 set argv = vec::push::str(argv use! deps::compiler_lib_dirs())
                 set argv = use! build::append_c_and_security_flags(argv)
-                if extra_flags != "" {
-                    set toks = strings::split(extra_flags " ")
-                    set ti = 0 :i64 mut
-                    while ti < len(toks) {
-                        set tk = use! util::list_get(toks ti)
-                        if tk != "" { set argv = vec::push::str(argv strings::copy(tk)) }
-                        set ti += 1
-                    }
-                }
-
-                if is_run {
-                    set build_out = use! util::run_compiler(argv)
-                    use dasu(build_out)
-                    if use proc::run::last_exit() == 0 { 
-                        use! util::record_build() 
-                        set name = entry :str mut
-                        if cli_file != "" && (fs::exists(cli_file) || use! util::endswith(cli_file ".mire")) { set name = cli_file }
-                        if use! util::endswith(name ".mire") {
-                            set name = use! util::replace(name ".mire" "")
-                        }
-                        set parts = use! util::split(name "/")
-                        set name = use! util::list_get(parts len(parts) - 1)
-
-                        set bin = "./" + out_dir2 + "/" + profile + "/" + name :str mut
-
-                        use dasu("")
-                        use dasu("  running " + bin + " ...")
-                        use proc::run::spawn(bin run_args)
-                    }
-                } else {
-                    set out = use! util::run_compiler(argv)
-                    use dasu(out)
-                    if use proc::run::last_exit() == 0 { use! util::record_build() }
-                }
-            }
-        }
-    }
-}
-
-pub fn debug: (args :&vec[str]) {
-    set is_proj = use! util::has_project() :bool mut
-    set n = vec::len(args) :i64 mut
-
-    set file_idx = 1 :i64 mut
-    set fi = 1 :i64 mut
-    while fi < n {
-        set fa = vec::get::str(args fi)
-        if !use! util::startswith(fa "-") {
-            set file_idx = fi
-            set fi = n
-        }
-        set fi += 1
-    }
-
-    set extra_flags = "" :str mut
-    set i = 1 :i64 mut
-    while i < n {
-        set a = vec::get::str(args i) :str mut
-        if a == "--tokens" || a == "-t" {
-            set extra_flags = extra_flags + " --tokens"
-        } else {
-            if a == "--ast" || a == "-p" {
-                set extra_flags = extra_flags + " --ast"
-            } else {
-                if a == "--ir" {
-                    set extra_flags = extra_flags + " --ir"
-                } else {
-                    if a == "--run" || a == "-r" {
-                        set extra_flags = extra_flags + " --run"
-                    } else {
-                        if !use! util::startswith(a "-") && (use! util::path_exists(a) || use! util::endswith(a ".mire")) {
-                            set file_idx = i
-                        } else {
-                            if use! util::startswith(a "-") {
-                                set extra_flags = extra_flags + " " + a
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        set i += 1
-    }
-
-    set cli_file = "" :str mut
-    if file_idx > 0 && file_idx < n { set cli_file = vec::get::str(args file_idx) }
-
-    if !is_proj {
-        if cli_file == "" {
-            use! util::error_line("OWL0002" "no file specified and no owl.toml found")
-            exit(1)
-            return
-        }
-        set argv = [] :vec[str] mut
-        set argv = vec::push::str(argv "debug")
-        set argv = vec::push::str(argv strings::copy(cli_file))
-        set argv = vec::push::str(argv "--lib-dir")
-        set lib_dirs = use! deps::compiler_lib_dirs()
-        set argv = vec::push::str(argv lib_dirs)
-        if extra_flags != "" {
-            set toks = strings::split(extra_flags " ")
-            set ti = 0 :i64 mut
-            while ti < len(toks) {
-                set tk = use! util::list_get(toks ti)
-                if tk != "" { set argv = vec::push::str(argv strings::copy(tk)) }
-                set ti += 1
-            }
-        }
-        set out = use! util::run_compiler(argv)
-        use dasu(out)
-        return
-    }
-
-    if !use! build::ensure_project_dependencies() {
-        use! util::error_line("OWL0003" "dependencies are unresolved")
-        exit(1)
-        return
-    }
-    set entry = use! util::config_required("project" "entry")
-    set file = entry :str mut
-    if cli_file != "" && fs::exists(cli_file) { set file = cli_file }
-    if !fs::exists(file) {
-        use! util::error_line("OWL0002" "input not found: " + file)
-        exit(1)
-        return
-    }
-    set argv = [] :vec[str] mut
-    set argv = vec::push::str(argv "debug")
-    set argv = vec::push::str(argv strings::copy(file))
-    set argv = vec::push::str(argv "--lib-dir")
-    set lib_dirs = use! deps::compiler_lib_dirs()
-    set argv = vec::push::str(argv lib_dirs)
-    if extra_flags != "" {
-        set toks = strings::split(extra_flags " ")
-        set ti = 0 :i64 mut
-        while ti < len(toks) {
-            set tk = use! util::list_get(toks ti)
-            if tk != "" { set argv = vec::push::str(argv strings::copy(tk)) }
-            set ti += 1
-        }
-    }
-    set out = use! util::run_compiler(argv)
-    use dasu(out)
-}
-
-pub fn new: (name :str) {
-    if fs::exists(name) {
-        use dasu("Error: directory already exists")
-    } else {
-        set dirs = use! util::split(name "/")
-        set base = use! util::list_get(dirs len(dirs) - 1)
-        set n = base
-        use! util::mkdir_p(name + "/code")
-        use! util::mkdir_p(name + "/bin")
-        use! util::mkdir_p(name + "/tests")
-        use! util::mkdir_p(name + "/docs")
-
-        set mire_path = use! util::owl_home_libs_display() + "/mire"
-        set auto = use! deps::gather_latest_libs()
-        set deps_section = "[dependencies]\nmire = { path = \"" + mire_path + "\", version = \"0.1.0\" }\n"
-        set auto_section = "" :str mut
-        if auto != "" {
-            set auto_section = "\n[tool.owl.auto-deps]\n" + auto + "\n"
-        }
-        set toml = "[project]\nname = \"" + n + "\"\nversion = \"0.1.0\"\ndescription = \"A Mire project\"\nentry = \"code/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\n\n[paths]\nsources = \"code\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n\n" + deps_section + auto_section
-        use fs::write(name + "/owl.toml" toml)
-        use fs::write(name + "/code/main.mire" "pub fn main: () {\n    use dasu(\"ok\")\n}\n")
-        use fs::write(name + "/tests/smoke.mire" "@[test]\npub fn test_smoke: () :bool {\n    return true\n}\n")
-        use dasu("Project created: " + name)
-    }
-}
-
-/! Append the [c] and [security] sections to the compiler argv as flags.
-    This replaces the generated `mire-config.toml`: the compiler now accepts
-    every field as a flag, so owl reads its own manifest and passes the values
-    across. Nothing is written into the project's cache directory any more.
-    Every flag is repeated rather than joined, because a cflag or a source path
-    may legitimately contain a space. !/
-pub fn append_c_and_security_flags: (argv :vec[str]) :vec[str] {
-    // Return fresh storage. Returning an alias of argv makes the assignment at
-    // the call site release the same vector that the new binding still uses.
-    set out = [] :vec[str] mut
-    set argument_index = 0 :i64 mut
-    while argument_index < vec::len(argv) {
-        set out = vec::push::str(out strings::copy(vec::get::str(argv argument_index)))
-        set argument_index += 1
-    }
-
-    // ── [c] ──
-    set c_sources = use! util::toml_get_array("owl.toml" "c" "sources")
-    set si = 0 :i64 mut
-    while si < vec::len(c_sources) {
-        set src = use! util::list_get(c_sources si)
-        if src != "" {
-            set out = vec::push::str(out "--c-source")
-            set out = vec::push::str(out strings::copy(src))
-        }
-        set si = si + 1
-    }
-    set c_include = use! util::toml_get_array("owl.toml" "c" "include")
-    set ci = 0 :i64 mut
-    while ci < vec::len(c_include) {
-        set inc = use! util::list_get(c_include ci)
-        if inc != "" {
-            set out = vec::push::str(out "--c-include")
-            set out = vec::push::str(out strings::copy(inc))
-        }
-        set ci = ci + 1
-    }
-    set c_cflags = use! util::toml_get_array("owl.toml" "c" "cflags")
-    set cf = 0 :i64 mut
-    while cf < vec::len(c_cflags) {
-        set flag = use! util::list_get(c_cflags cf)
-        if flag != "" {
-            set out = vec::push::str(out "--cflag")
-            set out = vec::push::str(out strings::copy(flag))
-        }
-        set cf = cf + 1
-    }
-    set c_libs = use! util::toml_get_array("owl.toml" "c" "libs")
-    set cl = 0 :i64 mut
-    while cl < vec::len(c_libs) {
-        set lib_name = use! util::list_get(c_libs cl)
-        if lib_name != "" {
-            set out = vec::push::str(out "--c-lib")
-            set out = vec::push::str(out strings::copy(lib_name))
-        }
-        set cl = cl + 1
-    }
-
-    // ── [security] ──
-    set sec_mode = use! util::toml_get("owl.toml" "security" "mode")
-    // Only forwarded when the manifest states a mode. The compiler already
-    // defaults to open when no mode is given, and omitting the flag also avoids
-    // having to write the word "open" here, which cannot be a string literal
-    // because `open` is a module keyword.
-    if sec_mode != "" {
-        set out = vec::push::str(out "--security-mode")
-        set out = vec::push::str(out strings::copy(sec_mode))
-    }
-
-    set sec_externs = use! util::toml_get_array("owl.toml" "security" "externs")
-    set se = 0 :i64 mut
-    while se < vec::len(sec_externs) {
-        set pattern = use! util::list_get(sec_externs se)
-        if pattern != "" {
-            set out = vec::push::str(out "--extern")
-            set out = vec::push::str(out strings::copy(pattern))
-        }
-        set se = se + 1
-    }
-    // Read both spellings. Real manifests use `extern_libs` with an underscore,
-    // because that is what the compiler config struct calls it, while the older
-    // generated config emitted `extern-libs` with a dash. Looking up only the
-    // dashed form silently produced an empty allowlist, so every extern lib was
-    // rejected and the build failed with "extern lib 'c' is not allowed in
-    // [security].extern_libs" while the manifest plainly allowed it.
-    // Read both spellings into one list. Real manifests use `extern_libs` with an
-    // underscore, because that is what the compiler config struct calls it,
-    // while the older generated config emitted the dashed `extern-libs`. Looking
-    // up only the dashed form produced an empty allowlist, so every extern lib
-    // was rejected and the build failed with "extern lib 'c' is not allowed in
-    // [security].extern_libs" while the manifest plainly allowed it.
-    //
-    // Assembled into a fresh list rather than reassigning one local from
-    // another: `set x = <vec[str] expr>` over an existing vec[str] local is
-    // rejected by the typechecker, so the fallback cannot be a plain reassignment.
-    set lib_src = [] :vec[str] mut
-    set lib_dashed = use! util::toml_get_array("owl.toml" "security" "extern-libs")
-    set lib_dashed_n = vec::len(lib_dashed)
-    set li = 0 :i64 mut
-    while li < lib_dashed_n {
-        set lib_d = use! util::list_get(lib_dashed li)
-        if lib_d != "" {
-            set lib_src = vec::push::str(lib_src strings::copy(lib_d))
-        }
-        set li = li + 1
-    }
-    if vec::len(lib_src) == 0 {
-        set lib_under = use! util::toml_get_array("owl.toml" "security" "extern_libs")
-        set lib_under_n = vec::len(lib_under)
-        set lj = 0 :i64 mut
-        while lj < lib_under_n {
-            set lib_u = use! util::list_get(lib_under lj)
-            if lib_u != "" {
-                set lib_src = vec::push::str(lib_src strings::copy(lib_u))
-            }
-            set lj = lj + 1
-        }
-    }
-    set sl = 0 :i64 mut
-    while sl < vec::len(lib_src) {
-        set lib_name = use! util::list_get(lib_src sl)
-        set out = vec::push::str(out "--extern-lib")
-        set out = vec::push::str(out strings::copy(lib_name))
-        set sl = sl + 1
-    }
-    set sec_macros = use! util::toml_get_array("owl.toml" "security" "macros")
-    set sm = 0 :i64 mut
-    while sm < vec::len(sec_macros) {
-        set mac = use! util::list_get(sec_macros sm)
-        if mac != "" {
-            set out = vec::push::str(out "--allow-macro")
-            set out = vec::push::str(out strings::copy(mac))
-        }
-        set sm = sm + 1
-    }
-    if use! util::toml_get("owl.toml" "security" "allow-unsafe") == "true" {
-        set out = vec::push::str(out "--allow-unsafe")
-    }
-    return out
-}
