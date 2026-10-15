@@ -858,8 +858,8 @@ pub fn dependency_checksum: (pkg_name :str, installed_version :str) :str {
     set meta_path = use! util::expand_home("~/.owl/libs/" + pkg_name + "/meta.toml")
     if !fs::exists(meta_path) { return "" }
 
-    set expected = use! crypto::checksum::store_get(store key)
-    set actual = use! crypto::checksum::file(meta_path)
+    set expected = use! checksum::store_get(store key)
+    set actual = use! checksum::file(meta_path)
 
     if expected != "" {
         if expected == actual {
@@ -873,7 +873,7 @@ pub fn dependency_checksum: (pkg_name :str, installed_version :str) :str {
 
     if actual == "" { return "" }
     use! util::mkdir_p(use! util::expand_home("~/.owl/cache"))
-    use! crypto::checksum::store_put(store key actual)
+    use! checksum::store_put(store key actual)
     use dasu("  [OK]   checksum guardado para " + key)
     return actual
 }

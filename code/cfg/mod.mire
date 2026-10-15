@@ -1,4 +1,5 @@
 module cfg
+load kioto::fs
 
 load mire::vec
 load! /code/_externs
@@ -40,9 +41,9 @@ pub fn default_global_cfg: () :str {
 /! Ensure global config exists !/
 pub fn ensure_global_cfg: () {
     set path = use! cfg::global_cfg_path()
-    if !use! util::fs_exists(path) {
+    if !use! fs::exists(path) {
         use! util::mkdir_p(use! util::owl_home_cfg())
-        use! util::fs_write(path use! cfg::default_global_cfg())
+        use! fs::write(path use! cfg::default_global_cfg())
     }
 }
 
@@ -84,7 +85,7 @@ pub fn set_project: (key :str value :str) :bool {
 pub fn list_global: () {
     use! cfg::ensure_global_cfg()
     set path = use! cfg::global_cfg_path()
-    set content = use! util::fs_read(path)
+    set content = use! fs::read(path)
     use dasu("Global config (" + path + "):")
     use dasu(content)
 }
@@ -153,11 +154,11 @@ pub fn run: (args :&vec[str]) :i64 {
     } elif cmd == "list" {
         if is_project {
             if use! util::has_project() {
-                set content = use! util::fs_read("owl.toml")
+                set content = use! fs::read("owl.toml")
                 set cfg_start = strings::index(content "[cfg]")
                 if cfg_start >= 0 {
                     set next_sec = strings::index(strings::substr(content cfg_start + 5 9999) "\n[")
-                    set cfg_content = ""
+                    set cfg_content = "" :str mut
                     if next_sec >= 0 {
                         set cfg_content = strings::substr(content cfg_start cfg_start + 5 + next_sec)
                     } else {
@@ -184,9 +185,9 @@ pub fn run: (args :&vec[str]) :i64 {
 /! Legacy compatibility: reads lock/update@lock from project [cfg] !/
 pub fn legacy_lock_config: () :str {
     if !use! util::has_project() { return "lock=1\nupdate@lock=Build" }
-    set lock = use! util::toml_get("owl.toml" "cfg" "lock")
-    if lock == "" { set lock = "1" }
-    set update = use! util::toml_get("owl.toml" "cfg" "update@lock")
-    if update == "" { set update = "Build" }
+    set lock = use! util::toml_get("owl.toml" "cfg" "lock") :str mut
+    if lock == "" { set lock = "1" :str mut }
+    set update = use! util::toml_get("owl.toml" "cfg" "update@lock") :str mut
+    if update == "" { set update = "Build" :str mut }
     return "lock=" + lock + "\nupdate@lock=" + update
 }

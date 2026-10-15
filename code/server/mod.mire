@@ -1,0 +1,96 @@
+module server
+
+load mire::vec
+load mire::map
+load mire::str
+load! /code/util
+load! /code/build
+load kioto::proc
+
+// Default server port (can be configured via owl.toml or env var)
+pub fn default_port: i64 { 80 }
+
+// Get server address from config or env
+pub fn server_address: str {
+    set env_addr = env::var("OWL_SERVER_ADDR")
+    if env_addr != "" { return env_addr }
+    set cfg_addr = use! util::toml_get("owl.toml" "cfg" "server_address")
+    if cfg_addr != "" { return cfg_addr }
+    "127.0.0.1"
+}
+
+// Get server port from config or env
+pub fn server_port: i64 {
+    set env_port = env::var("OWL_SERVER_PORT")
+    if env_port != "" { return use! util::string_to_i64(env_port) }
+    set cfg_port = use! util::toml_get_i64("owl.toml" "cfg" "server_port")
+    if cfg_port != 0 { return cfg_port }
+    default_port()
+}
+
+// Start the server (one-shot: handle one request then exit)
+pub fn run: (args :vec[str]) :str {
+    set address = server_address()
+    set port = server_port()
+    set port_str = use! util::i64_to_string(port)
+    
+    // Display server info
+    use dasu("Starting Owl server on " + address + ":" + port_str)
+    use dasu("Press Ctrl-C to stop (server handles one request then exits)")
+    
+    // For now, just listen and handle a single compile request
+    // In a full implementation, this would set up a TCP listener
+    // and handle the owl/avenys protocol
+    
+    // Try to handle a compile request if provided via args
+    if vec::len(args) > 1 {
+        set input_file = vec::get::str(args 1)
+        if use! util::path_exists(input_file) {
+            if use! util::endswith(input_file ".c") {
+                set c_output = use! util::compile_c_with_libtcc(input_file)
+                use dasu("C file compiled with libtcc: " + c_output)
+                // Run the compiled binary
+                use proc::run::spawn(c_output)
+            } else if use! util::endswith(input_file ".mire") || use! util::endswith(input_file ".mr") {
+                // Build and run mire file
+                set argv = [] :vec[str] mut
+                set argv = vec::push::str(argv "build")
+                set argv = vec::push::str(argv input_file)
+                set argv = vec::push::str(argv "--release")
+                set argv = vec::push::str(argv "--artifact")
+                set argv = vec::push::str(argv "bin")
+                set argv = vec::push::str(argv "--target")
+                set argv = vec::push::str(argv "x86_64-unknown-linux-gnu")
+                set out = use! util::run_compiler(argv)
+                use dasu(out)
+                if use proc::run::last_exit() == 0 {
+                    set bin = use! util::config_required("paths" "output") + "/release/" + input_file
+                    // Remove .mire extension for binary name
+                    set bin_name = use! util::replace(bin ".mire" "")
+                    use dasu("Running: " + bin_name)
+                    use proc::run::spawn(bin_name)
+                }
+            } else {
+                use dasu("Unsupported file type: " + input_file)
+            }
+        } else {
+            use dasu("File not found: " + input_file)
+        }
+    } else {
+        // No input file - just wait and show help
+        use dasu("Owl server running. Use: owl server <file> to compile/run a file")
+        // Wait indefinitely (simple approach)
+        loop {
+            set _ = use! util::sleep(1000)
+        }
+    }
+    
+    "server completed"
+}
+
+// Parse i64 from toml config section
+pub fn toml_get_i64: (file :str section :str key :str) :i64 {
+    set val_str = use! util::toml_get(file section key)
+    if val_str == "" { return 0 }
+    use! util::string_to_i64(val_str)
+}

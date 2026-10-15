@@ -18,7 +18,10 @@ pub fn url: (args :&vec[str]) {
         use dasu("usage: owl load --url <url>")
         use dasu("       owl -Lu <url>")
     } else {
-        use! registry::add(url)
+        set add_args = [] :vec[str] mut
+        set add_args = vec::push::str(add_args "add")
+        set add_args = vec::push::str(add_args url)
+        use! registry::add(add_args)
     }
     return
 }
@@ -144,7 +147,10 @@ pub fn remove_registry: (args :&vec[str]) {
     if name == "" {
         use dasu("usage: owl load -r|--remove <name>")
     } else {
-        use! registry::remove(name)
+        set rm_args = [] :vec[str] mut
+        set rm_args = vec::push::str(rm_args "remove")
+        set rm_args = vec::push::str(rm_args name)
+        use! registry::remove(rm_args)
     }
     return
 }
@@ -156,7 +162,9 @@ pub fn run: (args :&vec[str]) {
     set is_rm = use! args::flag::has(args "-r") || use! args::flag::has(args "--remove")
     if is_url { use! dload::url(args) } else {
         if is_list { use! registry::list() } else {
-            if is_sync { use! registry::sync() } else {
+            if is_sync { set sync_args = [] :vec[str] mut
+            set sync_args = vec::push::str(sync_args "sync")
+            use! registry::sync(sync_args) } else {
                 if is_rm { use! dload::remove_registry(args) } else {
                     use! dload::dependency(args)
                 }
@@ -175,26 +183,32 @@ pub fn registry_command: (args :&vec[str]) {
         if url_value == "" {
             use dasu("usage: owl reg add <url>")
         } else {
-            use! registry::add(url_value)
+            set add_args = [] :vec[str] mut
+            set add_args = vec::push::str(add_args "add")
+            set add_args = vec::push::str(add_args url_value)
+            use! registry::add(add_args)
         }
     } else {
         if action == "list" {
             use! registry::list()
-            use! registry::list_beta()
         } else {
             if action == "sync" {
-                use! registry::sync()
+                set sync_args = [] :vec[str] mut
+            set sync_args = vec::push::str(sync_args "sync")
+            use! registry::sync(sync_args)
             } else {
                 if action == "remove" {
                     set name = use! args::position::get(args 1)
                     if name == "" {
                         use dasu("usage: owl reg remove <name>")
                     } else {
-                        use! registry::remove(name)
+                        set rm_args = [] :vec[str] mut
+        set rm_args = vec::push::str(rm_args "remove")
+        set rm_args = vec::push::str(rm_args name)
+        use! registry::remove(rm_args)
                     }
                 } else {
                     if action == "beta" {
-                        use! registry::list_beta()
                     } else {
                         use dasu("usage: owl reg <add|list|sync|remove|beta> [value]")
                     }

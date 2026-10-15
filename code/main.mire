@@ -105,12 +105,13 @@ pub fn main: () {
         "load" { use dasu("load command not yet implemented") }
         "install" { use! install::run_simple(args) }
         "export" { use! export::run(args) }
-        "reg" { use! registry::sync() }
+        "reg" { use! registry::sync_all() }
         "deps" { use deps_tree() }
         "clean-cache" { use! clean::run(args) }
         "gc" { use! gc::run(args) }
         "upgrade" { use! upgrade::run(args) }
         "help" { use! ui::help() }
+        "server" { use! server::run(args) }
         "-h" { use! ui::help() }
         "--help" { use! ui::help() }
         "version" { use! ui::banner() }

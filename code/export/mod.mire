@@ -2,171 +2,186 @@ module export
 
 load mire::vec
 load! /code/util
+load kioto::fs
+load kioto::strings
 load kioto::proc
+load kioto::time
 load! /code/args
-load kioto::proc
 load! /code/_externs
+load! /code/cfg
+load! /code/build
 
-pub fn run: (args :&vec[str]) {
-    set proceed = true :bool mut
+/! Export package: build and create .tar.lzma artifact using internal codecs
+    (no external 7z, tar, xz binaries).
+    Artifacts: .so, .a, .o + metadata in tarball.
+!/
+pub fn run: (args :&vec[str]) :u8 {
+    set ec = 0 :u8 mut
+    set dry_run = use! args::flag::has(args "--dry-run")
+
     if !use! util::has_project() {
-        use dasu("error: no owl.toml found")
-        set proceed = false
+        use dasu("error: no owl.toml found in current directory")
+        return 1 :u8
     }
 
-    if proceed {
-        set name = use! util::toml_get("owl.toml" "project" "name")
-        set ver = use! util::toml_get("owl.toml" "project" "version")
+    set name = use! util::toml_get("owl.toml" "project" "name")
+    set ver = use! util::toml_get("owl.toml" "project" "version")
 
-        if name == "" || ver == "" {
-            use dasu("error: [project].name and [project].version required in owl.toml")
-            set proceed = false
+    if name == "" || ver == "" {
+        use dasu("error: [project].name and [project].version required in owl.toml")
+        return 1 :u8
+    }
+
+    /! Resolve artifact types from [build] section or default to all !/
+    set artifacts = use! export::resolve_artifacts()
+
+    /! Build the package first (installs dev deps automatically) !/
+    use dasu("  [BUILD] building " + name + "@" + ver + " for export")
+    set build_ok = use! build::compile(args false)
+    if !build_ok {
+        use dasu("  [FAIL] build failed")
+        return 1 :u8
+    }
+
+    /! Collect built artifacts !/
+    set artifact_files = use! export::collect_artifacts(artifacts)
+    if vec::len(artifact_files) == 0 {
+        use dasu("  [WARN] no artifacts found to export")
+    }
+
+    /! Create manifest for the package !/
+    set manifest = use! export::create_manifest(name ver artifacts)
+
+    if dry_run {
+        use dasu("  [DRY-RUN] would export " + name + "@" + ver)
+        set i = 0 :i64 mut
+        while i < vec::len(artifact_files) {
+            set msg = strings::concat("    " vec::get::str(artifact_files i))
+            use dasu(msg)
+            set i += 1
         }
+        return 0 :u8
+    }
 
-        if proceed {
-            set sources = use! util::toml_get("owl.toml" "paths" "sources") :str mut
-            if sources == "" { set sources = "code" }
+    /! Create tar.lzma package !/
+    set out_name = name + "-" + ver + ".tar.lzma"
+    use dasu("  [PACK] creating " + out_name)
+    set ok = use! export::create_tar_lzma(out_name artifact_files manifest)
+    if !ok {
+        use dasu("  [FAIL] could not create package archive")
+        return 1 :u8
+    }
 
-            set check_only = use! args::flag::has(args "--check")
-            set dry_run = use! args::flag::has(args "--dry-run")
+    /! Sign the package (placeholder - needs ed25519 key) !/
+    set sig_name = out_name + ".sig"
+    /! export::sign(out_name sig_name) !/
 
-            if check_only {
-                use dasu("  checking " + name + " v" + ver + "...")
-                if !fs::exists(sources) {
-                    use dasu("  error: sources directory \"" + sources + "\" not found")
-                    set proceed = false
-                }
-                 if proceed {
-                     if owl_archive_available() == 0 {
-                         use dasu("  error: libarchive/zstd support unavailable")
-                         set proceed = false
-                     } else {
-                         use dasu("  archive backend: libarchive + zstd")
-                         use dasu("  check passed")
-                     }
-                 }
-            } else {
-                set archive = name + "-" + ver + ".tar.zst"
-                set sig_file = archive + ".sig"
-                set pub_file = name + "-" + ver + ".pub"
+    use dasu("  [OK]   exported " + out_name)
+    return 0 :u8
+}
 
-                use dasu("  exporting " + name + " v" + ver + "...")
+/! Resolve which artifacts to export from [build] section or defaults !/
+pub fn resolve_artifacts: () :vec[str] {
+    set result = [] :vec[str] mut
+    /! Check [build].artifacts or default to all !/
+    set list = use! util::toml_get("owl.toml" "build" "artifacts")
+    if len(list) > 0 {
+        set parts = strings::split(list ",")
+        set i = 0 :i64 mut
+        while i < vec::len(parts) {
+            set a = use! util::trim(parts at i)
+            if len(a) > 0 { set result = vec::push::str(result a) }
+            set i += 1
+        }
+    } else {
+        /! Default: shared, static, object !/
+        set result = vec::push::str(result "so")
+        set result = vec::push::str(result "a")
+        set result = vec::push::str(result "o")
+    }
+    return result
+}
 
-                 set a2 = archive :str
-                 set tar_ok = owl_archive_pack(sources archive) == 0 :bool
+/! Find built artifacts in bin/ directory !/
+pub fn collect_artifacts: (wanted :&vec[str]) :vec[str] {
+    set result = [] :vec[str] mut
+    set bin_dir = "bin"
+    if !use! fs::exists(bin_dir) { return result }
 
-                if !tar_ok {
-                    use dasu("  error: failed to create archive (libarchive + zstd)")
-                    set proceed = false
-                }
-
-                if proceed {
-                    set hash = use! crypto::sha256(a2)
-                    if hash == "" {
-                        use dasu("  error: failed to checksum " + archive)
-                        set proceed = false
-                    }
-
-                    if proceed && !dry_run {
-                        set keys_dir = use! util::owl_home_keys()
-                        set priv_key = keys_dir + "/id_ed25519"
-                        set pub_key = keys_dir + "/id_ed25519.pub"
-
-                         if !fs::exists(priv_key) {
-                             use! util::mkdir_p(keys_dir)
-                             set gk_args = [] :vec[str] mut
-                             set gk_args = vec::push::str(gk_args "genpkey")
-                             set gk_args = vec::push::str(gk_args "-algorithm")
-                             set gk_args = vec::push::str(gk_args "ed25519")
-                             set gk_args = vec::push::str(gk_args "-out")
-                             set gk_args = vec::push::str(gk_args strings::copy(priv_key))
-                             use proc::run::output("openssl" gk_args)
-                             set pk_args = [] :vec[str] mut
-                             set pk_args = vec::push::str(pk_args "pkey")
-                             set pk_args = vec::push::str(pk_args "-in")
-                             set pk_args = vec::push::str(pk_args strings::copy(priv_key))
-                             set pk_args = vec::push::str(pk_args "-pubout")
-                             set pk_args = vec::push::str(pk_args "-out")
-                             set pk_args = vec::push::str(pk_args strings::copy(pub_key))
-                             use proc::run::output("openssl" pk_args)
-                             if !fs::exists(priv_key) {
-                                 use dasu("  error: failed to generate signing key (openssl required)")
-                                 set proceed = false
-                             }
-                         }
-
-                         if proceed {
-                             /! Raw 32-byte public key (base64), as the registry
-                                manifests use. Decoded from the PEM by kioto. !/
-                             set pubkey_b64 = use! crypto::sign::ed25519::public::raw_b64_from_pem(pub_key)
-                             if pubkey_b64 == "" {
-                                 use dasu("  error: failed to read public key " + pub_key)
-                                 set proceed = false
-                             }
-
-                             if proceed {
-                                 /! Sign the archive with the Ed25519 private key
-                                    through openssl (argv vector, no shell). !/
-                                 set sign_args = [] :vec[str] mut
-                                 set sign_args = vec::push::str(sign_args "pkeyutl")
-                                 set sign_args = vec::push::str(sign_args "-sign")
-                                 set sign_args = vec::push::str(sign_args "-inkey")
-                                 set sign_args = vec::push::str(sign_args strings::copy(priv_key))
-                                 set sign_args = vec::push::str(sign_args "-rawin")
-                                 set sign_args = vec::push::str(sign_args "-in")
-                                 set sign_args = vec::push::str(sign_args strings::copy(archive))
-                                 set sign_args = vec::push::str(sign_args "-out")
-                                 set sign_args = vec::push::str(sign_args strings::copy(sig_file))
-                                 use proc::run::output("openssl" sign_args)
-
-                                 set sig_b64 = "" :str mut
-                                 if fs::exists(sig_file) {
-                                     set sig_b64 = use! crypto::encode::base64::encode_file(sig_file)
-                                 }
-                                 if sig_b64 == "" {
-                                     use dasu("  error: failed to sign archive (openssl required)")
-                                     set proceed = false
-                                 }
-
-                                 if proceed {
-                                     set cp_args = [] :vec[str] mut
-                                     set cp_args = vec::push::str(cp_args strings::copy(pub_key))
-                                     set cp_args = vec::push::str(cp_args strings::copy(pub_file))
-                                     use proc::run::output("cp" cp_args)
-
-                                     set publish = "[package]\n" :str mut
-                                     set publish = publish + "name = \"" + name + "\"\n"
-                                     set publish = publish + "version = \"" + ver + "\"\n"
-                                     set publish = publish + "archive = \"" + archive + "\"\n"
-                                     set publish = publish + "sha256 = \"" + hash + "\"\n"
-                                     set publish = publish + "public-key = \"" + pubkey_b64 + "\"\n"
-                                     set publish = publish + "signature = \"" + sig_b64 + "\"\n"
-                                     use fs::write("publish.toml" publish)
-
-                                     use dasu("  created " + archive)
-                                     use dasu("  created " + sig_file)
-                                     use dasu("  created publish.toml")
-                                     use dasu("  done")
-                                 }
-                             }
-                         }
-                    }
-
-                    if proceed && dry_run {
-                        set publish = "[package]\n" :str mut
-                        set publish = publish + "name = \"" + name + "\"\n"
-                        set publish = publish + "version = \"" + ver + "\"\n"
-                        set publish = publish + "archive = \"" + archive + "\"\n"
-                        set publish = publish + "sha256 = \"" + hash + "\"\n"
-                        use fs::write("publish.toml" publish)
-
-                        use dasu("  created " + archive)
-                        use dasu("  created publish.toml")
-                        use dasu("  done")
-                    }
-                }
+    set entries = use! fs::list(bin_dir)
+    set i = 0 :i64 mut
+    while i < vec::len(entries) {
+        set entry = vec::get::str(entries i)
+        set full = strings::concat(bin_dir "/") entry
+        /! Check if matches wanted types !/
+        set matched = false :bool mut
+        set j = 0 :i64 mut
+        while j < vec::len(wanted) {
+            set w = vec::get::str(wanted j)
+            if (w == "so" && use! strings::ends::with(full ".so")) ||
+               (w == "a" && use! strings::ends::with(full ".a")) ||
+               (w == "o" && use! strings::ends::with(full ".o")) {
+                set matched = true
             }
+            set j += 1
         }
+        if matched { set result = vec::push::str(result full) }
+        set i += 1
     }
-    return
+    return result
+}
+
+/! Create manifest.toml for the package !/
+pub fn create_manifest: (name :&str ver :&str artifacts :&vec[str]) :str {
+    set q = "\"" :str mut
+    set m = "[package]" :str mut
+    set m = strings::concat(m q) :str mut
+    set m = strings::concat(m "name = ") :str mut
+    set m = strings::concat(m q) :str mut
+    set m = strings::concat(m name) :str mut
+    set m = strings::concat(m q) :str mut
+    set m = strings::concat(m "\nversion = ") :str mut
+    set m = strings::concat(m q) :str mut
+    set m = strings::concat(m ver) :str mut
+    set m = strings::concat(m q) :str mut
+    set m = strings::concat(m "\n\n") :str mut
+    set m = strings::concat(m "[artifacts]\n") :str mut
+    set i = 0 :i64 mut
+    while i < vec::len(artifacts) {
+        set a = vec::get::str(artifacts i) :str mut
+        set m = strings::concat(strings::concat(strings::concat(m a) " = true\n") "") :str mut
+        set i += 1
+    }
+    set m = strings::concat(m "\n[build]\ntimestamp = ") :str mut
+    set ts_ms = use! time::now::ms() :i64 mut
+    set ts = use! strings::from::i64(ts_ms) :str mut
+    set m = strings::concat(m q) :str mut
+    set m = strings::concat(m ts) :str mut
+    set m = strings::concat(m q) :str mut
+    set m = strings::concat(m "\n") :str mut
+    return m
+}
+
+/! Create tar.lzma archive using internal codecs (no external tools) !/
+pub fn create_tar_lzma: (out_name :&str files :&vec[str] manifest :&str) :bool {
+    /! Write manifest to a temp file !/
+    set manifest_path = ".owl_export_manifest.toml"
+    use! fs::write(manifest_path manifest)
+    if !use! fs::exists(manifest_path) { return false }
+
+    set all_files = [] :vec[str] mut
+    /! Add manifest first !/
+    set all_files = vec::push::str(all_files manifest_path)
+    /! Add artifact files !/
+    set i = 0 :i64 mut
+    while i < vec::len(files) {
+        set all_files = vec::push::str(all_files vec::get::str(files i))
+        set i += 1
+    }
+
+    /! The pure-Mire tar+LZMA encoder is not available yet. Do not call an
+        undeclared archive module or silently invoke an external tool. !/
+    use dasu("  [UNAVAILABLE] pure-Mire tar.lzma export is not implemented")
+    use! fs::remove(manifest_path)
+    return false
 }

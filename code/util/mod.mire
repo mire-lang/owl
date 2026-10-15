@@ -10,6 +10,7 @@ load kioto::mem
 load kioto::cpu
 load kioto::math
 load kioto::net
+load kioto::crypto::hash
 load kioto::log
 load kioto::cli
 load kioto::crypto
@@ -152,10 +153,12 @@ pub fn toml_array_literal: (items :&vec[str]) :str {
     return out + "]"
 }
 
-/! Inserts or replaces `key = "value"` inside `[section]` of a TOML file,
-   creating the section (and the file) when needed. Section names that are not
-   valid TOML bare keys (e.g. `owl@lock`) are written quoted. Returns true on
-   write. !/
+/!  
+    Inserts or replaces `key = "value"` inside `[section]` of a TOML file,
+    creating the section (and the file) when needed. Section names that are not
+    valid TOML bare keys (e.g. `owl@lock`) are written quoted. Returns true on
+    write. 
+!/
 pub fn toml_set: (file :str section :str key :str value :str) :bool {
     set content = "" :str mut
     if fs::exists(file) { set content = fs::read(file) }
@@ -459,7 +462,8 @@ pub fn owl_version: () :str {
 
 pub fn compiler_version: () :str {
     set ver = "" :str mut
-    set v = rt_proc_capture_argv(use! util::compiler_cmd() ["--version"])
+    set cmd = use! util::compiler_cmd()
+    set v = rt_proc_capture_argv(cmd, ["--version"])
     if v != "" {
         set ver = v
     } else {
@@ -850,7 +854,7 @@ pub fn substr_i64: (s :&str, start :i64, length :i64) :i64 { return use! util::s
    temp files). Returns "" on any failure. !/
 pub fn sha256sum_hex: (path :&str) :str {
     if !fs::exists(path) { return "" }
-    return use! crypto::hash::sha256_file(path)
+    return use! hash::sha256_file(path)
 }
 
 /! Returns the lowercase-hex SHA-512 of a file. The registry may publish
@@ -858,7 +862,7 @@ pub fn sha256sum_hex: (path :&str) :str {
    never trusts a hash copied from publish.toml. !/
 pub fn sha512sum_hex: (path :&str) :str {
     if !fs::exists(path) { return "" }
-    return use! crypto::hash::sha512_file(path)
+    return use! hash::sha512_file(path)
 }
 
 /! Returns true if any .mire under code/ or tests/ contains a
@@ -958,3 +962,52 @@ pub fn record_build: () {
     set body = "[build]\nbuild_count = " + use! util::i64_to_string(count) + "\nlast_build_time = " + use! util::i64_to_string(now_ms) + "\n"
     use fs::write(status_path body)
 }
+
+// Compiles C code using libtcc (Tiny C Compiler).
+// If libtcc is available, compiles the source file and returns the output path.
+// If libtcc is not available, returns an error message suggesting installation.
+pub fn compile_c_with_libtcc: (c_source :str) :str {
+    set tcc_path = "" :str mut
+    // Try common tcc locations
+    set checked_paths = ["tcc", "/usr/local/bin/tcc", "/usr/bin/tcc", "/opt/bin/tcc"]
+    set ti = 0 :i64 mut
+    while ti < 4 {
+        set p = use! util::list_get(checked_paths ti)
+        if use! util::path_exists(p) {
+            set tcc_path = strings::copy(p)
+            break
+        }
+        set ti += 1
+    }
+    // Also check env var
+    if tcc_path == "" {
+        set env_tcc = use! env::var("TCC_PATH")
+        if env_tcc != "" && use! util::path_exists(env_tcc) {
+            set tcc_path = strings::copy(env_tcc)
+        }
+    }
+    if tcc_path == "" {
+        // libtcc not found - return error message
+        return "Error: libtcc (Tiny C Compiler) not found. Please install libtcc or set TCC_PATH environment variable.\nC compilation is now handled by Owl using libtcc. Avenys only compiles Mire code."
+    }
+    // Compile the C source file using libtcc
+    set tmp_output = use! util::owl_home() + "/.tmp_c_output"
+    use! util::mkdir_p(use! util::path::dir(tmp_output))
+    // Use tcc to compile: tcc -o output source.c
+    set cmd = tcc_path + " -o " + tmp_output + " " + c_source
+    set exit_result = use! proc::run::spawn(cmd)
+    set exit_code = use! proc::run::last_exit()
+    if exit_code == 0 && use! util::path_exists(tmp_output) {
+        return tmp_output
+    } else {
+        // Read stderr/output for error message
+        set output_content = use! util::read_file(tmp_output + "/../tcc_error.txt" 2>/dev/null "tcc compilation failed")
+        // Clean up temp
+        use! util::rm_tmp(tmp_output)
+        return "Error: libtcc compilation failed for '" + c_source + "'. " + output_content
+    }
+}
+
+// Helper: remove temporary file
+pub fn rm_tmp: (path :str) {
+    use! util::rm_tmp(path)

@@ -1,0 +1,44 @@
+module update
+
+load mire::vec
+load! /code/util
+load kioto::proc
+load! /code/lockfile
+load! /code/dep_resolver
+load! /code/registry
+
+/! Update flow:
+    1. Sync all registries (registry::sync_all)
+    2. Re-resolve from owl.toml -> new plan
+    3. Execute plan (install/upgrade/downgrade to match)
+    4. Write updated owl.lock
+!/
+pub fn run: (args :&vec[str]) :u8 {
+    set ec = 0 :u8 mut
+    use! util::mkdir_p(use! util::cfg::home())
+
+    /! 1. Sync all registries !/
+    use dasu("  [SYNC] synchronizing registries...")
+    use! registry::sync_all()
+    use dasu("  [OK]   registries synchronized")
+
+    /! 2. Resolve from owl.toml with fresh index !/
+    use dasu("  [RESOLVE] re-resolving dependencies...")
+    set plan = use! dep_resolver::resolve()
+    if len(plan) == 0 {
+        use dasu("  [OK]   no dependencies to update")
+        return 0 :u8
+    }
+
+    /! 3. Execute plan - install/upgrade/downgrade to match resolved versions !/
+    use dasu("  [EXECUTE] applying updates...")
+    set ok = use! dep_resolver::execute_plan(plan)
+    if ok {
+        use dasu("  [OK]   dependencies updated and locked")
+    } else {
+        use dasu("  [FAIL] could not apply updates")
+        set ec = 1 :u8
+    }
+
+    return ec
+}

@@ -237,9 +237,10 @@ pub fn checkup: (args :&vec[str]) {
 }
 
 /! Check compiler installation !/
-fn checkup_compiler: () :bool {
+pub fn checkup_compiler: () :bool {
     set ok = true :bool mut
-    set compiler_out = proc::run::output(use! util::compiler_cmd() ["--version"])
+    set cmd = use! util::compiler_cmd()
+    set compiler_out = proc::run::output(cmd, ["--version"])
     if compiler_out == "" {
         use dasu("  [FAIL] compiler: mire not found")
         use dasu("         install mire (Avenys) to compile projects")
@@ -253,7 +254,7 @@ fn checkup_compiler: () :bool {
 }
 
 /! Validate owl.toml fields !/
-fn checkup_toml: () :bool {
+pub fn checkup_toml: () :bool {
     set ok = true :bool mut
 
     set name = use! util::toml_get("owl.toml" "project" "name")
@@ -359,7 +360,7 @@ fn checkup_toml: () :bool {
 }
 
 /! Validate dependencies can be loaded !/
-fn checkup_deps: () :bool {
+pub fn checkup_deps: () :bool {
     set ok = true :bool mut
     set dep_count = use! deps::count_deps()
 
@@ -466,7 +467,7 @@ fn checkup_deps: () :bool {
 }
 
 /! Validate load statements resolve !/
-fn checkup_loads: () :bool {
+pub fn checkup_loads: () :bool {
     set ok = true :bool mut
     set scanned = use! util::scan_load_packages()
 
@@ -535,7 +536,7 @@ fn checkup_loads: () :bool {
 }
 
 /! Validate build cache !/
-fn checkup_cache: () :bool {
+pub fn checkup_cache: () :bool {
     set ok = true :bool mut
     set cache_dir = use! util::toml_get("owl.toml" "paths" "cache") :str mut
     if cache_dir == "" { set cache_dir = "bin/.cache" }
@@ -598,7 +599,7 @@ fn checkup_cache: () :bool {
 }
 
 /! Fix missing dependencies by resolving from libs !/
-fn checkup_fix_deps: () {
+pub fn checkup_fix_deps: () {
     if !use! util::has_project() {
         use dasu("  [FAIL] no owl.toml found")
         return
@@ -685,7 +686,7 @@ fn checkup_fix_deps: () {
 }
 
 /! Clean build cache !/
-fn checkup_fix_cache: () {
+pub fn checkup_fix_cache: () {
     set cache_dir = use! util::toml_get("owl.toml" "paths" "cache") :str mut
     if cache_dir == "" { set cache_dir = "bin/.cache" }
 

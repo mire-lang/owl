@@ -43,7 +43,7 @@ pub fn run: (args :&vec[str]) :i64 {
         return 1
     }
     if fs::exists(vec::get::str(args 2)) {
-        use dasu(strings::concat("Error: directory '" vec::get::str(args 2) "' already exists"))
+        use dasu(strings::concat(strings::concat("Error: directory '" vec::get::str(args 2)) "' already exists"))
         return 1
     }
 
@@ -70,8 +70,8 @@ pub fn run: (args :&vec[str]) :i64 {
         return 1
     }
 
-    use dasu(strings::concat("Created project '" vec::get::str(args 2) "':"))
-    use dasu(strings::concat("  " vec::get::str(args 2) "/"))
+    use dasu(strings::concat(strings::concat("Created project '" vec::get::str(args 2)) "':"))
+    use dasu(strings::concat(strings::concat("  " vec::get::str(args 2)) "/"))
     use dasu("  ├── owl.toml")
     use dasu("  ├── bin/")
     use dasu("  └── src/")

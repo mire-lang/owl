@@ -1,452 +1,284 @@
 module registry
 
 load mire::vec
-load! /code/util
+load kioto::strings
+load kioto::fs
 load kioto::proc
+load! /code/util
 load! /code/trust
+load! /code/cache
+load! /code/cfg
+load! /code/crypto
 
-pub fn add: (url :str) {
-    set tmp = use! crypto::tempdir("owl-reg")
-    set proceed = true :bool mut
-    if tmp == "" {
-        use dasu("  [FAIL]  could not create temp directory")
-        set proceed = false
-    }
+/! MOR (Master Official Registry) - preconfigured, non-removable.
+    Contents:
+      kioto@2.4.7, kioto@2.5.3, kioto@3.0.0
+      mire@1.2.0
+      sdl@1.3.1
+      owl@latest
+!/
 
-    if proceed {
-        set content = "" :str mut
-        set fetched = false :bool mut
-        set used_url = "" :str mut
-
-        set attempt = 0 :i64 mut
-        while attempt < 4 {
-            set try_url = "" :str mut
-if attempt == 0 { set try_url = url + "/registry.json" }
-            if attempt == 1 { set try_url = url + "/raw/main/registry.json" }
-            if attempt == 2 { set try_url = url + "/raw/master/registry.json" }
-            if attempt == 3 { 
-                // Use GitHub API to bypass raw.githubusercontent.com caching
-                set try_url = strings::replace::all(url "https://github.com/" "https://api.github.com/repos/") + "/contents/registry.json"
-            }
-
-            if try_url != "" {
-                set curl_args = [] :vec[str] mut
-                set curl_args = vec::push::str(curl_args "-sL")
-                set curl_args = vec::push::str(curl_args "--fail")
-                set curl_args = vec::push::str(curl_args "-H")
-                set curl_args = vec::push::str(curl_args "Accept: application/vnd.github.raw")
-                set curl_args = vec::push::str(curl_args "-o")
-                set curl_args = vec::push::str(curl_args strings::copy(tmp + "/registry.json"))
-                set curl_args = vec::push::str(curl_args strings::copy(try_url))
-                use proc::run::output("curl" curl_args)
-                set registry_content = fs::read(tmp + "/registry.json")
-                set test_content = use! util::trim_value(registry_content)
-                if test_content != "" {
-                    set content = test_content
-                    set fetched = true
-                    set used_url = try_url
-                    use dasu("  [OK]    fetched registry.json from " + used_url)
-                }
-            }
-
-            if fetched { break }
-            set attempt += 1
-        }
-
-        set rm_args = [] :vec[str] mut
-        set rm_args = vec::push::str(rm_args "-rf")
-        set rm_args = vec::push::str(rm_args strings::copy(tmp))
-        use! util::rm_RF(tmp)
-
-        if !fetched {
-            use dasu("  [FAIL]  could not fetch registry.json from " + url)
-            set proceed = false
-        }
-
-        if proceed {
-            set name = use! util::json_get_str(content "name")
-            if name == "" {
-                use dasu("  [FAIL]  registry.json: missing 'name'")
-                set proceed = false
-            }
-
-            if proceed {
-                set protocol = use! util::json_get_int_str(content "protocol")
-                if protocol == "" {
-                    use dasu("  [FAIL]  missing 'protocol' in registry.json")
-                    set proceed = false
-                }
-
-                if proceed && protocol != "1" {
-                    use dasu("  [FAIL]  unsupported protocol v" + protocol + " (expected 1)")
-                    set proceed = false
-                }
-            }
-
-            if proceed {
-                set pubkey = use! util::json_get_str(content "public-key")
-                if pubkey == "" {
-                    use dasu("  [FAIL]  missing 'public-key' in registry.json")
-                    set proceed = false
-                }
-
-                if proceed {
-                    set reg_dir = use! util::owl_home_registries()
-                    set reg_path = reg_dir + "/" + name
-                    set reg_json_path = reg_path + "/registry.json"
-                    use! util::mkdir_p(reg_dir)
-                    if fs::exists(reg_path) {
-                        use dasu("  [FAIL]  registry '" + name + "' already exists at " + reg_path)
-                        set proceed = false
-                    }
-
-                    if proceed {
-                        use! util::mkdir_p(reg_path)
-                        use fs::write(reg_json_path content)
-
-                        set fp_tmp = use! crypto::tempdir("owl-fp")
-                        set fp = "" :str mut
-                        if fp_tmp != "" {
-                            set fp_file = fp_tmp + "/pubkey"
-                            use fs::write(fp_file pubkey)
-                            set fp = use! util::sha256sum_hex(fp_file)
-                            set rm2 = [] :vec[str] mut
-                            set rm2 = vec::push::str(rm2 "-rf")
-                            set rm2 = vec::push::str(rm2 strings::copy(fp_tmp))
-                            use! util::rm_RF(fp_tmp)
-                        }
-                        if fp == "" || len(fp) != 64 {
-                            use dasu("  [WARN]  could not compute fingerprint for public key")
-                        } else {
-                            use dasu("  [INFO]  trusted key fingerprint: " + fp)
-                            use! trust::trust(fp)
-                        }
-
-                        use dasu("  [OK]    registry '" + name + "' added")
-                        use! util::fs_make_readonly(use! util::owl_home_registries() + "/" + name)
-                    }
-                }
-            }
-        }
-    }
-    return
+pub fn home: () :str {
+    return use! util::owl_home_registries()
 }
 
-pub fn list_beta: () {
-    set beta_dir = use! util::expand_home("~/.owl/.libs")
-    set beta_dir_ls = strings::copy(beta_dir)
-    set ls_args = [] :vec[str] mut
-    set ls_args = vec::push::str(ls_args "ls")
-    set ls_args = vec::push::str(ls_args "-1")
-    set ls_args = vec::push::str(ls_args beta_dir_ls)
-    set output = proc::run::output("ls" ls_args)
-    if output == "" { return }
-    set lines = strings::split(output "\n")
+pub fn mor_name: () :str { return "mor" }
+
+pub fn mor_url: () :str { return "https://github.com/mire-org/registry-mor" }
+
+/! Helper: concat two strings !/
+fn sc: (a :&str, b :&str) :str {
+    return strings::concat(a b)
+}
+
+/! Helper: concat three strings (as two arguments) !/
+fn sc3: (a :&str, b :&str) :str {
+    return strings::concat(a b)
+}
+
+pub fn sync_all: () {
+    use! registry::sync([])
+}
+
+pub fn sync: (args :&vec[str]) {
+    use! util::mkdir_p(use! util::cfg::home())
+    set reg_dir = use! registry::home()
+    use! util::mkdir_p(reg_dir)
+
+    /! Ensure MOR exists !/
+    set mor_path = sc(strings::copy(reg_dir) "/") use! registry::mor_name()
+    if !fs::exists(mor_path) {
+        use dasu("  [MOR] initializing Master Official Registry...")
+        use! util::mkdir_p(mor_path)
+        set proto = "1"
+        use fs::write(sc(mor_path "/protocol") proto)
+        set url = use! registry::mor_url()
+        use fs::write(sc(mor_path "/source_url") url)
+        set initial_index = "[[packages]]\nname = \"kioto\"\nversion = \"2.4.7\"\n\n[[packages]]\nname = \"kioto\"\nversion = \"2.5.3\"\n\n[[packages]]\nname = \"kioto\"\nversion = \"3.0.0\"\n\n[[packages]]\nname = \"mire\"\nversion = \"1.2.0\"\n\n[[packages]]\nname = \"sdl\"\nversion = \"1.3.1\"\n\n[[packages]]\nname = \"owl\"\nversion = \"latest\"\n"
+        use fs::write(sc(mor_path "/index.toml") initial_index)
+        use dasu("  [MOR] initialized with base packages")
+    }
+
+    /! Sync each configured registry !/
+    set entries_str = use! util::list_text(use! registry::home())
+    set entries = strings::split(entries_str "\n")
     set i = 0 :i64 mut
-    while i < len(lines) {
-        set file = use! util::trim(use! util::list_get(lines i))
-        if file != "" && strings::ends::with(file ".json") {
-            set read_args = [] :vec[str] mut
-            set read_args = vec::push::str(read_args "cat")
-            set bd = strings::copy(beta_dir)
-            set filepath = bd + "/" + file
-            set read_args = vec::push::str(read_args filepath)
-            set content = proc::run::output("cat" read_args)
-            set name = use! registry::extract_json_field(content "name")
-            set version = use! registry::extract_json_field(content "version")
-            if name != "" && version != "" {
-                use dasu("  [BETA] " + name + "@" + version + " (local)")
-            }
+    while i < vec::len(entries) {
+        set name = use! util::trim(entries at i)
+        if len(name) > 0 {
+            use! registry::sync_one(name)
         }
         set i += 1
     }
 }
 
+pub fn sync_all: () {
+    use! registry::sync([])
+}
+
+pub fn sync_one: (name :&str) {
+    set home = use! registry::home()
+    set reg_dir = sc(strings::copy(home) "/") name
+    if !fs::exists(reg_dir) { return }
+
+    set url = fs::read(sc(reg_dir "/source_url"))
+    if len(url) == 0 { return }
+
+    set tmp = use! crypto::tempdir("owl-reg") :str mut
+    set proceed = true :bool mut
+    set content = "" :str mut
+    set used_url = "" :str mut
+
+    set attempt = 0 :i64 mut
+    while attempt < 4 {
+        set try_url = "" :str mut
+        if attempt == 0 { set try_url = sc(url "/registry.json") }
+        if attempt == 1 { set try_url = sc(url "/raw/main/registry.json") }
+        if attempt == 2 { set try_url = sc(url "/raw/master/registry.json") }
+        if attempt == 3 {
+            set try_url = sc(strings::replace::all(url "https://github.com/" "https://api.github.com/repos/") "/contents/registry.json")
+        }
+
+        if try_url != "" {
+            set curl_args = [] :vec[str] mut
+            set curl_args = vec::push::str(curl_args "-sL")
+            set curl_args = vec::push::str(curl_args "--fail")
+            set curl_args = vec::push::str(curl_args "-H")
+            set curl_args = vec::push::str(curl_args "Accept: application/vnd.github.raw")
+            set curl_args = vec::push::str(curl_args "-o")
+            set curl_args = vec::push::str(curl_args sc(tmp "/registry.json"))
+            set curl_args = vec::push::str(curl_args sc(try_url ""))
+            use proc::run::output("curl" curl_args)
+            set registry_content = fs::read(sc(tmp "/registry.json"))
+            set test_content = use! util::trim_value(registry_content)
+            if test_content != "" {
+                set content = test_content
+                set used_url = try_url
+                use dasu(sc(sc("  [OK]    fetched " name) " from ") used_url)
+            }
+        }
+
+        if content != "" { break }
+        set attempt += 1
+    }
+
+    if content == "" {
+        use dasu(sc(sc("  [WARN]  could not sync " name) " (offline?)"))
+    } else {
+        use fs::write(sc(reg_dir "/registry.json") content)
+        use fs::write(sc(reg_dir "/index.toml") content)
+        set msg1 = sc("  [OK]    " name) :str mut
+        set msg2 = sc(msg1 " synced (") :str mut
+        set msg3 = sc(msg2 used_url) :str mut
+        set msg4 = sc(msg3 ")") :str mut
+        use dasu(msg4)
+    }
+
+    set rm_args = [] :vec[str] mut
+    set rm_args = vec::push::str(rm_args "-rf")
+    set rm_args = vec::push::str(rm_args sc(tmp ""))
+    use! util::rm_RF(tmp)
+}
+
 pub fn list: () {
-    set reg_dir = use! util::owl_home_registries()
-    set proceed = true :bool mut
-    if !fs::exists(reg_dir) {
+    set reg_dir = use! registry::home()
+    set entries_str = use! util::list_text(reg_dir)
+    set entries = strings::split(entries_str "\n")
+    if vec::len(entries) == 0 {
         use dasu("  no registries configured")
-        set proceed = false
+        return
     }
-
-    if proceed {
-        set reg_arg = strings::copy(reg_dir)
-        set out = use! util::list_text(reg_arg)
-        if out == "" {
-            use dasu("  no registries configured")
-            set proceed = false
+    use dasu("  configured registries:")
+    set i = 0 :i64 mut
+    while i < vec::len(entries) {
+        set name = use! util::trim(entries at i)
+        if len(name) > 0 {
+            set is_mor = name == use! registry::mor_name()
+            set mark = "" :str mut
+            if is_mor { set mark = " (MOR, built-in)" }
+            use dasu(sc("  " name) mark)
         }
-
-        if proceed {
-            set entries = use! util::split(out "\n")
-            set ni = len(entries)
-            set found = false :bool mut
-            set i = 0 :i64 mut
-            while i < ni {
-                set entry = use! util::trim(use! util::list_get(entries i))
-                if entry != "" {
-                    set reg_path = reg_dir + "/" + entry
-                    if fs::exists(reg_path + "/registry.json") {
-                        set content = fs::read(reg_path + "/registry.json")
-                        set reg_name = use! util::json_get_str(content "name") :str mut
-                        if reg_name == "" { set reg_name = entry }
-                        set reg_protocol = use! util::json_get_int_str(content "protocol") :str mut
-                        if reg_protocol == "" { set reg_protocol = "?" }
-                        set status = "enabled" :str mut
-                        if fs::exists(reg_path + "/.disabled") { set status = "disabled" }
-                        set priority = "" :str mut
-                        if fs::exists(reg_path + "/.priority") {
-                            set priority_content = fs::read(reg_path + "/.priority")
-                            set priority = use! util::trim_value(priority_content)
-                        }
-
-                        if found {
-                            use dasu("")
-                        }
-                        set found = true
-                        set line = "  " + reg_name + "  v" + reg_protocol + "  [" + status + "]" :str mut
-                        if priority != "" { set line = line + "  priority=" + priority }
-                        use dasu(line)
-                    }
-                }
-                set i += 1
-            }
-
-            if !found {
-                use dasu("  no registries configured")
-            }
-        }
+        set i += 1
     }
-    return
 }
 
-pub fn remove: (name :str) {
-    set proceed = true :bool mut
-    set reg_path = use! util::owl_home_registries() + "/" + name
-    if !fs::exists(reg_path) {
-        use dasu("  [FAIL]  registry '" + name + "' not found")
-        set proceed = false
+pub fn add: (args :&vec[str]) {
+    if vec::len(args) < 3 {
+        use dasu("Usage: owl reg add <name> <url>")
+        return
     }
-    if proceed && !fs::exists(reg_path + "/registry.json") {
-        use dasu("  [FAIL]  '" + reg_path + "' is not a registry directory")
-        set proceed = false
+    set name = vec::get::str(args 2)
+    set url = vec::get::str(args 3)
+
+    if name == use! registry::mor_name() {
+        use dasu(sc(sc("  [FAIL]  '" use! registry::mor_name()) "' is reserved for the built-in MOR"))
+        return
     }
-    if proceed {
-        use! util::rm_RF(reg_path)
-        use dasu("  [OK]    registry '" + name + "' removed")
+
+    set home = use! registry::home()
+    set reg_dir = sc(strings::copy(home) "/") name
+    if fs::exists(reg_dir) {
+        use dasu(sc(sc("  [FAIL]  registry '" name) "' already exists"))
+        return
     }
-    return
+
+    use! util::mkdir_p(reg_dir)
+    use fs::write(sc(reg_dir "/protocol") "1")
+    use fs::write(sc(reg_dir "/source_url") url)
+
+    use! registry::sync_one(name)
+    use dasu(sc(sc("  [OK]    registry '" name) "' added and synced"))
 }
 
-pub fn sync_one: (reg_path :str) {
-    set proceed = true :bool mut
-    if !fs::exists(reg_path + "/registry.json") {
-        use dasu("    [SKIP]  no registry.json")
-        set proceed = false
+pub fn remove: (args :&vec[str]) {
+    if vec::len(args) < 3 {
+        use dasu("Usage: owl reg remove <name>")
+        return
+    }
+    set name = vec::get::str(args 2)
+
+    if name == use! registry::mor_name() {
+        use dasu("  [FAIL]  cannot remove MOR (built-in, non-removable)")
+        return
     }
 
-    if proceed {
-        set content = fs::read(reg_path + "/registry.json")
-        set reg_url = use! util::toml_get("owl.toml" "cfg" "registry_url") :str mut
-        if reg_url == "" {
-            set reg_url = use! util::json_get_str(content "url") :str mut
-        }
-        if reg_url == "" {
-            set reg_url = use! util::json_get_str(content "name")
-        }
-
-        set tmp = use! crypto::tempdir("owl-sync")
-        if tmp == "" {
-            use dasu("    [FAIL]  could not create temp directory")
-            set proceed = false
-        }
-
-        if proceed {
-            set synced = false :bool mut
-            set syncurl = "" :str mut
-
-            set attempt = 0 :i64 mut
-            while attempt < 3 {
-                set try_url = "" :str mut
-                if attempt == 0 { set try_url = reg_url + "/index.toml" }
-                if attempt == 1 { set try_url = reg_url + "/raw/main/index.toml" }
-                if attempt == 2 { set try_url = reg_url + "/raw/master/index.toml" }
-
-                if try_url != "" {
-                    set curl_args = [] :vec[str] mut
-                    set curl_args = vec::push::str(curl_args "-sL")
-                    set curl_args = vec::push::str(curl_args "--fail")
-                    set curl_args = vec::push::str(curl_args "-o")
-                    set curl_args = vec::push::str(curl_args strings::copy(tmp + "/index.toml"))
-                    set curl_args = vec::push::str(curl_args strings::copy(try_url))
-                    use proc::run::output("curl" curl_args)
-                    set test_content = fs::read(tmp + "/index.toml")
-                            set test_file_content = fs::read(tmp + "/index.toml")
-                            set test_trimmed = use! util::trim_value(test_file_content)
-                    if test_trimmed != "" {
-                        use fs::write(tmp + "/index.toml" test_content)
-                        set syncurl = try_url
-                        set synced = true
-                    }
-                }
-
-                if synced { break }
-                set attempt += 1
-            }
-
-            if !synced {
-                set rm_args = [] :vec[str] mut
-                set rm_args = vec::push::str(rm_args "-rf")
-                set rm_args = vec::push::str(rm_args strings::copy(tmp))
-                use! util::rm_RF(tmp)
-                use dasu("    [FAIL]  could not fetch index.toml from " + reg_url)
-                set proceed = false
-            }
-
-            if proceed {
-                set index_content = fs::read(tmp + "/index.toml")
-                set pubkey = use! util::json_get_str(content "public-key")
-                set curl_args = [] :vec[str] mut
-                set curl_args = vec::push::str(curl_args "-sL")
-                set curl_args = vec::push::str(curl_args "--fail")
-                set curl_args = vec::push::str(curl_args "-o")
-                set curl_args = vec::push::str(curl_args strings::copy(tmp + "/index.toml.sig"))
-                set curl_args = vec::push::str(curl_args strings::copy(syncurl + ".sig"))
-                use proc::run::output("curl" curl_args)
-                set sig_file = tmp + "/index.toml.sig"
-                    set sig_size = use! util::file_size(sig_file)
-                if sig_size != 0 && pubkey != "" {
-                    use dasu("    [INFO]  verifying index.toml signature...")
-                    set verify_result = use! crypto::verify::sigfile(pubkey tmp + "/index.toml" sig_file)
-                    if verify_result {
-                        use dasu("    [OK]    signature valid")
-                    } else {
-                        set rm_args = [] :vec[str] mut
-                        set rm_args = vec::push::str(rm_args "-rf")
-                        set rm_args = vec::push::str(rm_args strings::copy(tmp))
-                        use! util::rm_RF(tmp)
-                        use dasu("    [FAIL]  index.toml signature verification failed")
-                        set proceed = false
-                    }
-                } else {
-                    if pubkey == "" {
-                        use dasu("    [WARN]  no public-key in registry.json - skipping signature verification")
-                    } else {
-                        use dasu("    [WARN]  no index.toml.sig - skipping signature verification")
-                    }
-                }
-
-                if proceed {
-                    set writable_path = strings::copy(reg_path)
-                    use! util::fs_make_writable(writable_path)
-                    use fs::write(strings::copy(reg_path + "/index.toml") index_content)
-                    set ts = use! util::i64_to_string(time::now::ms())
-                    use fs::write(strings::copy(reg_path + "/last_sync") ts)
-                    set readonly_path = strings::copy(reg_path)
-                    use! util::fs_make_readonly(readonly_path)
-                    set rm_args = [] :vec[str] mut
-                    set rm_args = vec::push::str(rm_args "-rf")
-                    set rm_args = vec::push::str(rm_args strings::copy(tmp))
-                    use! util::rm_RF(tmp)
-
-                    use dasu("    [OK]    synced " + reg_path)
-                }
-            }
-        }
-    }
-    return
-}
-
-pub fn sync: () {
-    set reg_dir = use! util::owl_home_registries()
-    set proceed = true :bool mut
+    set home = use! registry::home()
+    set reg_dir = sc(strings::copy(home) "/") name
     if !fs::exists(reg_dir) {
-        use dasu("  no registries configured")
-        set proceed = false
+        use dasu(sc(sc("  [FAIL]  registry '" name) "' does not exist"))
+        return
     }
 
-    if proceed {
-        set registry_root = use! util::owl_home_registries()
-        set registry_arg = strings::copy(registry_root)
-    set out = use! util::list_text(registry_arg)
-        if out == "" {
-            use dasu("  no registries configured")
-            set proceed = false
-        }
+    set rm_args = [] :vec[str] mut
+    set rm_args = vec::push::str(rm_args "-rf")
+    set rm_args = vec::push::str(rm_args sc(reg_dir ""))
+    use! util::rm_RF(reg_dir)
+    use dasu(sc(sc("  [OK]    registry '" name) "' removed"))
+}
 
-        if proceed {
-            set entries = use! util::split(out "\n")
-            set ni = len(entries)
-            set enabled_count = 0 :i64 mut
-            set enabled_list = "" :str mut
-            set i = 0 :i64 mut
-            while i < ni {
-                set entry = use! util::trim(use! util::list_get(entries i))
-                if entry != "" {
-                    if fs::exists(use! util::owl_home_registries() + "/" + entry + "/registry.json") && !fs::exists(use! util::owl_home_registries() + "/" + entry + "/.disabled") {
-                        set enabled_count += 1
-                        if enabled_list == "" { set enabled_list = entry } else { set enabled_list = enabled_list + " " + entry }
+pub fn find_package: (name :&str version :&str) :str {
+    set entries_str = use! util::list_text(use! registry::home())
+    set entries = strings::split(entries_str "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(entries) {
+        set reg = use! util::trim(entries at i)
+        if len(reg) > 0 {
+            set idx = sc(sc(strings::copy(use! registry::home()) "/") reg) "/index.toml"
+            if fs::exists(idx) {
+                set content = fs::read(idx)
+                set search = sc(sc("name = \"" name) "\"")
+                if strings::contains(content search) {
+                    set ver_search = sc(sc("version = \"" version) "\"")
+                    if strings::contains(content ver_search) {
+                        return content
                     }
-                }
-                set i += 1
-            }
-
-            if enabled_count == 0 {
-                use dasu("  no enabled registries")
-            } else {
-                set do_all = true :bool mut
-                if enabled_count > 1 {
-                    use dasu("  found " + use! util::i64_to_string(enabled_count) + " enabled registries: " + enabled_list)
-                    use dasu("  sync all? (Y/n)")
-                    set answer = use! util::read_line_trim()
-                    if answer == "n" || answer == "N" {
-                        set do_all = false
-                    }
-                }
-
-                set i = 0 :i64 mut
-                while i < ni {
-                    set entry = use! util::trim(use! util::list_get(entries i))
-                    if entry != "" {
-                        set sync_this = false :bool mut
-                        if do_all {
-                            set sync_this = true
-                        } else {
-                            use dasu("  sync " + entry + "? (Y/n)")
-                            set ans = use! util::read_line_trim()
-                            if ans != "n" && ans != "N" { set sync_this = true }
-                        }
-                        if sync_this {
-                            set reg_path = use! util::owl_home_registries() + "/" + entry
-                            if fs::exists(reg_path + "/registry.json") && !fs::exists(reg_path + "/.disabled") {
-                                use! registry::sync_one(reg_path)
-                            }
-                        }
-                    }
-                    set i += 1
                 }
             }
         }
+        set i += 1
     }
-    return
+    return ""
 }
 
-fn extract_json_field: (content :str field :str) :str {
-    set needle = "\"" + field + "\" : \""
-    set pos = strings::index(content needle)
-    if pos < 0 {
-        set needle2 = "\"" + field + "\" :\""
-        set pos2 = strings::index(content needle2)
-        if pos2 < 0 { return "" }
-        set start = pos2 + len(needle2)
-        set end = strings::index(strings::substr(content start 9999) "\"")
-        if end < 0 { return "" }
-        return strings::substr(content start end)
+pub fn resolve_latest: (name :&str) :str {
+    set best = "" :str mut
+    set entries_str = use! util::list_text(use! registry::home())
+    set entries = strings::split(entries_str "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(entries) {
+        set reg = use! util::trim(entries at i)
+        if len(reg) > 0 {
+            set idx = sc(sc(strings::copy(use! registry::home()) "/") reg) "/index.toml"
+            if fs::exists(idx) {
+                set content = fs::read(idx)
+                set lines = use! semver::count_lines(content)
+                set in_pkg = false :bool mut
+                set cur_name = "" :str mut
+                set cur_ver = "" :str mut
+                set j = 0 :i64 mut
+                while j < lines {
+                    set line = use! util::trim(use! semver::nth_line(content j))
+                    if line == "[[packages]]" {
+                        if in_pkg && len(cur_name) > 0 && cur_name == name {
+                            if (use! semver::compare_versions(cur_ver best) > 0) { set best = cur_ver :str mut }
+                        }
+                        set in_pkg = true
+                        set cur_name = ""
+                        set cur_ver = ""
+                    } else {
+                        if in_pkg {
+                            if use! util::startswith(line "name =") { set cur_name = use! semver::extract_str_val(line) }
+                            if use! util::startswith(line "version =") { set cur_ver = use! semver::extract_str_val(line) }
+                        }
+                    }
+                    set j += 1
+                }
+                if in_pkg && len(cur_name) > 0 && cur_name == name {
+                    if (use! semver::compare_versions(cur_ver best) > 0) { set best = cur_ver :str mut }
+                }
+            }
+        }
+        set i += 1
     }
-    set start = pos + len(needle)
-    set end = strings::index(strings::substr(content start 9999) "\"")
-    if end < 0 { return "" }
-    return strings::substr(content start end)
+    return best
 }
-
