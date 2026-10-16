@@ -4,7 +4,11 @@ load! /code/util
 load kioto::crypto::sign::ed25519
 
 pub fn tempdir: (prefix :str) :str {
-    set candidate = "/tmp/" + prefix + "-" + use! util::i64_to_string(time::now::ns())
+    set tmp_dir = use! util::ensure_tmp_dir()
+    if tmp_dir == "" { return "" }
+    set candidate = "" :str mut
+    set candidate = strings::concat(tmp_dir "/") prefix
+    set candidate = strings::concat(candidate "-") use! util::i64_to_string(time::now::ns())
     set candidate_for_create = strings::copy(candidate)
     use! util::mkdir_p(candidate_for_create)
     if fs::exists(candidate) { return strings::copy(candidate) }

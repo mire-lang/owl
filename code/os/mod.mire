@@ -1,0 +1,148 @@
+module os
+
+load mire::vec
+load! /code/util
+load kioto::proc
+load kioto::strings
+
+/! Operating System detection for Owl.
+   Detects the host OS distribution and provides package manager information
+   for dependency resolution across different Linux distributions. !/
+
+pub fn detect: () :str {
+    set os_id = use! os::detect_id()
+    if os_id != "" { return os_id }
+    return "unknown"
+}
+
+pub fn detect_id: () :str {
+    set os_release = fs::read("/etc/os-release")
+    if len(os_release) == 0 {
+        return use! os::detect_fallback()
+    }
+    set lines = use! strings::split(os_release "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(lines) {
+        set line = use! strings::trim(lines at i)
+        if use! strings::starts::with(line "ID=") {
+            set val = use! os::strip_quote(use! strings::substr(line 3 len(line)))
+            if len(val) > 0 { return val }
+        }
+        set i += 1
+    }
+    return use! os::detect_fallback()
+}
+
+pub fn detect_version: () :str {
+    set os_release = fs::read("/etc/os-release")
+    if len(os_release) == 0 { return "unknown" }
+    set lines = use! strings::split(os_release "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(lines) {
+        set line = use! strings::trim(lines at i)
+        if use! strings::starts::with(line "VERSION_ID=") {
+            set val = use! os::strip_quote(use! strings::substr(line 11 len(line)))
+            if len(val) > 0 { return val }
+        }
+        set i += 1
+    }
+    return "unknown"
+}
+
+pub fn detect_family: () :str {
+    set id = use! os::detect_id()
+    if id == "arch" || id == "endeavouros" || id == "manjaro" { return "arch" }
+    if id == "debian" || id == "ubuntu" || id == "linuxmint" || id == "raspbian" { return "debian" }
+    if id == "fedora" || id == "rhel" || id == "centos" || id == "almalinux" || id == "rocky" { return "fedora" }
+    if id == "alpine" { return "alpine" }
+    if id == "opensuse" || id == "sles" { return "opensuse" }
+    return "unknown"
+}
+
+pub fn detect_fallback: () :str {
+    set uname_args = [] :vec[str] mut
+    set uname_args = vec::push::str(uname_args "-s")
+    set uname_out = proc::run::output("uname" uname_args)
+    set uname_trimmed = use! strings::trim(uname_out)
+    if uname_trimmed == "Linux" {
+        set os_release = fs::read("/etc/os-release")
+        if len(os_release) > 0 { return "linux" }
+        return "linux-unknown"
+    }
+    if uname_trimmed == "Darwin" { return "macos" }
+    if uname_trimmed == "FreeBSD" { return "freebsd" }
+    return "unknown"
+}
+
+pub fn package_manager: () :str {
+    set family = use! os::detect_family()
+    if family == "arch" { return "pacman" }
+    if family == "debian" { return "apt" }
+    if family == "fedora" { return "dnf" }
+    if family == "alpine" { return "apk" }
+    if family == "opensuse" { return "zypper" }
+    return "unknown"
+}
+
+pub fn package_manager_install_cmd: () :str {
+    set pm = use! os::package_manager()
+    if pm == "pacman" { return "pacman -S --needed --noconfirm" }
+    if pm == "apt" { return "apt-get install -y" }
+    if pm == "dnf" { return "dnf install -y" }
+    if pm == "apk" { return "apk add" }
+    if pm == "zypper" { return "zypper install -y" }
+    return "unknown"
+}
+
+pub fn package_manager_update_cmd: () :str {
+    set pm = use! os::package_manager()
+    if pm == "pacman" { return "pacman -Sy" }
+    if pm == "apt" { return "apt-get update" }
+    if pm == "dnf" { return "dnf makecache" }
+    if pm == "apk" { return "apk update" }
+    if pm == "zypper" { return "zypper refresh" }
+    return "unknown"
+}
+
+pub fn info: () {
+    set id = use! os::detect_id()
+    set ver = use! os::detect_version()
+    set fam = use! os::detect_family()
+    set pm = use! os::package_manager()
+    set pm_cmd = use! os::package_manager_install_cmd()
+    use dasu("  OS: " + id + " " + ver)
+    use dasu("  Family: " + fam)
+    use dasu("  Package Manager: " + pm + " (" + pm_cmd + ")")
+}
+
+pub fn strip_quote: (s :&str) :str {
+    set len = len(s)
+    if len >= 2 {
+        set first = use! strings::substr(s 0 1)
+        set last_idx = len - 1
+        set last = use! strings::substr(s last_idx 1)
+        if first == "\"" && last == "\"" {
+            set end_idx = len - 2
+            return use! strings::substr(s 1 end_idx)
+        }
+    }
+    return s
+}
+
+pub fn run: (args :&vec[str]) {
+    if vec::len(args) < 2 {
+        use dasu("Usage: owl os <detect|id|version|family|package-manager|info>")
+        return
+    }
+    set sub = vec::get::str(args 1)
+    match sub {
+        "detect" { use dasu(use! os::detect()) }
+        "id" { use dasu(use! os::detect_id()) }
+        "version" { use dasu(use! os::detect_version()) }
+        "family" { use dasu(use! os::detect_family()) }
+        "package-manager" { use dasu(use! os::package_manager()) }
+        "info" { use! os::info() }
+        _ { use dasu("Unknown os subcommand: " + sub)
+            use dasu("Available: detect, id, version, family, package-manager, info") }
+    }
+}

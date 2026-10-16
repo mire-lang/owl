@@ -35,6 +35,10 @@ load! profile
 load! upgrade
 load! /code/new
 load! server
+load! sandbox
+load! /code/os
+load! /code/deps_db
+load! /code/pkgbuild
 
 /! Print the resolved dependency tree.
     Implemented here rather than as deps::tree in /code/deps: every call from the
@@ -113,6 +117,11 @@ pub fn main: () {
         "upgrade" { use! upgrade::run(args) }
         "help" { use! ui::help() }
         "server" { use! server::run(args) }
+        "sandbox" { use! sandbox::run(args) }
+        "os" { use! os::run(args) }
+        "sandbox" { use! sandbox::run(args) }
+        "deps-db" { use! deps_db::run(args) }
+        "pkgbuild" { use! pkgbuild::run(args) }
         "-h" { use! ui::help() }
         "--help" { use! ui::help() }
         "version" { use! ui::banner() }

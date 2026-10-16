@@ -28,7 +28,12 @@ pub fn run: (args :&vec[str]) :i64 {
 
     use dasu("source: " + remote_url)
 
-    set tmp_dir = "/tmp/.owl-upgrade"
+    set tmp_dir = use! util::ensure_tmp_dir() :str mut
+    if tmp_dir == "" {
+        use dasu("error: could not create temporary directory")
+        return 1
+    }
+    set tmp_dir = strings::concat(tmp_dir "/owl-upgrade")
 
     if !yes {
         use dasu("This will clone the repository and build a new owl binary.")

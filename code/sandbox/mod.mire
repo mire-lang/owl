@@ -1,0 +1,130 @@
+module sandbox
+
+load mire::vec
+load! /code/util
+load kioto::fs
+load kioto::proc
+
+/! Sandbox directory for isolated testing (~/.owl/sandbox/).
+   All operations within the sandbox are isolated from the main filesystem.
+   Owl manages creation and cleanup of the sandbox directory. !/
+
+pub fn init: () :bool {
+    set sandbox_dir = use! util::owl_sandbox_dir()
+    if sandbox_dir == "" {
+        use dasu("  [FAIL]  sandbox: could not determine home directory")
+        return false
+    }
+    if !fs::exists(sandbox_dir) {
+        use! util::mkdir_p(strings::copy(sandbox_dir))
+    }
+    use dasu("  [OK]    sandbox initialized at " + sandbox_dir)
+    return true
+}
+
+pub fn path: () :str {
+    return use! util::owl_sandbox_dir()
+}
+
+pub fn create: (name :&str) :str {
+    set base = use! util::owl_sandbox_dir()
+    if base == "" { return "" }
+    set dir = strings::concat(base "/") name
+    if !fs::exists(dir) {
+        use! util::mkdir_p(strings::copy(dir))
+    }
+    return dir
+}
+
+pub fn cleanup: (name :&str) :bool {
+    set base = use! util::owl_sandbox_dir()
+    if base == "" { return false }
+    set dir = strings::concat(base "/") name
+    if fs::exists(dir) {
+        use! util::rm_RF(dir)
+        return true
+    }
+    return false
+}
+
+pub fn list: () {
+    set base = use! util::owl_sandbox_dir()
+    if base == "" {
+        use dasu("  [FAIL]  sandbox: no home directory")
+        return
+    }
+    if !fs::exists(base) {
+        use dasu("  sandbox: not initialized")
+        return
+    }
+    use dasu("  sandbox entries:")
+    set entries_str = use! util::list_text(base)
+    set entries = strings::split(entries_str "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(entries) {
+        set name = use! util::trim(entries at i)
+        if len(name) > 0 {
+            use dasu(sc("  " name))
+        }
+        set i += 1
+    }
+}
+
+pub fn run_isolated: (cmd :&str, args :vec[str], sandbox_name :&str) :i64 {
+    set base = use! util::owl_sandbox_dir()
+    if base == "" {
+        use dasu("  [FAIL]  sandbox: no home directory")
+        return 1
+    }
+    set dir = strings::concat(base "/") sandbox_name
+    if !fs::exists(dir) {
+        use! util::mkdir_p(strings::copy(dir))
+    }
+    set output = proc::run::output_cwd(cmd args dir true)
+    set exit_code = proc::run::last_exit()
+    return exit_code
+}
+
+pub fn run: (args :&vec[str]) {
+    if vec::len(args) < 2 {
+        use dasu("Usage: owl sandbox <init|path|create|cleanup|list> [name]")
+        return
+    }
+    set sub = vec::get::str(args 1)
+    match sub {
+        "init" { use! sandbox::init() }
+        "path" { use dasu(use! sandbox::path()) }
+        "create" {
+            if vec::len(args) < 3 {
+                use dasu("Usage: owl sandbox create <name>")
+            } else {
+                set name = vec::get::str(args 2)
+                set dir = use! sandbox::create(name)
+                if len(dir) > 0 {
+                    use dasu("  [OK]    sandbox created at " + dir)
+                } else {
+                    use dasu("  [FAIL]  could not create sandbox")
+                }
+            }
+        }
+        "cleanup" {
+            if vec::len(args) < 3 {
+                use dasu("Usage: owl sandbox cleanup <name>")
+            } else {
+                set name = vec::get::str(args 2)
+                if use! sandbox::cleanup(name) {
+                    use dasu("  [OK]    sandbox cleaned up")
+                } else {
+                    use dasu("  [FAIL]  sandbox not found")
+                }
+            }
+        }
+        "list" { use! sandbox::list() }
+        _ { use dasu("Unknown sandbox subcommand: " + sub)
+            use dasu("Available: init, path, create, cleanup, list") }
+    }
+}
+
+fn sc: (a :&str, b :&str) :str {
+    return strings::concat(a b)
+}

@@ -359,11 +359,43 @@ pub fn json_get_int_str: (content :&str key :str) :str {
 }
 
 /! Paths and environment !/
+
+/! Ensure the owl temporary directory exists at ~/.owl/tmp/.
+   Returns the absolute path to the tmp directory, or "" on failure.
+   All temporary operations in Owl must use this directory instead of /tmp. !/
+pub fn ensure_tmp_dir: () :str {
+    set home = env::var("HOME")
+    if home == "" { return "" }
+    set tmp_dir = strings::concat(home "/.owl/tmp")
+    if !fs::exists(tmp_dir) {
+        use! util::mkdir_p(strings::copy(tmp_dir))
+        if !fs::exists(tmp_dir) { return "" }
+    }
+    return tmp_dir
+}
+
+/! Get the path to the sandbox directory for isolated testing (~/.owl/sandbox/).
+   Creates it if it does not exist. !/
+pub fn owl_sandbox_dir: () :str {
+    set home = env::var("HOME")
+    if home == "" { return "" }
+    set sandbox_dir = strings::concat(home "/.owl/sandbox")
+    if !fs::exists(sandbox_dir) {
+        use! util::mkdir_p(strings::copy(sandbox_dir))
+    }
+    return sandbox_dir
+}
+
+/! Paths and environment !/
 pub fn owl_home: () :str {
     set path = "" :str mut
     set home = env::var("HOME")
     if home == "" {
-        set path = "/tmp/.owl"
+        set tmp_dir = use! util::ensure_tmp_dir()
+        if len(tmp_dir) > 0 {
+            set path = strings::concat(tmp_dir "/.owl")
+        }
+        if path == "" { set path = "" }
     } else {
         set path = strings::concat(home "/.owl")
     }
@@ -613,7 +645,11 @@ pub fn arg_value: (args :&vec[str], flag :&str) :str {
 }
 
 pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :str runtime :str target :str output :str cache :str libs :str) :bool {
-    use fs::write("/tmp/mire_write_mire_config_called.txt" "write_mire_config called with path=[" + path + "]\n")
+        set tmp_dir = use! util::ensure_tmp_dir() :str mut
+        if tmp_dir != "" {
+            set debug_path = strings::concat(tmp_dir "/mire_write_mire_config_called.txt")
+        use fs::write(debug_path "write_mire_config called with path=[" + path + "]\n")
+    }
     set artifact_copy = strings::copy(artifact)
     use! util::mkdir_p(strings::copy(fs::path::dir(path)))
 
@@ -826,7 +862,11 @@ pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :
 
     fs::write(path config)
     set config_len = len(config) :i64 mut
-    use fs::write("/tmp/write_mire_config_result.txt" "write_mire_config: path=[" + path + "] exists=[" + (if fs::exists(path) { "true" } else { "false" }) + "] config_len=[" + use! util::i64_to_string(config_len) + "]\n")
+    set tmp_dir = use! util::ensure_tmp_dir() :str mut
+    if tmp_dir != "" {
+        set debug_path = strings::concat(tmp_dir "/write_mire_config_result.txt")
+        use fs::write(debug_path "write_mire_config: path=[" + path + "] exists=[" + (if fs::exists(path) { "true" } else { "false" }) + "] config_len=[" + use! util::i64_to_string(config_len) + "]\n")
+    }
     return fs::exists(path)
 }
 

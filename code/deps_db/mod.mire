@@ -1,0 +1,374 @@
+module deps_db
+
+load mire::vec
+load! /code/util
+load! /code/os
+load kioto::strings
+load kioto::fs
+
+/! Dependency Database for Owl.
+   Stores package definitions with per-distro package names, checksums,
+   and security metadata. Modeled after AUR PKGBUILD but stored as TOML
+   for simplicity and portability across Mire installations.
+   
+   Database file: ~/.owl/deps_db/packages.toml
+   
+   Format:
+   [[package]]
+   name = "sqlite3"
+   version = "3.45.0"
+   description = "SQLite database library"
+   homepage = "https://sqlite.org"
+   repo = "https://github.com/sqlite/sqlite"
+   
+   [package.checksums]
+   sha256 = "abc123..."
+   pgp_signature = "sig..."
+   
+   [package.distros]
+   arch = { package = "sqlite", repo = "extra" }
+   debian = { package = "libsqlite3-dev", repo = "main" }
+   ubuntu = { package = "libsqlite3-dev", repo = "main" }
+   fedora = { package = "sqlite-devel", repo = "updates" }
+   alpine = { package = "sqlite-dev", repo = "community" }
+   opensuse = { package = "libsqlite3-devel", repo = "oss" }
+   
+   [package.build]
+   depends_on = ["readline", "zlib"]
+   build_cmd = "./configure && make && make install"
+   install_cmd = "make install"
+!/
+
+pub fn db_path: () :str {
+    set home = env::var("HOME")
+    if home == "" { return "" }
+    return strings::concat(home "/.owl/deps_db")
+}
+
+pub fn db_file: () :str {
+    return use! deps_db::db_path() + "/packages.toml"
+}
+
+pub fn init: () :bool {
+    set dir = use! deps_db::db_path()
+    if dir == "" { return false }
+    if !fs::exists(dir) {
+        use! util::mkdir_p(strings::copy(dir))
+    }
+    set f = use! deps_db::db_file()
+    if !fs::exists(f) {
+        set initial = "# Owl Dependency Database\n# Managed by Owl package manager\n# Edit with care or use 'owl deps add' command\n\n"
+        use fs::write(f initial)
+    }
+    use dasu("  [OK]    dependency database initialized at " + f)
+    return true
+}
+
+pub fn list: () {
+    set f = use! deps_db::db_file()
+    if !fs::exists(f) {
+        use dasu("  [FAIL]  dependency database not initialized. Run 'owl deps-db init' first.")
+        return
+    }
+    set content = fs::read(f)
+    set lines = strings::split(content "\n")
+    use dasu("  registered packages:")
+    set i = 0 :i64 mut
+    while i < vec::len(lines) {
+        set line = use! util::trim(lines at i)
+        if use! strings::starts::with(line "[[packages]]") {
+            set name = "" :str mut
+            set ver = "" :str mut
+            set j = i + 1 :i64 mut
+            while j < vec::len(lines) {
+                set next_line = use! util::trim(lines at j)
+                if use! strings::starts::with(next_line "[[") { break }
+                if use! strings::starts::with(next_line "name =") {
+                    set name = use! semver::extract_str_val(next_line)
+                }
+                if use! strings::starts::with(next_line "version =") {
+                    set ver = use! semver::extract_str_val(next_line)
+                }
+                set j += 1
+            }
+            if len(name) > 0 {
+                set ver_disp = if len(ver) > 0 { " " + ver } else { "" }
+                use dasu(sc("  " name) ver_disp)
+            }
+        }
+        set i += 1
+    }
+}
+
+pub fn add: (name :&str version :&str repo :&str description :&str) :bool {
+    set name = strings::copy(name)
+    set name = strings::copy(name)
+    set version = strings::copy(version)
+    set repo = strings::copy(repo)
+    set description = strings::copy(description)
+    set f = use! deps_db::db_file()
+    if !fs::exists(f) {
+        use! deps_db::init()
+    }
+    
+    set home = env::var("HOME")
+    set distro = use! os::detect_id()
+    set fam = use! os::detect_family()
+    set pm = use! os::package_manager()
+    
+    set entry = "" :str mut
+    set entry = entry + "[[packages]]\n"
+    set entry = entry + "name = \"" + name + "\"\n"
+    set entry = entry + "version = \"" + version + "\"\n"
+    set entry = entry + "description = \"" + description + "\"\n"
+    set entry = entry + "repo = \"" + repo + "\"\n"
+    set entry = entry + "os_id = \"" + distro + "\"\n"
+    set entry = entry + "os_family = \"" + fam + "\"\n"
+    set entry = entry + "package_manager = \"" + pm + "\"\n"
+    set entry = entry + "added = \"" + use! util::i64_to_string(time::now::ns()) + "\"\n"
+    set entry = entry + "\n"
+    
+    set content = fs::read(f)
+    set new_content = content + entry
+    use fs::write(f new_content)
+    use dasu("  [OK]    package '" name + "' version " + version + " added to dependency database")
+    return true
+}
+
+pub fn lookup: (name :&str) :str {
+    set f = use! deps_db::db_file()
+    if !fs::exists(f) { return "" }
+    set content = fs::read(f)
+    set lines = strings::split(content "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(lines) {
+        set line = use! util::trim(lines at i)
+        if use! strings::starts::with(line "[[packages]]") {
+            set found_name = "" :str mut
+            set found_ver = "" :str mut
+            set j = i + 1 :i64 mut
+            while j < vec::len(lines) {
+                set next_line = use! util::trim(lines at j)
+                if use! strings::starts::with(next_line "[[") { break }
+                if use! strings::starts::with(next_line "name =") {
+                    set found_name = use! semver::extract_str_val(next_line)
+                }
+                if use! strings::starts::with(next_line "version =") {
+                    set found_ver = use! semver::extract_str_val(next_line)
+                }
+                set j += 1
+            }
+            if found_name == name {
+                return found_ver
+            }
+        }
+        set i += 1
+    }
+    return ""
+}
+
+pub fn get_distro_package: (name :&str) :str {
+    set fam = use! os::detect_family()
+    set id = use! os::detect_id()
+    set f = use! deps_db::db_file()
+    if !fs::exists(f) { return "" }
+    set content = fs::read(f)
+    set lines = strings::split(content "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(lines) {
+        set line = use! util::trim(lines at i)
+        if use! strings::starts::with(line "[[packages]]") {
+            set found_name = "" :str mut
+            set found_pkg = "" :str mut
+            set j = i + 1 :i64 mut
+            while j < vec::len(lines) {
+                set next_line = use! util::trim(lines at j)
+                if use! strings::starts::with(next_line "[[") { break }
+                if use! strings::starts::with(next_line "name =") {
+                    set found_name = use! semver::extract_str_val(next_line)
+                }
+                if found_name == name {
+                    set search = fam + " = "
+                    if use! strings::starts::with(next_line search) {
+                        set pkg_line = next_line
+                        set eq = strings::index(pkg_line "=")
+                        if eq >= 0 {
+                            set after = strings::substr(pkg_line eq + 1 200) :str mut
+                            set after = use! util::trim(after)
+                            if use! strings::starts::with(after "{") {
+                                set pkg_search = "package = \""
+                                set pkg_pos = strings::index(after pkg_search)
+                                if pkg_pos >= 0 {
+                                    set after2 = strings::substr(after pkg_pos + len(pkg_search) 100)
+                                    set end_pos = strings::index(after2 "\"")
+                                    if end_pos >= 0 {
+                                        set found_pkg = strings::substr(after2 0 end_pos)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                set j += 1
+            }
+            if len(found_name) > 0 && len(found_pkg) > 0 {
+                return found_pkg
+            }
+        }
+        set i += 1
+    }
+    return ""
+}
+
+pub fn get_checksum: (name :&str) :str {
+    set f = use! deps_db::db_file()
+    if !fs::exists(f) { return "" }
+    set content = fs::read(f)
+    set lines = strings::split(content "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(lines) {
+        set line = use! util::trim(lines at i)
+        if use! strings::starts::with(line "[[packages]]") {
+            set found_name = "" :str mut
+            set found_sha = "" :str mut
+            set j = i + 1 :i64 mut
+            while j < vec::len(lines) {
+                set next_line = use! util::trim(lines at j)
+                if use! strings::starts::with(next_line "[[") { break }
+                if use! strings::starts::with(next_line "name =") {
+                    set found_name = use! semver::extract_str_val(next_line)
+                }
+                if found_name == name {
+                    if use! strings::starts::with(next_line "sha256 =") {
+                        set found_sha = use! semver::extract_str_val(next_line)
+                    }
+                }
+                set j += 1
+            }
+            if found_name == name && len(found_sha) > 0 {
+                return found_sha
+            }
+        }
+        set i += 1
+    }
+    return ""
+}
+
+pub fn get_repo: (name :&str) :str {
+    set f = use! deps_db::db_file()
+    if !fs::exists(f) { return "" }
+    set content = fs::read(f)
+    set lines = strings::split(content "\n")
+    set i = 0 :i64 mut
+    while i < vec::len(lines) {
+        set line = use! util::trim(lines at i)
+        if use! strings::starts::with(line "[[packages]]") {
+            set found_name = "" :str mut
+            set found_repo = "" :str mut
+            set j = i + 1 :i64 mut
+            while j < vec::len(lines) {
+                set next_line = use! util::trim(lines at j)
+                if use! strings::starts::with(next_line "[[") { break }
+                if use! strings::starts::with(next_line "name =") {
+                    set found_name = use! semver::extract_str_val(next_line)
+                }
+                if found_name == name {
+                    if use! strings::starts::with(next_line "repo =") {
+                        set found_repo = use! semver::extract_str_val(next_line)
+                    }
+                }
+                set j += 1
+            }
+            if found_name == name && len(found_repo) > 0 {
+                return found_repo
+            }
+        }
+        set i += 1
+    }
+    return ""
+}
+
+fn sc: (a :&str, b :&str) :str {
+    return strings::concat(a b)
+}
+
+pub fn run: (args :&vec[str]) {
+    if vec::len(args) < 2 {
+        use dasu("Usage: owl deps-db <init|list|add|find|get-pkg|get-checksum|get-repo> [args...]")
+        return
+    }
+    set sub = vec::get::str(args 1)
+    match sub {
+        "init" { use! deps_db::init() }
+        "list" { use! deps_db::list() }
+        "add" {
+            if vec::len(args) < 5 {
+                use dasu("Usage: owl deps-db add <name> <version> <repo> <description>")
+            } else {
+                set name = strings::copy(vec::get::str(args 2))
+                set version = strings::copy(vec::get::str(args 3))
+                set repo = strings::copy(vec::get::str(args 4))
+                set desc = strings::copy(vec::get::str(args 5))
+                if use! deps_db::add(name version repo desc) {
+                    use dasu("  [OK]    package added to dependency database")
+                } else {
+                    use dasu("  [FAIL]  could not add package to dependency database")
+                }
+            }
+        }
+        "find" {
+            if vec::len(args) < 3 {
+                use dasu("Usage: owl deps-db find <name>")
+            } else {
+                set name = strings::copy(vec::get::str(args 2))
+                set ver = use! deps_db::lookup(name)
+                if len(ver) > 0 {
+                    use dasu("  " + name + " version " + ver)
+                } else {
+                    use dasu("  package '" + name + "' not found in dependency database")
+                }
+            }
+        }
+        "get-pkg" {
+            if vec::len(args) < 3 {
+                use dasu("Usage: owl deps-db get-pkg <name>")
+            } else {
+                set name = strings::copy(vec::get::str(args 2))
+                set pkg = use! deps_db::get_distro_package(name)
+                if len(pkg) > 0 {
+                    use dasu("  " + name + " -> " + pkg + " (for " + use! os::detect_family() + ")")
+                } else {
+                    use dasu("  package '" + name + "' not found for this distro")
+                }
+            }
+        }
+        "get-checksum" {
+            if vec::len(args) < 3 {
+                use dasu("Usage: owl deps-db get-checksum <name>")
+            } else {
+                set name = strings::copy(vec::get::str(args 2))
+                set sha = use! deps_db::get_checksum(name)
+                if len(sha) > 0 {
+                    use dasu("  " + name + " sha256: " + sha)
+                } else {
+                    use dasu("  no checksum recorded for '" + name + "'")
+                }
+            }
+        }
+        "get-repo" {
+            if vec::len(args) < 3 {
+                use dasu("Usage: owl deps-db get-repo <name>")
+            } else {
+                set name = strings::copy(vec::get::str(args 2))
+                set repo = use! deps_db::get_repo(name)
+                if len(repo) > 0 {
+                    use dasu("  " + name + " repo: " + repo)
+                } else {
+                    use dasu("  no repo recorded for '" + name + "'")
+                }
+            }
+        }
+        _ { use dasu("Unknown deps-db subcommand: " + sub)
+            use dasu("Available: init, list, add, find, get-pkg, get-checksum, get-repo") }
+    }
+}

@@ -11,11 +11,11 @@ load! /code/cfg
 load! /code/crypto
 
 /! MOR (Master Official Registry) - preconfigured, non-removable.
-    Contents:
-      kioto@2.4.7, kioto@2.5.3, kioto@3.0.0
-      mire@1.2.0
-      sdl@1.3.1
-      owl@latest
+   Contents:
+     kioto@2.5.0, kioto@3.0.0, kioto@3.1.0
+     mire@1.3.0
+     sdl@1.3.1
+     owl@latest
 !/
 
 pub fn home: () :str {
@@ -54,7 +54,7 @@ pub fn sync: (args :&vec[str]) {
         use fs::write(sc(mor_path "/protocol") proto)
         set url = use! registry::mor_url()
         use fs::write(sc(mor_path "/source_url") url)
-        set initial_index = "[[packages]]\nname = \"kioto\"\nversion = \"2.4.7\"\n\n[[packages]]\nname = \"kioto\"\nversion = \"2.5.3\"\n\n[[packages]]\nname = \"kioto\"\nversion = \"3.0.0\"\n\n[[packages]]\nname = \"mire\"\nversion = \"1.2.0\"\n\n[[packages]]\nname = \"sdl\"\nversion = \"1.3.1\"\n\n[[packages]]\nname = \"owl\"\nversion = \"latest\"\n"
+        set initial_index = "[[packages]]\nname = \"kioto\"\nversion = \"2.5.0\"\n\n[[packages]]\nname = \"kioto\"\nversion = \"3.0.0\"\n\n[[packages]]\nname = \"kioto\"\nversion = \"3.1.0\"\n\n[[packages]]\nname = \"mire\"\nversion = \"1.3.0\"\n\n[[packages]]\nname = \"sdl\"\nversion = \"1.3.1\"\n\n[[packages]]\nname = \"owl\"\nversion = \"latest\"\n"
         use fs::write(sc(mor_path "/index.toml") initial_index)
         use dasu("  [MOR] initialized with base packages")
     }
