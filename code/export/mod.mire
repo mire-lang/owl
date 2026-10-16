@@ -1,10 +1,11 @@
 module export
 
+load mire::vec
 load! /code/util
+load kioto::proc
 load! /code/args
-
-extern fn owl_archive_available: () :i32 lib "c"
-extern fn owl_archive_pack: (root :&str output :&str) :i32 lib "c"
+load kioto::proc
+load! /code/_externs
 
 pub fn run: (args :&vec[str]) {
     set proceed = true :bool mut
@@ -97,7 +98,7 @@ pub fn run: (args :&vec[str]) {
                          if proceed {
                              /! Raw 32-byte public key (base64), as the registry
                                 manifests use. Decoded from the PEM by kioto. !/
-                             set pubkey_b64 = use! kioto::crypto::sign::ed25519::public::raw_b64_from_pem(pub_key)
+                             set pubkey_b64 = use! crypto::sign::ed25519::public::raw_b64_from_pem(pub_key)
                              if pubkey_b64 == "" {
                                  use dasu("  error: failed to read public key " + pub_key)
                                  set proceed = false
@@ -120,7 +121,7 @@ pub fn run: (args :&vec[str]) {
 
                                  set sig_b64 = "" :str mut
                                  if fs::exists(sig_file) {
-                                     set sig_b64 = use! kioto::crypto::encode::base64::encode_file(sig_file)
+                                     set sig_b64 = use! crypto::encode::base64::encode_file(sig_file)
                                  }
                                  if sig_b64 == "" {
                                      use dasu("  error: failed to sign archive (openssl required)")

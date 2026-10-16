@@ -88,6 +88,35 @@ instead of a later `llvm-sys` linker failure.
 | `-V`, `--version` | Show version |
 | `-h`, `--help` | Show help |
 
+## Testing
+
+```bash
+owl test              # the whole suite
+owl test -j 8         # parallel
+owl test --release    # opt-level 3, binaries land in <output>/release/
+owl test --no-run     # compile only
+```
+
+Flags are forwarded to `mire test`; see `--help` for the full list.
+
+**Testing ignores the artifact.** `owl test` always builds an executable, whatever
+`[build] artifact` says, because a test needs an entry point to run from and a
+package's published form is no business of its test suite. This is enforced on
+both sides: owl does not forward a library artifact, and the compiler normalizes
+one away if it is configured that way anyway. A manifest declaring
+`runtime = "none"` is likewise lifted to `minimal` for the test build, since a
+test needs the runtime to run on. An explicit `--runtime` is left alone.
+
+Before this, every library package in the tree — `kioto`, `mire`, `sdl`, `sqlite`
+and `blu` — got a shared object instead of a test executable, and each test file
+was reported `ok` having run no assertion. See
+[docs/changelog.md](docs/changelog.md) under 1.2.4.
+
+> One caveat that is *not* fixed: a file with several `@[test]` functions reports
+> all of them as failed when any one fails. The count is deliberately
+> conservative, so a red suite is never understated — but `Failed: 11` does not
+> mean eleven broken tests.
+
 ## checkup Command — Diagnostics & Repair
 
 ```bash
@@ -250,6 +279,28 @@ pins exact versions and paths for reproducible installs.
 owl install           # Resolve owl.toml and update/install owl.lock
 owl install --lock   # Install all packages from owl.lock
 ```
+
+Every dependency declared in `[dependencies]` gets a `[[package]]` entry,
+**including local `path` dependencies** (they are recorded with
+`registry = "local"` and their declared path). A dependency that is missing
+from the lockfile makes it out of sync with `owl.toml`, which re-triggers
+resolution — so if a project re-resolves on every command, a dep is most
+likely not being written to the lock.
+
+```toml
+[[package]]
+name     = "kioto"
+version  = "2.4.9"
+path     = "~/.owl/libs/kioto"
+registry = "local"
+```
+
+Entries are written column-aligned to width 8 (`name␣␣␣␣␣=`, `version␣␣=`,
+`path␣␣␣␣␣=`, `registry␣=`); the lockfile reader matches on that exact
+alignment, so hand-edited entries must keep it.
+
+Only `[c] sources` may list C files (`.c`). A `.mire` module listed there is
+passed to the C compiler and fails the build.
 
 ## Documentation
 

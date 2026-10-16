@@ -1,14 +1,19 @@
 module build
 
+load mire::vec
 load! /code/util
+load kioto::proc
 load! /code/lockfile
+load kioto::proc
 load! /code/deps
+load kioto::proc
 load! /code/install
+load kioto::proc
 load! /code/args
-    set cfg_lock = use! util::toml_get("owl.toml" "cfg" "lock")
-    if cfg_lock == "0" { return true }
-
-extern fn exit: (code :i64) lib "c"
+load kioto::proc
+load! /code/lockfile
+load kioto::proc
+load! /code/_externs
 
 /! Validate the project environment before compilation. A missing or stale
    lockfile is a dependency-management state, not a compiler error: Owl asks
@@ -61,19 +66,28 @@ pub fn test_config: (args :&vec[str]) :str {
     set requested_opt = use! util::arg_value(args "--opt-level")
     if requested_opt != "" { set opt = requested_opt }
 
-set entry = use! util::config_required("project" "entry")
-    set artifact = use! util::arg_value(args "--artifact") :str mut
-    if artifact == "" { 
-        set artifact = use! util::config_default("build" "artifact" "bin") 
-    }
-    use dasu("[DEBUG] build: artifact resolved to [" + artifact + "]")
+    set entry = use! util::config_required("project" "entry")
+// ----- owl resolves, it does not decide. A test needs an executable, and what
+// ----- a project publishes is irrelevant to that, so the artifact the
+// ----- manifest declares is not consulted here. Forwarding it was how a
+// ----- library declaring artifact = "shared" ended up building a shared
+// ----- object with no test entry point: every test file was reported ok having
+// ----- run no assertion, across all five library packages in the tree. The
+// ----- compiler enforces the same rule for anyone who drives it directly; this
+// ----- keeps owl from handing it a manifest to override.
+    set artifact = "bin"
 // ----- owl writes a normalized mire config per artifact; the tier and target
 // ----- must still honor the project's owl.toml so full-tier projects (e.g.
 // ----- the avenys test suite) don't silently regress to "minimal".
 set runtime = use! util::arg_value(args "--runtime") :str mut
 if runtime == "" {
     set runtime = use! util::config_default("build" "runtime" "minimal")
+// ----- A test needs the runtime to run on, so a manifest declaring
+// ----- runtime = "none" is lifted to "minimal" here. An explicit --runtime is
+// ----- left alone: the caller asked for that tier by name.
+    if runtime == "none" { set runtime = "minimal" }
 }
+
     set target = use! util::arg_value(args "--target") :str mut
     if target == "" { set target = "x86_64-unknown-linux-gnu" }
     set output = use! util::config_required("paths" "output")
@@ -89,15 +103,13 @@ if runtime == "" {
 }
 
 pub fn compile: (args :&vec[str] is_run :bool) {
-    use! fs::write("/tmp/build_debug.txt" "COMPILE FUNCTION CALLED")
-    use dasu("[DEBUG] compile called, is_run=" + (if is_run { "true" } else { "false" }))
-    set is_proj = use! util::has_project()
+    set is_proj = use! util::has_project() :bool mut
 
-    set n = rt_vec_len(args)
+    set n = vec::len(args) :i64 mut
     set file_idx = 1 :i64 mut
     set fi = 1 :i64 mut
     while fi < n {
-        set fa = rt_vec_get_str(args fi)
+        set fa = vec::get::str(args fi)
         if !use! util::startswith(fa "-") {
             set file_idx = fi
             set fi = n
@@ -113,7 +125,7 @@ pub fn compile: (args :&vec[str] is_run :bool) {
     set run_args = [] :vec[str] mut
     set seen_ddash = false :bool mut
     while i < n {
-        set a = rt_vec_get_str(args i)
+        set a = vec::get::str(args i)
         if a == "--" {
             set seen_ddash = true
         } else {
@@ -130,7 +142,7 @@ pub fn compile: (args :&vec[str] is_run :bool) {
                     } else {
                         if a == "-O" || a == "--opt-level" {
                             set i += 1
-                            if i < n { set cli_opt = rt_vec_get_str(args i) }
+                            if i < n { set cli_opt = vec::get::str(args i) }
                         } else {
                             if use! util::startswith(a "-O") && len(a) > 2 {
                                 set cli_opt = use! util::replace(a "-O" "")
@@ -153,7 +165,7 @@ pub fn compile: (args :&vec[str] is_run :bool) {
 
     if !is_proj {
         if cli_file == "" {
-            if file_idx > 0 && file_idx < n { set cli_file = rt_vec_get_str(args file_idx) }
+            if file_idx > 0 && file_idx < n { set cli_file = vec::get::str(args file_idx) }
         }
         if cli_file == "" {
             use! util::error_line("OWL0002" "no file specified and no owl.toml found")
@@ -277,13 +289,13 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
 }
 
 pub fn debug: (args :&vec[str]) {
-    set is_proj = use! util::has_project()
-    set n = rt_vec_len(args)
+    set is_proj = use! util::has_project() :bool mut
+    set n = vec::len(args) :i64 mut
 
     set file_idx = 1 :i64 mut
     set fi = 1 :i64 mut
     while fi < n {
-        set fa = rt_vec_get_str(args fi)
+        set fa = vec::get::str(args fi)
         if !use! util::startswith(fa "-") {
             set file_idx = fi
             set fi = n
@@ -294,7 +306,7 @@ pub fn debug: (args :&vec[str]) {
     set extra_flags = "" :str mut
     set i = 1 :i64 mut
     while i < n {
-        set a = rt_vec_get_str(args i)
+        set a = vec::get::str(args i) :str mut
         if a == "--tokens" || a == "-t" {
             set extra_flags = extra_flags + " --tokens"
         } else {
@@ -322,7 +334,7 @@ pub fn debug: (args :&vec[str]) {
     }
 
     set cli_file = "" :str mut
-    if file_idx > 0 && file_idx < n { set cli_file = rt_vec_get_str(args file_idx) }
+    if file_idx > 0 && file_idx < n { set cli_file = vec::get::str(args file_idx) }
 
     if !is_proj {
         if cli_file == "" {
@@ -334,7 +346,8 @@ pub fn debug: (args :&vec[str]) {
         set argv = vec::push::str(argv "debug")
         set argv = vec::push::str(argv strings::copy(cli_file))
         set argv = vec::push::str(argv "--lib-dir")
-        set argv = vec::push::str(argv use! deps::compiler_lib_dirs())
+        set lib_dirs = use! deps::compiler_lib_dirs()
+        set argv = vec::push::str(argv lib_dirs)
         if extra_flags != "" {
             set toks = strings::split(extra_flags " ")
             set ti = 0 :i64 mut
@@ -366,7 +379,8 @@ pub fn debug: (args :&vec[str]) {
     set argv = vec::push::str(argv "debug")
     set argv = vec::push::str(argv strings::copy(file))
     set argv = vec::push::str(argv "--lib-dir")
-    set argv = vec::push::str(argv use! deps::compiler_lib_dirs())
+    set lib_dirs = use! deps::compiler_lib_dirs()
+    set argv = vec::push::str(argv lib_dirs)
     if extra_flags != "" {
         set toks = strings::split(extra_flags " ")
         set ti = 0 :i64 mut

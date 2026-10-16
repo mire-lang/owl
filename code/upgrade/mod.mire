@@ -1,6 +1,8 @@
 module upgrade
 
+load mire::vec
 load! /code/util
+load kioto::proc
 load! /code/args
 
 pub fn run: (args :&vec[str]) :i64 {

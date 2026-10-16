@@ -19,6 +19,9 @@ Thumbs.db
 *.tmp
 *.swp
 
+# Debug artifact escrito por util::write_mire_config
+write_mire_config_debug.txt
+
 # Backups
 *.bak
 *.backup

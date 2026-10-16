@@ -1,14 +1,17 @@
 module info
 
+load mire::vec
+load kioto::strings
 load! /code/util
+load kioto::proc
 load! /code/deps
 
 pub fn run: (args :&vec[str]) {
     set json_mode = false :bool mut
     set i = 2 :i64 mut
-    set argc = rt_vec_len(args)
+    set argc = vec::len(args)
     while i < argc {
-        if rt_vec_get_str(args i) == "--json" { set json_mode = true }
+        if vec::get::str(args i) == "--json" { set json_mode = true }
         set i += 1
     }
 
@@ -174,10 +177,10 @@ pub fn clean: (args :&vec[str]) {
     set clean_all = false :bool mut
     set clean_global = false :bool mut
 
-    set n = rt_vec_len(args)
+    set n = vec::len(args)
     set i = 2 :i64 mut
     while i < n {
-        set a = rt_vec_get_str(args i)
+        set a = vec::get::str(args i)
         if a == "--bin" { set clean_bin = true }
         if a == "--cache" { set clean_cache = true }
         if a == "--all" || a == "-A" { set clean_all = true }

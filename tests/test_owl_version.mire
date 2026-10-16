@@ -1,0 +1,39 @@
+// owl tool test: version and help flags are answered, not rejected
+load kioto
+load kioto::fs
+load testlib
+
+pub fn main: () {
+    use dasu("--- test: owl --version / -V / --help ---")
+
+    set owl_bin = strings::concat(env::var("HOME") "/.local/bin/owl")
+
+    set va = [] :vec[str] mut
+    set va = vec::push::str(va "--version")
+    set va = vec::push::str(va "version")
+    set v1 = proc::run::output(owl_bin va)
+
+    set sa = [] :vec[str] mut
+    set sa = vec::push::str(sa "-V")
+    set sa = vec::push::str(sa "version")
+    set v2 = proc::run::output(owl_bin sa)
+
+    set ha = [] :vec[str] mut
+    set ha = vec::push::str(ha "--help")
+    set ha = vec::push::str(ha "help")
+    set v3 = proc::run::output(owl_bin ha)
+
+    testlib.assert_true(strings::starts::with(strings::trim(v1) "Owl v"))
+    testlib.assert_true(strings::starts::with(strings::trim(v2) "Owl v"))
+    testlib.assert_true(strings::contains(v3 "Usage: owl"))
+
+    /! None of the three may be answered with the flag-validation error. !/
+    set n1 = strings::contains(v1 "E0012")
+    set n2 = strings::contains(v2 "E0012")
+    set n3 = strings::contains(v3 "E0012")
+    testlib.assert_true(!n1)
+    testlib.assert_true(!n2)
+    testlib.assert_true(!n3)
+
+    use dasu("  --version / -V / --help: ok")
+}

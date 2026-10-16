@@ -1,6 +1,6 @@
 [project]
 name = "owl"
-version = "1.1.1"
+version = "1.2.4"
 entry = "code/main.mire"
 
 [build]
@@ -15,7 +15,7 @@ bin = "/tmp/owl-archive-bin"
 cache = "/tmp/owl-archive-cache"
 
 [cfg]
-libs = ["archive"]
+libs = ["archive", "zstd"]
 sources = ["native/archive.c"]
 link-dirs = []
 cflags = ["-Wl,--disable-new-dtags", "-Wl,-rpath,$ORIGIN/../lib/mire"]

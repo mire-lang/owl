@@ -1,124 +1,192 @@
 module cfg
 
-extern fn toml_get: (file :str section :str key :str) :str lib "util"
-extern fn has_project: () :bool lib "util"
-extern fn error_line: (code :str) :i64
-extern fn rt_vec_len: (list :&vec[str]) :i64 lib "c"
+load mire::vec
+load! /code/_externs
 
+/! Global config file path !/
+pub fn global_cfg_path: () :str {
+    return use! util::owl_home_cfg() + "/global.toml"
+}
+
+/! Default global config !/
+pub fn default_global_cfg: () :str {
+    set cfg = "" :str mut
+    set cfg = cfg + "[registry]\n"
+    set cfg = cfg + "default = \"MOR\"\n"
+    set cfg = cfg + "required = true\n\n"
+    set cfg = cfg + "[lock]\n"
+    set cfg = cfg + "version = 3\n"
+    set cfg = cfg + "update = \"on-resolve\"\n"
+    set cfg = cfg + "strict = false\n\n"
+    set cfg = cfg + "[cache]\n"
+    set cfg = cfg + "ttl = 7\n"
+    set cfg = cfg + "max-size = 512\n"
+    set cfg = cfg + "project-refresh = 5\n\n"
+    set cfg = cfg + "[net]\n"
+    set cfg = cfg + "timeout = 30\n"
+    set cfg = cfg + "retries = 3\n"
+    set cfg = cfg + "mirror = \"\"\n\n"
+    set cfg = cfg + "[build]\n"
+    set cfg = cfg + "default-profile = \"debug\"\n"
+    set cfg = cfg + "default-target = \"SystemAuto\"\n\n"
+    set cfg = cfg + "[projects]\n"
+    set cfg = cfg + "deps-path = \"~/.owl/libs\"\n"
+    set cfg = cfg + "src = \"./src/\"\n"
+    set cfg = cfg + "target = \"./bin/\"\n"
+    set cfg = cfg + "cache = \"./bin/.cache\"\n"
+    return cfg
+}
+
+/! Ensure global config exists !/
+pub fn ensure_global_cfg: () {
+    set path = use! cfg::global_cfg_path()
+    if !use! util::fs_exists(path) {
+        use! util::mkdir_p(use! util::owl_home_cfg())
+        use! util::fs_write(path use! cfg::default_global_cfg())
+    }
+}
+
+/! Read a value from global config !/
+pub fn get_global: (key :str) :str {
+    use! cfg::ensure_global_cfg()
+    set path = use! cfg::global_cfg_path()
+    set section_key = strings::split(key ".")
+    if len(section_key) != 2 { return "" }
+    set section = use! util::list_get(section_key 0)
+    set key_name = use! util::list_get(section_key 1)
+    return use! util::toml_get(path section key_name)
+}
+
+/! Write a value to global config !/
+pub fn set_global: (key :str value :str) :bool {
+    use! cfg::ensure_global_cfg()
+    set path = use! cfg::global_cfg_path()
+    set section_key = strings::split(key ".")
+    if len(section_key) != 2 { return false }
+    set section = use! util::list_get(section_key 0)
+    set key_name = use! util::list_get(section_key 1)
+    return use! util::toml_set(path section key_name value)
+}
+
+/! Read a value from project [cfg] section !/
+pub fn get_project: (key :str) :str {
+    if !use! util::has_project() { return "" }
+    return use! util::toml_get("owl.toml" "cfg" key)
+}
+
+/! Write a value to project [cfg] section !/
+pub fn set_project: (key :str value :str) :bool {
+    if !use! util::has_project() { return false }
+    return use! util::toml_set("owl.toml" "cfg" key value)
+}
+
+/! List all global config keys !/
+pub fn list_global: () {
+    use! cfg::ensure_global_cfg()
+    set path = use! cfg::global_cfg_path()
+    set content = use! util::fs_read(path)
+    use dasu("Global config (" + path + "):")
+    use dasu(content)
+}
+
+/! Main entry point !/
 pub fn run: (args :&vec[str]) :i64 {
-    set project = "" :str mut
-    set lock_val = "" :str mut
-    set update_val = "" :str mut
+    set n = vec::len(args)
+    if n == 0 {
+        use! cfg::list_global()
+        return 0
+    }
 
-    /! Parse flags
-    set i = 0 :i64 mut
-    set n = rt_vec_len(args)
+    set cmd = vec::get::str(args 0)
+    set is_project = false :bool mut
+    set write_mode = false :bool mut
+    set arg_start = 1 :i64 mut
 
+    /! Check for --project and --write flags !/
+    set i = 1 :i64 mut
     while i < n {
-        set arg = rt_vec_get_str(args i)
-        if use! util::startswith(arg "--lock") && i + 1 < n {
-            set lock_val = rt_vec_get_str(args i + 1)
-            set i += 2
-        } elif use! util::startswith(arg "--update") && i + 1 < n {
-            set update_val = rt_vec_get_str(args i + 1)
-            set i += 2
-        } elif use! util::startswith(arg "--project") && i + 1 < n {
-            set project = rt_vec_get_str(args i + 1)
-            set i += 2
+        set arg = vec::get::str(args i)
+        if arg == "--project" { set is_project = true }
+        if arg == "--write" { set write_mode = true }
+        set i += 1
+    }
+
+    /! Adjust arg_start for flags !/
+    if cmd == "get" || cmd == "set" {
+        if is_project { set arg_start = 3 } else { set arg_start = 2 }
+    }
+
+    if cmd == "get" {
+        if n < arg_start {
+            use dasu("Usage: owl cfg get <key> [--project]")
+            return 1
+        }
+        set key = vec::get::str(args 1)
+        if is_project {
+            set val = use! cfg::get_project(key)
+            if val != "" { use dasu(key + " = " + val) } else { use dasu(key + " = (not set)") }
         } else {
-            set i += 1
+            set val = use! cfg::get_global(key)
+            if val != "" { use dasu(key + " = " + val) } else { use dasu(key + " = (not set)") }
         }
-    }
-
-    /! If no project specified, use current directory
-    if project == "" {
-        if use! util::has_project() {
-            /! Read lock and update@lock from existing [cfg] section
-            set lock_val = use! util::toml_get("owl.toml" "cfg" "lock")
-            if lock_val == "" { set lock_val = "1" }
-            set update_val = use! util::toml_get("owl.toml" "cfg" "update@lock")
-            if update_val == "" { set update_val = "Build" }
+        return 0
+    } elif cmd == "set" {
+        if n < arg_start + 1 {
+            use dasu("Usage: owl cfg set <key> <value> [--project]")
+            return 1
+        }
+        set key = vec::get::str(args 1)
+        set value = vec::get::str(args 2)
+        set ok = false :bool mut
+        if is_project {
+            set ok = use! cfg::set_project(key value)
+            if ok { use dasu("Project config updated: " + key + " = " + value) }
         } else {
-            use dasu("Error: no project directory (no owl.toml found)")
+            set ok = use! cfg::set_global(key value)
+            if ok { use dasu("Global config updated: " + key + " = " + value) }
+        }
+        if !ok {
+            use dasu("Error: failed to set " + key)
             return 1
         }
-    }
-
-    /! Validate lock value
-    if lock_val != "" {
-        if use! util::startswith(lock_val "0") { set lock_val = "0" } elif use! util::startswith(lock_val "1") { set lock_val = "1" } else {
-            use dasu("Error: invalid lock value '" + lock_val + "'")
-            return 1
-        }
-    } else {
-        set lock_val = "1" /! Default
-    }
-
-    /! Validate update@lock value
-    if update_val != "" {
-        if use! util::startswith(update_val "Build") { } elif use! util::startswith(update_val "Changes") { } elif use! util::startswith(update_val "None") { } else {
-            use dasu("Error: invalid update@lock value '" + update_val + "'")
-            return 1
-        }
-    } else {
-        set update_val = "Build" /! Default
-    }
-
-    /! If --write flag, rewrite owl.toml [cfg] section
-    if use! args::flag::has(args "--write") {
-        set toml_path = project + "/owl.toml" :str mut
-        if !fs::exists(toml_path) {
-            use dasu("Error: owl.toml not found in '" + project + "'")
-            return 1
-        }
-        set content = fs::read(toml_path)
-        if content == "" {
-            use dasu("Error: owl.toml is empty")
-            return 1
-        }
-
-        /! Find [cfg] section
-        set cfg_section_start = strings::index(content "[cfg]")
-        set cfg_section_end = strings::index(content "[security]")
-
-        set new_cfg_block = "\n[cfg]\nlock = " + lock_val + "\nupdate@lock = \"" + update_val + "\"\n"
-
-        if cfg_section_start >= 0 {
-            /! [cfg] section exists - replace it
-            if cfg_section_end >= 0 {
-                set before = strings::substr(content 0 cfg_section_start) :str mut
-                set after = strings::substr(content cfg_section_end 9999) :str mut
-                set new_content = before + new_cfg_block + after
+        return 0
+    } elif cmd == "list" {
+        if is_project {
+            if use! util::has_project() {
+                set content = use! util::fs_read("owl.toml")
+                set cfg_start = strings::index(content "[cfg]")
+                if cfg_start >= 0 {
+                    set next_sec = strings::index(strings::substr(content cfg_start + 5 9999) "\n[")
+                    set cfg_content = ""
+                    if next_sec >= 0 {
+                        set cfg_content = strings::substr(content cfg_start cfg_start + 5 + next_sec)
+                    } else {
+                        set cfg_content = strings::substr(content cfg_start 9999)
+                    }
+                    use dasu("Project [cfg] section:")
+                    use dasu(cfg_content)
+                } else {
+                    use dasu("Project has no [cfg] section")
+                }
             } else {
-                set new_content = content + new_cfg_block
+                use dasu("No project (no owl.toml)")
             }
         } else {
-            /! No [cfg] section - add after [project] or at end
-            set project_section_end = strings::index(content "[build]")
-            if project_section_end >= 0 {
-                set before = strings::substr(content 0 project_section_end) :str mut
-                set after = strings::substr(content project_section_end 9999) :str mut
-                set new_content = before + new_cfg_block + after
-            } else {
-                set new_content = content + new_cfg_block
-            }
+            use! cfg::list_global()
         }
-
-        /! Write back
-        set write_ok = use! fs::write(toml_path new_content)
-        if write_ok {
-            use dasu("Config updated:")
-            use dasu("  lock: " + lock_val)
-            use dasu("  update@lock: " + update_val)
-        } else {
-            use dasu("Error: failed to write owl.toml")
-            return 1
-        }
+        return 0
     } else {
-        /! No --write: just show current config
-        use dasu("Current lockfile configuration:")
-        use dasu("  lock: " + lock_val)
-        use dasu("  update@lock: " + update_val)
+        use dasu("Usage: owl cfg [get|set|list] [--project] [--write]")
+        return 1
     }
-    return 0
+}
+
+/! Legacy compatibility: reads lock/update@lock from project [cfg] !/
+pub fn legacy_lock_config: () :str {
+    if !use! util::has_project() { return "lock=1\nupdate@lock=Build" }
+    set lock = use! util::toml_get("owl.toml" "cfg" "lock")
+    if lock == "" { set lock = "1" }
+    set update = use! util::toml_get("owl.toml" "cfg" "update@lock")
+    if update == "" { set update = "Build" }
+    return "lock=" + lock + "\nupdate@lock=" + update
 }

@@ -1,0 +1,70 @@
+module _externs
+
+/! 
+   Centralized extern declarations for Owl.
+   All modules should `load! /code/_externs` and use `_externs::pal_*`, `_externs::rt_*`, etc.
+!/
+
+/! ── PAL (Platform Abstraction Layer) ───────────────────────────── !/
+
+/! Process management !/
+pub extern fn pal_proc_create: (argv :ptr, flags :i32, stdin_ch :i64, stdout_ch :i64, stderr_ch :i64) :i64 lib "c"
+pub extern fn pal_proc_wait: (proc :i64) :i64 lib "c"
+pub extern fn pal_proc_kill: (proc :i64) :i64 lib "c"
+pub extern fn pal_proc_close: (proc :i64) lib "c"
+
+/! File system !/
+pub extern fn pal_fs_read_file: (path :&str) :str lib "c"
+pub extern fn pal_fs_write_file: (path :&str, content :&str) :bool lib "c"
+pub extern fn pal_fs_exists: (path :&str) :bool lib "c"
+pub extern fn pal_fs_mkdir: (path :&str) :bool lib "c"
+pub extern fn pal_fs_remove: (path :&str) :bool lib "c"
+
+/! Archive !/
+pub extern fn owl_archive_extract: (input :&str, destination :&str) :i32 lib "c"
+pub extern fn owl_archive_available: () :i32 lib "c"
+pub extern fn owl_archive_pack: (root :&str, output :&str) :i32 lib "c"
+
+/! ── Runtime (rt_*) ────────────────────────────────────────────── !/
+
+/! Argument handling !/
+pub extern fn rt_build_argv: (cmd :&str, args :vec[str]) :ptr lib "c"
+pub extern fn rt_free_argv: (argv :ptr, argc :i64) lib "c"
+
+/! Vector operations !/
+pub extern fn rt_vec_len: (v :&vec[str]) :i64 lib "c"
+pub extern fn rt_vec_get_str: (list :&vec[str], index :i64) :str lib "c"
+
+/! Process capture !/
+pub extern fn rt_proc_capture_argv: (cmd :&str, args :vec[str]) :str lib "c"
+pub extern fn rt_proc_capture_argv2: (cmd :&str, args :vec[str], cwd :&str, merge_err :i64) :str lib "c"
+pub extern fn rt_proc_last_exit: () :i64 lib "c"
+pub extern fn rt_read_tty: () :str lib "c"
+
+/! String/number conversion !/
+pub extern fn rt_string_to_i64: (value :str) :i64 lib "c"
+pub extern fn rt_i64_to_string: (value :i64) :str lib "c"
+
+/! Memory/string ops !/
+pub extern fn rt_string_copy: (s :&str) :str lib "c"
+pub extern fn rt_string_concat: (left :&str, right :&str) :str lib "c"
+
+/! ── Util (lib "util") ──────────────────────────────────────────── !/
+
+/! TOML operations !/
+pub extern fn toml_get: (file :str, section :str, key :str) :str lib "util"
+pub extern fn toml_set: (file :str, section :str, key :str, value :str) :bool lib "util"
+
+/! Project management !/
+pub extern fn has_project: () :bool lib "util"
+pub extern fn owl_home_cfg: () :str lib "util"
+pub extern fn mkdir_p: (path :str) lib "util"
+pub extern fn error_line: (code :str) :i64 lib "util"
+
+/! Filesystem (lib "util") !/
+pub extern fn fs_exists: (path :&str) :bool lib "util"
+pub extern fn fs_read: (path :&str) :str lib "util"
+pub extern fn fs_write: (path :&str, content :&str) :bool lib "util"
+
+/! ── C standard library ─────────────────────────────────────────── !/
+pub extern fn exit: (code :i64) lib "c"

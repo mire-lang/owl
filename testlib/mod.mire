@@ -4,7 +4,11 @@ load kioto
 extern fn exit: (code :i64) lib "c"
 
 pub fn fail: (msg :str) {
-    use dasu("  FAIL: " + msg)
+    // The runner counts lines that start with `[FAIL]`, and also honours a
+    // non-zero exit. Both are load-bearing: the marker attributes the failure
+    // to this file with a readable reason, and the exit code keeps the failure
+    // from being lost if the wording ever drifts again.
+    use dasu("  [FAIL] " + msg)
     use exit(1)
 }
 
@@ -24,6 +28,21 @@ pub fn assert_eq: (expected :i64 actual :i64) {
     if expected != actual {
         fail("expected " + strings::from::i64(expected) + ", got " + strings::from::i64(actual))
     }
+}
+
+// Float comparison by tolerance, not by ==. Exact equality turns a one-ulp
+// difference into a failure that reads like a logic bug, and it does so
+// intermittently, on whichever platform happens to round differently. The
+// tolerance is relative to the larger magnitude, so a tiny value and a large
+// one are held to the same relative standard, and it falls out correctly when
+// both sides are zero.
+pub fn assert_eq_f64: (expected :f64 actual :f64) {
+    set scale = math::abs(expected) :f64 mut
+    if math::abs(actual) > scale { set scale = math::abs(actual) }
+    if math::abs(expected - actual) <= math::consts::epsilon() * 4.0 * scale {
+        return
+    }
+    fail("expected " + strings::from::f64(expected) + ", got " + strings::from::f64(actual))
 }
 
 pub fn assert_ne: (a :i64 b :i64) {

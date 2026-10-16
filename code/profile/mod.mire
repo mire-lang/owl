@@ -19,11 +19,11 @@ pub fn run: (args :&vec[str]) {
     use dasu("  Output:    " + use! util::toml_get("owl.toml" "paths" "output") + "/" + use! util::toml_get("owl.toml" "build" "profile") + "/main")
 
     set binary_size = "0" :str mut
-     if fs::exists("bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main") {
-         set prof = use! util::toml_get("owl.toml" "build" "profile")
-         set sz = use! util::file_size("bin/" + prof + "/main")
-         set binary_size = use! util::i64_to_string(sz)
-     }
+    if fs::exists("bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main") {
+        set prof = use! util::toml_get("owl.toml" "build" "profile")
+        set sz = use! util::file_size("bin/" + prof + "/main")
+        set binary_size = use! util::i64_to_string(sz)
+    }
     use dasu("  Binary:    " + binary_size + " bytes")
 
     if fs::exists(status_path) {

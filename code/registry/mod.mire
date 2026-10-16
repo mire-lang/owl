@@ -1,6 +1,8 @@
 module registry
 
+load mire::vec
 load! /code/util
+load kioto::proc
 load! /code/trust
 
 pub fn add: (url :str) {
@@ -22,11 +24,17 @@ pub fn add: (url :str) {
 if attempt == 0 { set try_url = url + "/registry.json" }
             if attempt == 1 { set try_url = url + "/raw/main/registry.json" }
             if attempt == 2 { set try_url = url + "/raw/master/registry.json" }
+            if attempt == 3 { 
+                // Use GitHub API to bypass raw.githubusercontent.com caching
+                set try_url = strings::replace::all(url "https://github.com/" "https://api.github.com/repos/") + "/contents/registry.json"
+            }
 
             if try_url != "" {
                 set curl_args = [] :vec[str] mut
                 set curl_args = vec::push::str(curl_args "-sL")
                 set curl_args = vec::push::str(curl_args "--fail")
+                set curl_args = vec::push::str(curl_args "-H")
+                set curl_args = vec::push::str(curl_args "Accept: application/vnd.github.raw")
                 set curl_args = vec::push::str(curl_args "-o")
                 set curl_args = vec::push::str(curl_args strings::copy(tmp + "/registry.json"))
                 set curl_args = vec::push::str(curl_args strings::copy(try_url))

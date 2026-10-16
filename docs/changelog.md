@@ -1,19 +1,147 @@
-# Owl Changelog
-
-## [1.1.2] - 2026-09-20
+## [1.2.4] - 2026-09-26
 
 ### Added
-- **Lockfile checksum-of-change cache**: `owl checkup` now computes SHA-256 of `owl.toml` and compares it to the stored `manifest-sha256` in `owl.lock`. When checksums match, full lockfile validation is skipped (fast path).
-- **Interactive lockfile update prompt**: When `owl.toml` has changed since the last lockfile generation, `owl checkup` prompts `Update lockfile now? (y/N)` with options to regenerate, keep existing, or install locked versions.
-- **Fresh project auto-generation**: New projects created with `owl new` now automatically generate a V3 lockfile on first `owl checkup`/`build`/`run` without blocking.
-
-### Changed
-- **GitHub registry fallback removed**: The `registry add` command no longer attempts to download from `github.com`/`raw.githubusercontent.com` URLs. Users must configure a proper custom registry.
-- **Permissions tightened**: `~/.owl/libs/` directories now use `500` (read+execute for owner) instead of world-readable.
+- **`owl test --release`** — the `test` subcommand had no entry in the allowed-flags table at
+  all, so it rejected *every* flag and printed an empty "available flags" list. It now accepts
+  the flags `mire test` itself understands (`--release`/`-r`, `--debug`/`-d`, `--opt-level`/`-O`,
+  `--jobs`/`-j`, `--lib-dir`/`-L`, `--config`, `--no-run`, `--no-warn`, `--no-categorize`,
+  `--cache`, `--cache-dir`, `--verbose`/`-v`, `--log`, `--help`/`-h`) and forwards them to the
+  compiler. `build::test_config()` already mapped `--release` to `profile = "release"` /
+  `opt-level = "3"`; only the validation gate was missing. Release test binaries now land in
+  `<output>/release/` instead of `<output>/debug/`.
 
 ### Fixed
-- **Lockfile validation on fresh projects**: Previously `owl checkup` would fail with "owl.lock not found" on new projects. Now it auto-generates a V3 lockfile and proceeds.
-- **Tilde expansion in dependencies**: `[dependencies]` paths with `~/.owl/libs/...` are now properly expanded via `util::expand_home()`.
+- **Passthrough dropped flag values** — `check::run_tests()` forwarded only arguments starting
+  with `-`, so `-j 4` reached the compiler as a bare `-j` and it aborted with
+  `Missing value for --jobs`. Value-taking flags now carry their value across via the new
+  `check::takes_value()` helper.
+- **Broken proc API calls** — the `proc::run_output` / `run_output_cwd` / `run_last_exit` /
+  `run_spawn` names were replaced by the namespaced `proc::run::output` / `::output_cwd` /
+  `::last_exit` / `::spawn` form used across the rest of the library. 56 call sites in
+  `code/` and `tests/` were migrated.
+- **`owl test` ran nothing for any library package** — every test file was reported `ok` having
+  executed no assertion. `build::test_config()` resolved the artifact from `[build] artifact`
+  (defaulting to `bin`) and forwarded it, so a package declaring `artifact = "shared"` was built
+  as a shared object with no test entry point. The green was a build success, not a test result,
+  and it reached every library package in the tree: `kioto`, `mire`, `sdl`, `sqlite` and `blu`
+  all set that artifact. `test_config()` now always builds a `bin`; owl resolves the project, it
+  does not decide how a test is built. A manifest declaring `runtime = "none"` is lifted to
+  `minimal` for the test build, since a test needs the runtime to run on, while an explicit
+  `--runtime` is left alone.
+
+  Found by deliberately breaking an assertion in a library package: with `bin/.cache` and
+  `tests/log` cleared, `owl test` reported `Ok: 16 - Passed: 16` where `mire test` reported
+  `FAILED`. After the fix the same experiment reports `Failed: 11` under both runners. The
+  companion fix is in the compiler, which normalizes a library artifact away even when driven
+  directly with a manifest that asks for one, so the guarantee does not depend on which tool is
+  invoked.
+- **`owl --version`, `-V` and `--help` were all rejected** — flag validation scanned the argument
+  vector from index 0, so the subcommand token was validated as a flag of itself. `owl --version`
+  therefore reported `E0012: Unknown flag --version` against a subcommand named `--version`, with
+  an empty "available flags" list, even though `main` already dispatched all three to the banner
+  and the help text. Only the arguments after the subcommand are its flags, so the scan starts at
+  `argv[2]`. Regression test: `tests/test_owl_version.mire`, which asserts all three are answered
+  and none carries `E0012`.
+- **`owl --version` reported a stale version** — `util::owl_version()` returned a hardcoded
+  `"1.1.2"` while the manifest said `1.2.4`, so the banner understated the release it shipped in.
+  The version is now read from `[project] version` in `owl.toml`, keeping the manifest the single
+  source of truth, with the constant retained only as a fallback for running outside a project.
+- **`testlib::fail` printed no marker the runner could attribute** — it printed the reason and
+  returned, so a failing assertion exited 0 and the failure was lost. It now emits `  [FAIL]`
+  before the reason and exits non-zero. The marker attributes the failure to the file with a
+  readable reason; the exit code keeps the failure from being lost if the wording drifts again.
+- **`testlib::assert_eq_f64` was missing** — float comparisons had no helper, and a tolerance had
+  to be spelled out at every call site. Added, comparing against `epsilon * 4` scaled by the larger
+  magnitude so it is a relative tolerance that also holds near zero.
+- **Debug instrumentation left in the release path** — `code/build`, `code/check` and `code/util`
+  carried `[DEBUG]` tracing and unconditional writes to `/tmp/build_debug.txt`,
+  `/tmp/config_default_debug.txt`, `/tmp/owl_test_debug.txt` and a relative
+  `write_mire_config_debug.txt`, all of which landed in a user's working directory during a normal
+  build. Removed.
+
+### Documentation
+
+README gains a Testing section — the command table listed every command except the one used most
+— documenting the flag forwarding, the artifact independence described above, and the one runner
+caveat that remains: a file with several `@[test]` functions reports all of them as failed when
+any one fails, so the count overstates rather than understates.
+
+## [1.2.3] - 2026-09-26
+
+### Fixed
+- **Path dependencies were never written to the lockfile** — `dep_resolver::resolve()` skipped
+  every dep that was absent from the registry index (`version == ""` → `continue`), so a project
+  whose deps are all `path = ...` got a lock with zero `[[package]]` entries. `lockfile::in_sync()`
+  compares locked packages against declared deps, so the lock was permanently out of sync and
+  **every** command re-resolved dependencies and exited without doing any work. Local/path deps
+  are now recorded with `registry = "local"`, their declared path, and their pinned version when
+  `owl.toml` declares one (new `dep_resolver::declared_dep_field()` helper, deliberately local to
+  avoid a `deps` ↔ `dep_resolver` load cycle).
+- **Lockfile entry alignment** — `lockfile::packages()` and `get_field()` match column-aligned
+  keys (`name␣␣␣␣␣=`, `version␣␣=`, `path␣␣␣␣␣=`, `registry␣=`), but `dep_resolver` wrote
+  single-space keys — so the writer produced locks its own reader could not parse, and its
+  "already locked?" search key never matched. Writers and search keys now use the aligned format.
+- **`[c] sources` accepted a `.mire` file** — `owl.toml` listed `code/_externs/mod.mire` as a C
+  source, which the C compiler then tried to build, failing every `owl test` target with
+  `Could not publish C object ... No such file or directory`. It is a Mire module and is compiled
+  by the Mire compiler; removed from `[c] sources`.
+- **Undefined identifier in `lockfile::generate()`** — a typo (`nl_c` for `nl3`) referenced an
+  undeclared name, which reached LLVM as `@nl_c` and aborted `opt` with
+  `use of undefined value '@nl_c'`.
+- **Undefined identifier in `new`** — the final confirmation messages interpolated an undeclared
+  `name`; now `vec::get::str(args 0)`.
+
+### Changed
+- **Ownership (MSS) fixes across 15 modules** — `dep_resolver` now copies loop-invariant
+  `:str` values (`strings::copy`) before reuse, `util::mkdir_p` takes `&str`, and the vector
+  externs were replaced by the public `mire::vec` API (`vec::len`, `vec::get::str`) with explicit
+  `load mire::vec` per consuming module. Each module that calls `proc::` now declares
+  `load kioto::proc` itself: reachable-import selection does not inherit another module's loads.
+
+## [1.2.2] - 2026-09-26
+
+### Changed
+- **Dependency bump** — kioto updated to 2.5.2 (adds `compat-v2` and `minimal-runtime` feature flags, compatibility shim).
+- **Feature flag support** — owl now forwards `[features]` from kioto when building.
+
+## [1.2.1] - 2026-09-26
+
+### Added
+- **P0 Infrastructure: cfg/cache/libs/bin separation** — New `util` path helpers for `~/.owl/{cfg,cache,libs,keys}` layout; versioned libs with `Name@ver` directories and active symlinks (`Name -> Name@ver`); `owl.cfg` get/set/list for standard config keys; canonical lockfile copy to `cache/resolution/<sha>/lock.toml`; `checkup --fix lock` restores from cache.
+- **`owl new` minimal template** — Creates only `owl.toml`, `bin/`, and `src/main.mire` with v1.2.0 format.
+- **CLI flag validation** — `args::allowed_flags()` and `args::validate()` provide tree-style error messages for unknown flags per subcommand.
+- **Project `[c]` forwarding** — `owl build`/`run`/`test` now forward `[c] sources`, `[c] include`, `[c] libs`, `[c] cflags` from `owl.toml` to the compiler. `[c] include` directories emitted as `-I` cflags.
+- **Test runner integration** — `check::run_tests()` generates test config and invokes compiler's `test` command with proper flags and lib-dir.
+
+### Changed
+- **Dependency commands** — `deps clean` removes unused deps and regenerates lockfile; `deps load` scans sources for `load` statements and injects missing deps; `deps deps` prints dependency tree.
+- **`proc::run::output` → `proc::run_output`** — Updated test suite to use new kioto API.
+- **`testlib` path** — Changed from local `./testlib` to `~/.owl/libs/testlib` for consistency.
+- **Lockfile generation** — Writes main `owl.lock`; cache write deferred to avoid ownership issues.
+
+### Fixed
+- **`write_mire_config` debug output** — Added debug file writes to trace config generation.
+- **Archive bridge** — Only adds `native/archive.c` if not already declared in `owl.toml`; does not add `archive` to libs (source compiled directly).
+- **Lockfile restore** — Reads cached lock file content before writing to avoid ownership issues.
+
+### Known Limitations (Stubs)
+- **`install package/clone`** — Minimal stubs due to compiler ownership analysis issues; full implementation pending compiler fix.
+- **`checkup --fix deps` / `lockfile.ensure`** — Stubbed for same reason.
+- **`clean`, `load`, `install`, `deps` commands** — Stubbed in main dispatch.
+
+# Owl Changelog
+
+## [1.1.2] - 2026-09-22
+
+### Fixed
+- **Main entry point restored**: `code/main.mire` now has a proper `pub fn main: ()` with full command dispatch (build, run, test, check, info, checkup, profile, new, clean, load, install, export, reg, deps, gc, upgrade, help, version)
+- **proc module integration fixed**: `code/util/mod.mire` now declares PAL proc externs directly (`pal_proc_create`, `pal_proc_wait`, `pal_proc_kill`, `pal_proc_close`, `rt_build_argv`, `rt_free_argv`, `rt_vec_len`, `rt_proc_capture_argv`, `rt_proc_capture_argv2`, `rt_proc_last_exit`, `rt_read_tty`) instead of depending on `kioto::proc` which could not be loaded due to Mire's module resolution limitations
+- **Build configuration updated**: Uses manual `mire-config.toml` for native archive linking (`native/archive.c`, `archive` lib)
+- **Command modules updated**: All modules (build, check, crypto, export, info, install, lockfile, profile, registry, upgrade) now call PAL/rt_* functions directly instead of `proc::run_*`
+
+### Changed
+- **owl.toml version 1.1.2**: Updated dependency paths to `~/.owl/libs/mire` and `~/.owl/libs/kioto`
+- **Kioto proc module flattened**: `kioto::proc` now exports all functions at top level (`run_create`, `run_spawn`, `run_output`, `run_output_cwd`, `run_last_exit`, `run_read_line`, `wait`, `kill`, `close`, `stream`) for direct loading
 
 ## [1.1.1] - 2026-09-18
 
@@ -32,7 +160,7 @@
 
 ### Lockfile V3 Automatic Generation
 - `owl ensure` now returns `true` immediately if no `owl.lock` exists
-- Project new → lockfile V3 automatically generated on first `build`/`run`
+- Project new → lockfile V3 automatically generated on first `owl checkup`/`build`/`run`
 - Lockfile format: `manifest-sha512`, `[[package]]` entries with name/version/path/registry/compiler/language
 - V1 and V2 still readable and editable via `owl.toml [owl@lock] version`
 

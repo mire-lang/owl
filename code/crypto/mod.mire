@@ -19,20 +19,20 @@ pub fn verify: () {
        a base64 raw public key. The heavy lifting (base64 + libsodium) lives in
        kioto; this is an in-process check with no shell and no temp files. !/
     pub fn ed25519: (pubkey_b64 :str, data_file :str, sig_b64 :str) :bool {
-        return use! kioto::crypto::sign::ed25519::public::verify_b64(pubkey_b64 data_file sig_b64)
+        return use! crypto::sign::ed25519::public::verify_b64(pubkey_b64 data_file sig_b64)
     }
 
     /! Same as ed25519 but the signature is a raw 64-byte file. !/
     pub fn sigfile: (pubkey_b64 :str, data_file :str, sig_file :str) :bool {
-        return use! kioto::crypto::sign::ed25519::public::verify_file(pubkey_b64 data_file sig_file)
+        return use! crypto::sign::ed25519::public::verify_file(pubkey_b64 data_file sig_file)
     }
 
     /! Verifies a PEM-encoded public key file against a raw signature file. The
        PEM body is decoded to the raw 32-byte key by kioto. Returns false when
        the key cannot be read. !/
     pub fn pemfile: (pem_file :str, data_file :str, sig_file :str) :bool {
-        set raw_b64 = use! kioto::crypto::sign::ed25519::public::raw_b64_from_pem(pem_file)
+        set raw_b64 = use! crypto::sign::ed25519::public::raw_b64_from_pem(pem_file)
         if raw_b64 == "" { return false }
-        return use! kioto::crypto::sign::ed25519::public::verify_file(raw_b64 data_file sig_file)
+        return use! crypto::sign::ed25519::public::verify_file(raw_b64 data_file sig_file)
     }
 }

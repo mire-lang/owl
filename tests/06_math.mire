@@ -1,12 +1,21 @@
 // owl syntax test
+//
+// TARGETS KIOTO 2.5.0. The range builders live directly under `math::` here;
+// in kioto 3.0 they move to `math::seq::` and the scalar helpers gain f64
+// overloads. Re-point this file at the 3.0 API when 3.0.0 becomes the base —
+// the assertions are the same, the qualified names are not.
 load kioto
 load testlib
 
 pub fn main: () {
     use dasu("--- math ---")
 
-    testlib.assert_eq(5 math::abs(-5))
-    testlib.assert_eq(42 math::abs(42))
+    // 2.5's `math::abs` is the integer one; the f64 magnitude the tolerance
+    // comparison needs comes from the runtime directly.
+    set abs_f = 0.0 - 5.0 :f64 mut
+    if abs_f < 0.0 { set abs_f = 0.0 - abs_f }
+    testlib.assert_eq_f64(5.0 abs_f)
+    testlib.assert_eq(42 math::abs(0 - 42))
     use dasu("  math.abs: ok")
 
     testlib.assert_eq(3 math::min(3 7))
@@ -18,27 +27,34 @@ pub fn main: () {
     use dasu("  math.max: ok")
 
     testlib.assert_eq(1 math::clamp(1 0 5))
-    testlib.assert_eq(0 math::clamp(-1 0 5))
+    testlib.assert_eq(0 math::clamp(0 -1 5))
     testlib.assert_eq(5 math::clamp(10 0 5))
     use dasu("  math.clamp: ok")
 
-    set r = math::range(5) :vec[i64]
-    testlib.assert_eq(5 len(r))
+    set r = math::range(5)
+    testlib.assert_eq(5 vec::len(r))
     testlib.assert_eq(0 vec::get::i64(r 0))
     testlib.assert_eq(4 vec::get::i64(r 4))
     use dasu("  math.range: ok")
 
-    set rb = math::between(2 6) :vec[i64]
-    testlib.assert_eq(4 len(rb))
+    set rb = math::between(2 6)
+    testlib.assert_eq(4 vec::len(rb))
     testlib.assert_eq(2 vec::get::i64(rb 0))
     testlib.assert_eq(5 vec::get::i64(rb 3))
     use dasu("  math.between: ok")
 
-    set rs = math::step(0 10 3) :vec[i64]
-    testlib.assert_eq(4 len(rs))
+    set rs = math::step(0 10 3)
+    testlib.assert_eq(4 vec::len(rs))
     testlib.assert_eq(0 vec::get::i64(rs 0))
     testlib.assert_eq(9 vec::get::i64(rs 3))
     use dasu("  math.step: ok")
+
+    // The descending arm is the part a naive port drops.
+    set rd = math::between(6 2)
+    testlib.assert_eq(4 vec::len(rd))
+    testlib.assert_eq(6 vec::get::i64(rd 0))
+    testlib.assert_eq(3 vec::get::i64(rd 3))
+    use dasu("  math.between descending: ok")
 
     set nums = [5 2 8 1 9] :vec[i64]
     testlib.assert_eq(1 math::minlist(nums))
@@ -46,9 +62,8 @@ pub fn main: () {
     use dasu("  math.minlist/max_list: ok")
 
     testlib.assert_eq(25 math::sum(nums))
-    use dasu("  math.sum: ok")
-
-
+    testlib.assert_eq_f64(5.0 math::mean(nums))
+    use dasu("  math.sum/mean: ok")
 
     use dasu("all math tests passed")
 }
