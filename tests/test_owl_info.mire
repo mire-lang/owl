@@ -51,12 +51,18 @@ pub fn owl_info_reports_project: () :bool {
     use dasu("INFO_EXIT=" + strings::from::i64(info_exit))
     use dasu("INFO_OUT=" + info_out)
 
-    /! info declares --json and honours it, so a rejected flag must stay an error. !/
-    set ij = [] :vec[str] mut
-    set ij = vec::push::str(ij "info")
-    set ij = vec::push::str(ij "--json")
-    set ij = vec::push::str(ij proj_dir)
-    set info_json = proc::run::output(owl_bin ij)
+    /! Run the JSON form from inside the project, the way the text form above
+       runs it. Passing the directory as an argument does not work: the runtime
+       only resolves manifest paths under the current directory, so
+       `owl info /elsewhere/proj` reports no project at all. !/
+    set jc = [] :vec[str] mut
+    set jc = vec::push::str(jc "-c")
+    set j1 = strings::concat("cd " proj_dir)
+    set j2 = strings::concat(j1 " && ")
+    set j3 = strings::concat(j2 owl_bin)
+    set j4 = strings::concat(j3 " info --json .")
+    set jc = vec::push::str(jc j4)
+    set info_json = proc::run::output("sh" jc)
     set json_exit = proc::run.last_exit()
     set json_has_name = strings::contains(info_json "\"name\"")
     set json_has_entry = strings::contains(info_json "src/main.mr")
