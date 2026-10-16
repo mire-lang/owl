@@ -406,3 +406,71 @@ set artifact = use! util::arg_value(args "--artifact") :str mut
                 set argv = vec::push::str(argv "--lib-dir")
                 set argv = vec::push::str(argv use! deps::compiler_lib_dirs())
                 set argv = use! build::append_c_and_security_flags(argv)
+                if extra_flags != "" {
+                    set toks = strings::split(extra_flags " ")
+                    set ti = 0 :i64 mut
+                    while ti < len(toks) {
+                        set tk = use! util::list_get(toks ti)
+                        if tk != "" {
+                            set argv = vec::push::str(argv strings::copy(tk))
+                        }
+                        set ti = ti + 1
+                    }
+                }
+
+                if is_run {
+                    set build_out = use! util::run_compiler(argv)
+                    use dasu(build_out)
+                    if use proc::run::last_exit() == 0 {
+                        use! util::record_build()
+                        /! Derive the artifact stem by slicing, not by replacing.
+                           The strip used to run through strings::replace::all on a
+                           binding produced by strings::copy, and that binding holds
+                           a stale pointer: it prints correctly and then yields "" as
+                           an extern argument. 'owl run' ended up executing
+                           "./bin/debug/" instead of the built artifact. Slicing off
+                           the known extension length avoids both calls. !/
+                        set name = entry :str mut
+                        if cli_file != "" {
+                            set name = cli_file
+                        }
+                        set stem = name :str mut
+                        if use! util::endswith(stem ".mire") {
+                            set cut = len(stem) :i64 mut
+                            set cut = cut - 5
+                            set stem = strings::substr(stem 0 cut)
+                        }
+                        if use! util::endswith(stem ".mr") {
+                            set cut = len(stem) :i64 mut
+                            set cut = cut - 3
+                            set stem = strings::substr(stem 0 cut)
+                        }
+                        set name = stem
+                        set parts = use! util::split(name "/")
+                        /! Take the last segment with a walked index. Reading
+                           vec::get::str with a computed index (`parts len(parts) - 1`)
+                           returns a garbage string rather than the element, so the
+                           index is walked from a mutable counter instead. !/
+                        set last = "" :str mut
+                        set pi = 0 :i64 mut
+                        while pi < len(parts) {
+                            set last = vec::get::str(parts pi)
+                            set pi += 1
+                        }
+                        set name = last
+                        set bin = "./" + out_dir2 + "/" + profile + "/" + name :str mut
+                        use dasu("")
+                        use dasu("  running " + bin + " ...")
+                        use proc::run::spawn(bin run_args)
+                    }
+                } else {
+                    set out = use! util::run_compiler(argv)
+                    use dasu(out)
+                    if use proc::run::last_exit() == 0 {
+                        use! util::record_build()
+                    }
+                }
+            }
+        }
+    }
+}

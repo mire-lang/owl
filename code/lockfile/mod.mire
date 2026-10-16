@@ -825,7 +825,7 @@ pub fn install_one: (pkg_name :str pkg_ver :str registry_name :str) {
     set pkg_dir4 = pkg_dir :str
     use! util::mkdir_p(pkg_dir)
     use dasu("    extracting...")
-    set archive_status = owl_archive_extract(tarball_file pkg_dir2)
+    set archive_status = use! util::extract_archive(tarball_file pkg_dir2)
     if archive_status != 0 {
         use dasu("  [FAIL] " + pkg_name + ": libarchive/zstd extraction failed")
         use! util::rm_RF(tarball_file)

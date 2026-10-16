@@ -1,20 +1,8 @@
 // owl tool test: owl info reports project and compiler details
 load kioto::strings
+load kioto::fs
 load mire::vec
 load kioto::proc
-
-fn write_file: (path :str, content :str) :bool {
-    set c1 = strings::concat("cat > ' " path)
-    set c2 = strings::concat(c1 "' << 'MIRE_EOF'\n")
-    set c3 = strings::concat(c2 content)
-    set c4 = strings::concat(c3 "\nMIRE_EOF\n")
-    set parts = [] :vec[str] mut
-    set parts = vec::push::str(parts "sh")
-    set parts = vec::push::str(parts "-c")
-    set parts = vec::push::str(parts c4)
-    use proc::run.output("sh" parts)
-    return proc::run.last_exit() == 0
-}
 
 @[test]
 pub fn owl_info_reports_project: () :bool {
@@ -39,41 +27,55 @@ pub fn owl_info_reports_project: () :bool {
 
     set toml_path = strings::concat(proj_dir "/owl.toml")
     set toml_content = "[project]\nname = \"testinfo\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mr\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n"
-    if !write_file(toml_path toml_content) { return false }
+    use fs::write(toml_path toml_content)
 
     set main_path = strings::concat(proj_dir "/src/main.mr")
     set main_content = "pub fn main: () :i64 {\n  return 0\n}\n"
-    if !write_file(main_path main_content) { return false }
+    use fs::write(main_path main_content)
 
     set ia = [] :vec[str] mut
     set ia = vec::push::str(ia "info")
     set ia = vec::push::str(ia ".")
     set info_cmd = [] :vec[str] mut
-    set info_cmd = vec::push::str(info_cmd "sh")
     set info_cmd = vec::push::str(info_cmd "-c")
     set ic1 = strings::concat("cd " proj_dir)
     set ic2 = strings::concat(ic1 " && ")
     set ic3 = strings::concat(ic2 owl_bin)
     set ic4 = strings::concat(ic3 " info .")
     set info_cmd = vec::push::str(info_cmd ic4)
-    set info_out = use! proc::run.output("sh" info_cmd)
+    set info_out = proc::run::output("sh" info_cmd)
+    set info_exit = proc::run.last_exit()
     set has_version = strings::contains(info_out "owl:")
-    set has_compiler = strings::contains(info_out "Compiler:")
+    set has_compiler = strings::contains(info_out "compiler:")
+    set has_entry = strings::contains(info_out "src/main.mr")
+    use dasu("INFO_EXIT=" + strings::from::i64(info_exit))
+    use dasu("INFO_OUT=" + info_out)
 
+    /! info declares --json and honours it, so a rejected flag must stay an error. !/
     set ij = [] :vec[str] mut
     set ij = vec::push::str(ij "info")
     set ij = vec::push::str(ij "--json")
     set ij = vec::push::str(ij proj_dir)
-    set info_json = use! proc::run.output(owl_bin ij)
+    set info_json = proc::run::output(owl_bin ij)
+    set json_exit = proc::run.last_exit()
     set json_has_name = strings::contains(info_json "\"name\"")
+    set json_has_entry = strings::contains(info_json "src/main.mr")
+    set json_clean = !strings::contains(info_json "E0012")
+    use dasu("JSON_EXIT=" + strings::from::i64(json_exit))
+    use dasu("JSON_OUT=" + info_json)
 
     set rm = [] :vec[str] mut
     set rm = vec::push::str(rm "-rf")
     set rm = vec::push::str(rm test_base)
     use proc::run.output("rm" rm)
 
+    if info_exit != 0 { return false }
     if !has_version { return false }
     if !has_compiler { return false }
+    if !has_entry { return false }
+    if json_exit != 0 { return false }
+    if !json_clean { return false }
     if !json_has_name { return false }
+    if !json_has_entry { return false }
     return true
 }

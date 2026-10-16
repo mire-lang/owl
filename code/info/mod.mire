@@ -96,47 +96,78 @@ pub fn run: (args :&vec[str]) {
     }
 
     if json_mode {
-        set out = "{\n" :str mut
+        /! Collect the pieces in a vector and join once. Growing a ":str mut"
+           accumulator with `out = out + piece` reallocated and released the
+           buffer on every one of the roughly thirty lines below; one of those
+           releases handed the allocator a pointer it did not own and the
+           process aborted at exit with "free(): double free detected in tcache 2".
+           Joining a single time allocates exactly once. !/
+        set parts = [] :vec[str] mut
+        set parts = vec::push::str(parts "{")
         if has_proj {
-            set out_path = o_val + "/" + p_val :str
-            set out_target = arch_val + "-" + kernel_val :str
-            set out = out + "  \"project\": {\n"
-            set out = out + "    \"name\": " + use! util::json_quote(n_val) + ",\n"
-            set out = out + "    \"version\": " + use! util::json_quote(v_val) + "\n"
-            set out = out + "  },\n"
-            set out = out + "  \"entry\": " + use! util::json_quote(e_val) + ",\n"
-            set out = out + "  \"profile\": " + use! util::json_quote(p_val) + ",\n"
-            set out = out + "  \"output\": " + use! util::json_quote(out_path) + ",\n"
-            set out = out + "  \"cache\": " + use! util::json_quote(c_val) + ",\n"
-            set out = out + "  \"target\": " + use! util::json_quote(out_target) + ",\n"
+            set out_path = o_val + "/" + p_val
+            set out_target = arch_val + "-" + kernel_val
+            set q_name = use! util::json_quote(n_val)
+            set q_ver = use! util::json_quote(v_val)
+            set q_entry = use! util::json_quote(e_val)
+            set q_profile = use! util::json_quote(p_val)
+            set q_output = use! util::json_quote(out_path)
+            set q_cache = use! util::json_quote(c_val)
+            set q_target = use! util::json_quote(out_target)
+            set parts = vec::push::str(parts "  \"project\": {")
+            set parts = vec::push::str(parts "    \"name\": " + q_name + ",")
+            set parts = vec::push::str(parts "    \"version\": " + q_ver)
+            set parts = vec::push::str(parts "  },")
+            set parts = vec::push::str(parts "  \"entry\": " + q_entry + ",")
+            set parts = vec::push::str(parts "  \"profile\": " + q_profile + ",")
+            set parts = vec::push::str(parts "  \"output\": " + q_output + ",")
+            set parts = vec::push::str(parts "  \"cache\": " + q_cache + ",")
+            set parts = vec::push::str(parts "  \"target\": " + q_target + ",")
         }
-        set out = out + "  \"compiler\": " + use! util::json_quote(compiler_line) + ",\n"
-        set out = out + "  \"owl\": " + use! util::json_quote(use! util::owl_version()) + ",\n"
-        set out = out + "  \"llvm\": " + use! util::json_quote(llvm) + ",\n"
-        set out = out + "  \"language\": \"Mire\",\n"
-        set out = out + "  \"abi\": 1"
+        set q_compiler = use! util::json_quote(compiler_line)
+        set raw_version = use! util::owl_version()
+        set q_version = use! util::json_quote(raw_version)
+        set q_llvm = use! util::json_quote(llvm)
+        set parts = vec::push::str(parts "  \"compiler\": " + q_compiler + ",")
+        set parts = vec::push::str(parts "  \"owl\": " + q_version + ",")
+        set parts = vec::push::str(parts "  \"llvm\": " + q_llvm + ",")
+        set parts = vec::push::str(parts "  \"language\": \"Mire\",")
+        set parts = vec::push::str(parts "  \"abi\": 1")
         if has_proj {
-            set out = out + ",\n  \"dependencies\": [\n"
-            set dep_lines = use! util::split(use! util::trim(deps_raw) "\n")
+            set parts = vec::push::str(parts ",")
+            set parts = vec::push::str(parts "  \"dependencies\": [")
+            set trimmed_deps = use! util::trim(deps_raw)
+            set dep_lines = use! util::split(trimmed_deps "\n")
             set dli = 0 :i64 mut
+            set first = true :bool mut
             while dli < len(dep_lines) {
-                set parts = use! util::split(use! util::list_get(dep_lines dli) "|")
-                if len(parts) >= 3 {
-                    set dk = use! util::list_get(parts 0)
-                    set dv = use! util::list_get(parts 1)
-                    set dp = use! util::list_get(parts 2)
-                    if dli > 0 { set out = out + ",\n" }
-                    set out = out + "    { \"name\": " + use! util::json_quote(dk) + ", \"version\": " + use! util::json_quote(dv) + ", \"path\": " + use! util::json_quote(dp) + " }"
+                set raw_line = vec::get::str(dep_lines dli)
+                set row = use! util::split(raw_line "|")
+                if len(row) >= 3 {
+                    set dk = use! util::list_get(row 0)
+                    set dv = use! util::list_get(row 1)
+                    set dp = use! util::list_get(row 2)
+                    set q_dk = use! util::json_quote(dk)
+                    set q_dv = use! util::json_quote(dv)
+                    set q_dp = use! util::json_quote(dp)
+                    set entry_txt = "{ \"name\": " + q_dk + ", \"version\": " + q_dv + ", \"path\": " + q_dp + " }" :str mut
+                    if first == false {
+                        set entry_txt = "," + entry_txt
+                    }
+                    set first = false
+                    set parts = vec::push::str(parts "    " + entry_txt)
                 }
                 set dli += 1
             }
             if deps_raw == "" {
-                set out = out + "    "
+                set parts = vec::push::str(parts "    ")
             }
-            set out = out + "\n  ]"
+            set parts = vec::push::str(parts "  ]")
         }
-        set out = out + "\n}\n"
-        use dasu(use! util::trim(out))
+        set parts = vec::push::str(parts "}")
+        set joined = strings::join(parts "\n")
+        set final_out = use! util::trim(joined)
+        use dasu(final_out)
     } else {
         if has_proj {
             use dasu("project:     " + n_val + " v" + v_val)

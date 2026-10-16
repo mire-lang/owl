@@ -58,9 +58,5 @@ mire = { path = "~/.owl/libs/mire" }
 kioto = { path = "../kioto" }
 crypto = { path = "./code/crypto" }
 
-[c]
-sources = ["native/archive.c"]
-libs = []
-
 ["owl@lock"]
 version = "3"

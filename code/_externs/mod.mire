@@ -21,7 +21,6 @@ pub extern fn pal_fs_mkdir: (path :&str) :bool lib "c"
 pub extern fn pal_fs_remove: (path :&str) :bool lib "c"
 
 /! Archive !/
-pub extern fn owl_archive_extract: (input :&str, destination :&str) :i32 lib "c"
 pub extern fn owl_archive_available: () :i32 lib "c"
 pub extern fn owl_archive_pack: (root :&str, output :&str) :i32 lib "c"
 

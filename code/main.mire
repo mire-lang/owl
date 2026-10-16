@@ -93,8 +93,19 @@ pub fn main: () {
         return
     }
     set cmd = args at 1
-    /! Validate flags for subcommand before dispatch !/
-    if use! args::validate(cmd args) == false {
+    /! 'owl <subcommand> --help' asks for usage, not for that subcommand to run.
+       Validate first so a genuine typo is still reported, then answer the help
+       request before dispatching. !/
+    /! Bind the result before branching. Comparing the call result against
+       `false` directly in the condition made the branch never take, so a
+       rejected flag printed its error and then ran the subcommand anyway and
+       still exited 0. !/
+    set args_ok = use! args::validate(cmd args)
+    if !args_ok {
+        exit(1)
+    }
+    if use! args::flag::has(args "--help") || use! args::flag::has(args "-h") {
+        use! ui::help()
         return
     }
     match cmd {
@@ -119,7 +130,6 @@ pub fn main: () {
         "server" { use! server::run(args) }
         "sandbox" { use! sandbox::run(args) }
         "os" { use! os::run(args) }
-        "sandbox" { use! sandbox::run(args) }
         "deps-db" { use! deps_db::run(args) }
         "pkgbuild" { use! pkgbuild::run(args) }
         "-h" { use! ui::help() }

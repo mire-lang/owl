@@ -1,20 +1,8 @@
 // owl tool test: owl check validates owl.toml
 load kioto::strings
+load kioto::fs
 load mire::vec
 load kioto::proc
-
-fn write_file: (path :str, content :str) :bool {
-    set c1 = strings::concat("cat > ' " path)
-    set c2 = strings::concat(c1 "' << 'MIRE_EOF'\n")
-    set c3 = strings::concat(c2 content)
-    set c4 = strings::concat(c3 "\nMIRE_EOF\n")
-    set parts = [] :vec[str] mut
-    set parts = vec::push::str(parts "sh")
-    set parts = vec::push::str(parts "-c")
-    set parts = vec::push::str(parts c4)
-    use proc::run.output("sh" parts)
-    return proc::run.last_exit() == 0
-}
 
 @[test]
 pub fn owl_check_validates_project: () :bool {
@@ -39,25 +27,27 @@ pub fn owl_check_validates_project: () :bool {
 
     set toml_path = strings::concat(proj_dir "/owl.toml")
     set toml_content = "[project]\nname = \"testcheck\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mr\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n"
-    if !write_file(toml_path toml_content) { return false }
+    use fs::write(toml_path toml_content)
 
     set main_path = strings::concat(proj_dir "/src/main.mr")
     set main_content = "pub fn main: () :i64 {\n  return 0\n}\n"
-    if !write_file(main_path main_content) { return false }
+    use fs::write(main_path main_content)
 
     set ca = [] :vec[str] mut
     set ca = vec::push::str(ca "check")
     set ca = vec::push::str(ca ".")
     set check_cmd = [] :vec[str] mut
-    set check_cmd = vec::push::str(check_cmd "sh")
     set check_cmd = vec::push::str(check_cmd "-c")
     set cc1 = strings::concat("cd " proj_dir)
     set cc2 = strings::concat(cc1 " && ")
     set cc3 = strings::concat(cc2 owl_bin)
     set cc4 = strings::concat(cc3 " check .")
     set check_cmd = vec::push::str(check_cmd cc4)
-    set check_out = use! proc::run.output("sh" check_cmd)
+    set check_out = proc::run::output("sh" check_cmd)
+    set check_exit = proc::run.last_exit()
     set check_ok = strings::contains(check_out "[OK]")
+    use dasu("CHECK_EXIT=" + strings::from::i64(check_exit))
+    use dasu("CHECK_OUT=" + check_out)
 
     set rm = [] :vec[str] mut
     set rm = vec::push::str(rm "-rf")

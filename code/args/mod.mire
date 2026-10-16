@@ -119,7 +119,9 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
     } elif subcmd == "export" || subcmd == "e" {
         set result = vec::push::str(result "--dry-run")
     } elif subcmd == "info" {
-        /! no flags yet !/
+        /! info does implement --json; it was simply never declared here, so the
+           validator rejected the flag that the subcommand then went on to honour. !/
+        set result = vec::push::str(result "--json")
     } elif subcmd == "profile" {
         set result = vec::push::str(result "--json")
     } elif subcmd == "clean" {
@@ -160,7 +162,11 @@ pub fn validate: (subcmd :&str, args :&vec[str]) :bool {
     while i < n {
         set a = vec::get::str(args i)
         if use! util::startswith(a "-") {
-            set known = false :bool mut
+            /! Asking for help is never a mistake, so -h/--help pass validation
+               even for a subcommand that declares no flags of its own. Rejecting
+               them made 'owl info --help' fail with an unknown-flag error and
+               print the very usage line it was asking for. !/
+            set known = a == "-h" || a == "--help" :bool mut
             set j = 0 :i64 mut
             set alen = vec::len(allowed)
             while j < alen {
@@ -179,6 +185,11 @@ pub fn validate: (subcmd :&str, args :&vec[str]) :bool {
                     set j += 1
                 }
                 use dasu(strings::concat(strings::concat("|   run 'owl " subcmd) " --help' for usage"))
+                /! Terminate here rather than returning false. The boolean came
+                   back as true at the call site, so a rejected flag printed its
+                   error and then let the subcommand run anyway, exiting 0. The
+                   caller cannot be trusted with this answer, so make it. !/
+                exit(1)
                 return false
             }
         }

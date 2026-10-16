@@ -325,7 +325,7 @@ while i < len(declared) {
             }
             
             /! Extract !/
-            if owl_archive_extract(strings::copy(tarball_file) strings::copy(ver_dir)) != 0 { return false }
+            if use! util::extract_archive(strings::copy(tarball_file) strings::copy(ver_dir)) != 0 { return false }
             
             /! Write meta.toml !/
             set meta_path = strings::copy(ver_dir) + "/meta.toml"

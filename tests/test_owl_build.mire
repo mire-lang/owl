@@ -1,79 +1,67 @@
 // owl tool test: owl build produces a working binary
 load kioto::strings
+load kioto::fs
 load mire::vec
 load kioto::proc
-
-fn write_file: (path :str, content :str) :bool {
-    set c1 = strings::concat("cat > ' " path)
-    set c2 = strings::concat(c1 "' << 'MIRE_EOF'\n")
-    set c3 = strings::concat(c2 content)
-    set c4 = strings::concat(c3 "\nMIRE_EOF\n")
-    set parts = [] :vec[str] mut
-    set parts = vec::push::str(parts "sh")
-    set parts = vec::push::str(parts "-c")
-    set parts = vec::push::str(parts c4)
-    use proc::run.output("sh" parts)
-    return proc::run.last_exit() == 0
-}
 
 @[test]
 pub fn owl_build_produces_binary: () :bool {
     set home_parts = [] :vec[str] mut
     set home_parts = vec::push::str(home_parts "-c")
     set home_parts = vec::push::str(home_parts "echo $HOME")
-    set home_out = proc::run::output("sh" home_parts)
-    set home = strings::trim(home_out)
+    set home = strings::trim(proc::run::output("sh" home_parts))
     set da = [] :vec[str] mut
     set da = vec::push::str(da "+%s")
     set ts = strings::trim(proc::run::output("date" da))
     set test_base = strings::concat(strings::concat(strings::copy(home) "/.owl/tmp/owl_build_test_") ts)
     set proj_dir = strings::concat(test_base "/testbuild")
-    set owl_bin = "/home/Evelyn/.local/bin/owl" :str mut
-    if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
 
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")
     set mk = vec::push::str(mk strings::concat(proj_dir "/src"))
     set mk = vec::push::str(mk strings::concat(proj_dir "/bin"))
-    use proc::run.output("mkdir" mk)
+    use proc::run::output("mkdir" mk)
 
     set toml_path = strings::concat(proj_dir "/owl.toml")
     set toml_content = "[project]\nname = \"testbuild\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mr\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n"
-    if !write_file(toml_path toml_content) { return false }
+    use fs::write(toml_path toml_content)
 
     set main_path = strings::concat(proj_dir "/src/main.mr")
     set main_content = "pub fn main: () :i64 {\n  use dasu(\"Hello from testbuild\")\n  return 0\n}\n"
-    if !write_file(main_path main_content) { return false }
+    use fs::write(main_path main_content)
 
-    set ba = [] :vec[str] mut
-    set ba = vec::push::str(ba "build")
-    set ba = vec::push::str(ba "src/main.mr")
-    set build_cmd = [] :vec[str] mut
-    set build_cmd = vec::push::str(build_cmd "sh")
-    set build_cmd = vec::push::str(build_cmd "-c")
-    set bc1 = strings::concat("cd " proj_dir)
-    set bc2 = strings::concat(bc1 " && ")
-    set bc3 = strings::concat(bc2 owl_bin)
-    set bc4 = strings::concat(bc3 " src/main.mr")
-    set build_cmd = vec::push::str(build_cmd bc4)
-    set build_out = use! proc::run.output("sh" build_cmd)
+    set sh = [] :vec[str] mut
+    set sh = vec::push::str(sh "-c")
+    set sh = vec::push::str(sh strings::concat(strings::concat(strings::concat("cd " proj_dir) " && ") "/home/Evelyn/.local/bin/owl build src/main.mr"))
+    set build_out = proc::run::output("sh" sh)
     set compiler_exit_code = proc::run.last_exit()
-    set build_failed = strings::contains(build_out "error")
 
-    set binary_path = strings::concat(proj_dir "/bin/debug/main")
-    set test_cmd = [] :vec[str] mut
-    set test_cmd = vec::push::str(test_cmd "-x")
-    set test_cmd = vec::push::str(test_cmd binary_path)
-    use proc::run.output("test" test_cmd)
-    set binary_exists = proc::run.last_exit() == 0
+    set bin_dir = strings::concat(proj_dir "/bin/debug")
+    set ls = [] :vec[str] mut
+    set ls = vec::push::str(ls "-1")
+    set ls = vec::push::str(ls bin_dir)
+    set produced = proc::run::output("ls" ls)
+
+    set chk = [] :vec[str] mut
+    set chk = vec::push::str(chk "-x")
+    set chk = vec::push::str(chk strings::concat(bin_dir "/main"))
+    use proc::run::output("test" chk)
+    set binary_ok = proc::run.last_exit() == 0
+    use dasu("BUILD_EXIT=" + strings::from::i64(compiler_exit_code))
+    use dasu("BUILD_OUT=" + build_out)
+    use dasu("BIN_DIR=" + produced)
+    use dasu("BINARY_OK=" + strings::from::bool(binary_ok))
+
+    set compiled = compiler_exit_code == 0
+    set produced_binary = strings::contains(produced "main")
 
     set rm = [] :vec[str] mut
     set rm = vec::push::str(rm "-rf")
     set rm = vec::push::str(rm test_base)
-    use proc::run.output("rm" rm)
+    use proc::run::output("rm" rm)
 
-    if build_failed { return false }
-    if compiler_exit_code != 0 { return false }
-    if !binary_exists { return false }
+    if !compiled { return false }
+    if !produced_binary { return false }
+    if !binary_ok { return false }
     return true
 }

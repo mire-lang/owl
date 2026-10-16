@@ -320,8 +320,14 @@ pub fn error_line: (tag :str msg :str) {
 }
 
 /! JSON helpers !/
-pub fn json_quote: (s :str) :str {
-    return "\"" + s + "\""
+/! Wrap a string in JSON double quotes.
+    The parameter is a borrow. Taking `s :str` made this function own the
+    caller's buffer, so the caller's own release freed it a second time:
+    `owl info --json` and `owl profile --json` aborted with
+    "free(): double free detected in tcache 2". !/
+pub fn json_quote: (s :&str) :str {
+    set v = strings::copy(s)
+    return "\"" + v + "\""
 }
 
 pub fn json_get_str: (content :&str key :str) :str {
@@ -1001,4 +1007,62 @@ pub fn record_build: () {
     set now_ms = time::now::ms()
     set body = "[build]\nbuild_count = " + use! util::i64_to_string(count) + "\nlast_build_time = " + use! util::i64_to_string(now_ms) + "\n"
     use fs::write(status_path body)
+}
+
+/! Extract a tarball/archive using the system `tar` command.
+   Returns 0 on success, non-zero on failure.
+   Supported formats: .tar, .tar.gz, .tgz, .tar.bz2, .tar.xz, .zip !/
+pub fn extract_archive: (archive_path :&str, dest_dir :&str) :i64 {
+    set archive_path = strings::copy(archive_path)
+    set dest_dir = strings::copy(dest_dir)
+    set archive_lower = strings::lower(archive_path)
+    
+    set cmd_parts = [] :vec[str] mut
+    
+    if use! strings::ends::with(archive_lower ".tar.gz") || use! strings::ends::with(archive_lower ".tgz") {
+        set cmd_parts = vec::push::str(cmd_parts "tar")
+        set cmd_parts = vec::push::str(cmd_parts "-xzf")
+        set cmd_parts = vec::push::str(cmd_parts archive_path)
+        set cmd_parts = vec::push::str(cmd_parts "-C")
+        set cmd_parts = vec::push::str(cmd_parts dest_dir)
+    } else {
+        if use! strings::ends::with(archive_lower ".tar.bz2") {
+            set cmd_parts = vec::push::str(cmd_parts "tar")
+            set cmd_parts = vec::push::str(cmd_parts "-xjf")
+            set cmd_parts = vec::push::str(cmd_parts archive_path)
+            set cmd_parts = vec::push::str(cmd_parts "-C")
+            set cmd_parts = vec::push::str(cmd_parts dest_dir)
+        } else {
+            if use! strings::ends::with(archive_lower ".tar.xz") {
+                set cmd_parts = vec::push::str(cmd_parts "tar")
+                set cmd_parts = vec::push::str(cmd_parts "-xJf")
+                set cmd_parts = vec::push::str(cmd_parts archive_path)
+                set cmd_parts = vec::push::str(cmd_parts "-C")
+                set cmd_parts = vec::push::str(cmd_parts dest_dir)
+            } else {
+                if use! strings::ends::with(archive_lower ".tar") {
+                    set cmd_parts = vec::push::str(cmd_parts "tar")
+                    set cmd_parts = vec::push::str(cmd_parts "-xf")
+                    set cmd_parts = vec::push::str(cmd_parts archive_path)
+                    set cmd_parts = vec::push::str(cmd_parts "-C")
+                    set cmd_parts = vec::push::str(cmd_parts dest_dir)
+                } else {
+                    if use! strings::ends::with(archive_lower ".zip") {
+                        set cmd_parts = vec::push::str(cmd_parts "unzip")
+                        set cmd_parts = vec::push::str(cmd_parts "-o")
+                        set cmd_parts = vec::push::str(cmd_parts archive_path)
+                        set cmd_parts = vec::push::str(cmd_parts "-d")
+                        set cmd_parts = vec::push::str(cmd_parts dest_dir)
+                    } else {
+                        use dasu("  [FAIL]  unknown archive format: " + archive_path)
+                        return 1
+                    }
+                }
+            }
+        }
+    }
+    
+    set result = proc::run::output(cmd_parts at 0 cmd_parts)
+    set exit_code = proc::run::last_exit()
+    return exit_code
 }
