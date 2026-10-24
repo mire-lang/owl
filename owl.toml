@@ -56,7 +56,6 @@ _externs = "code/_externs"
 [dependencies]
 kioto = { path = "~/.owl/libs/kioto" }
 mire = { path = "~/.owl/libs/mire" }
-kioto = { path = "../kioto" }
 crypto = { path = "./code/crypto" }
 
 ["owl@lock"]
