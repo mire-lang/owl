@@ -1,6 +1,6 @@
 [project]
 name = "owl"
-version = "1.4.0"
+version = "1.3.0"
 description = "Package and project manager for the Mire (Avenys) language"
 entry = "code/main.mire"
 languages = ["mire"]
@@ -54,6 +54,7 @@ os = "code/os"
 _externs = "code/_externs"
 
 [dependencies]
+kioto = { path = "~/.owl/libs/kioto" }
 mire = { path = "~/.owl/libs/mire" }
 kioto = { path = "../kioto" }
 crypto = { path = "./code/crypto" }

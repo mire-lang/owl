@@ -495,7 +495,7 @@ pub fn owl_version: () :str {
     if v != "" {
         return v
     }
-    return "1.2.4"
+    return "1.3.0"
 }
 
 pub fn compiler_version: () :str {
@@ -893,6 +893,19 @@ pub fn str_equals: (a :&str, b :&str) :bool { return a == b }
 pub fn read_line_trim: () :str { return strings::trim(rt_read_tty()) }
 pub fn read_line: () :str { return rt_read_tty() }
 pub fn trim_substr: (s :&str, start :i64, length :i64) :str { return strings::trim(strings::substr(s start length)) }
+
+/! Return a shallow copy of a string vector. Needed because Mire moves
+   `args` on the first call, so each subcommand needs its own copy. !/
+pub fn copy_args: (args :&vec[str]) :vec[str] {
+    set out = [] :vec[str] mut
+    set i = 0 :i64 mut
+    set n = vec::len(args)
+    while i < n {
+        set out = vec::push::str(out use! vec::get::str(args i))
+        set i += 1
+    }
+    return out
+}
 pub fn substr_i64: (s :&str, start :i64, length :i64) :i64 { return use! util::string_to_i64(strings::substr(s start length)) }
 
 /! Returns the lowercase-hex SHA-256 of a file. The digest is computed by

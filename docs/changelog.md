@@ -1,3 +1,32 @@
+## [1.3.0] - 2026-10-21
+
+### Added
+- **`owl load <name> [version]`** — adds a dependency to `[dependencies]` in `owl.toml`.
+  Without a version it uses a local path `~/.owl/libs/<name>`; with a version it
+  declares a versioned registry dependency. Follow with `owl install` to resolve.
+
+### Fixed
+- **CLI flag validation rejected valid flags** — `args::allowed_flags()` for `build`,
+  `run`, and `test` did not declare flags that `build::compile()` and
+  `build::test_config()` already handle, so `owl build -d`, `owl build --debug`,
+  `owl build -O <n>`, `owl build -B`, `owl run -d`, `owl run --debug`,
+  `owl run -R`, `owl test --release`, `owl test -j <n>` and others were rejected
+  with `E0012: Unknown flag`. Every flag the compiler understands is now declared.
+- **Version inconsistency** — README said `v1.3.0`, `owl.toml` said `1.4.0`, and the
+  fallback constant said `1.2.4`. All now report `v1.3.0`, read from
+  `[project] version` in `owl.toml`.
+- **`owl info` hardcoded `mire`** — `info::run()` invoked `mire --version`
+  directly instead of `util::compiler_cmd()`, ignoring `[build] compiler` and
+  `MIRE_COMPILER`. Now resolves through `compiler_cmd()`.
+- **`owl new` template mismatch** — scaffolded `src/main.mr` with
+  `pub fn main: () :i64`, but the codebase uses `code/main.mire` with
+  `pub fn main: ()`. Template now matches codebase conventions.
+
+### Documentation
+- `docs/Cli/overview.md` rewritten for v1.3.0 with complete flag listings.
+- `README.md` command table updated: `build`, `run`, `test` now list all flags
+  the compiler accepts; added `owl load` and Build Profiles sections.
+
 ## [1.2.4] - 2026-09-26
 
 ### Added

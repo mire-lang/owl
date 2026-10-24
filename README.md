@@ -47,11 +47,11 @@ instead of a later `llvm-sys` linker failure.
 
 | Short | Command | Description |
 |-------|---------|-------------|
-| `-B` | `build [file] [-d\|-r] [-O <n>]` | Compile project to binary |
-| `-R` | `run [file] [-d\|-r] [-O <n>] [-- <args>]` | Compile and execute |
-| `-T` | `test [file] [--verbose] [--no-run]` | Run test suite |
+| `-B` | `build [file] [-d|--debug|-r|--release] [-O <n>]` | Compile project to binary |
+| `-R` | `run [file] [-d|--debug|-r|--release] [-O <n>] [-- <args>]` | Compile and execute |
+| `-T` | `test [file] [--release|-r] [--debug|-d] [--opt-level|-O <n>] [--jobs|-j <n>] [--no-run] [--verbose|-v] [--log] [--no-warn] [--no-categorize] [--cache|--cache-dir|--lib-dir|-L <path>] [--config <file>] [--target <triple>] [--runtime <tier>]` | Run test suite |
 | `-K` | `check` | Validate dependencies (path, version, integrity) |
-| `-D` | `debug [file] [--tokens\|-t] [--ast\|-p] [--ir] [--run\|-r]` | Compiler introspection |
+| `-D` | `debug [file] [--tokens|-t] [--ast|-p] [--ir] [--run|-r]` | Compiler introspection |
 | `-Q` | `info [--json]` | Project and environment information |
 
 ### Project
@@ -67,8 +67,8 @@ instead of a later `llvm-sys` linker failure.
 
 | Short | Command | Description |
 |-------|---------|-------------|
-| `-L` | `load <name>` | Add dependency to owl.toml |
-| `-G` | `reg add <url>` | Add a package registry |
+| `-L` | `load <name> [ver]` | Add dependency to owl.toml |
+| `-L` | `reg add <url>` | Add a package registry |
 | `-G` | `reg list` | List registries |
 | `-G` | `reg sync` | Sync registries |
 | `-G` | `reg remove <name>` | Remove registry |
@@ -117,7 +117,47 @@ was reported `ok` having run no assertion. See
 > conservative, so a red suite is never understated — but `Failed: 11` does not
 > mean eleven broken tests.
 
-## checkup Command — Diagnostics & Repair
+## Build Profiles and Optimization
+
+`owl build`, `owl run` and `owl test` all accept `--release`/`-r`, `--debug`/`-d`,
+and `-O <n>`/`--opt-level <n>`. `--release` implies `opt-level = 3`, `--debug`
+implies `opt-level = 0`. The values default to those in `[build]` of `owl.toml`.
+
+```bash
+owl build --release    # profile=release, opt-level=3
+owl run -d             # profile=debug, opt-level=0
+owl test -r -O2        # release profile, opt-level 2
+owl build -O s         # optimize for size
+```
+
+## `owl load` — Add a dependency
+
+`owl load <name> [version]` adds a package to `[dependencies]` in `owl.toml`.
+Without a version it uses a local path `~/.owl/libs/<name>`; with a version it
+declares a versioned registry dependency. Run `owl install` afterward to resolve
+and install.
+
+```bash
+owl load kioto           # path dep: ~/.owl/libs/kioto
+owl load json 1.2.0      # versioned dep
+owl install              # resolve and install
+```
+
+## `owl new` template
+
+`owl new <name>` scaffolds:
+
+```
+<name>/
+  owl.toml
+  bin/
+  code/
+    main.mire
+```
+
+The manifest uses `entry = "code/main.mire"`, `sources = "code"`, and the entry
+is `pub fn main: ()` (no return type). Build with `owl build`, run with `owl run`.
+
 
 ```bash
 # Full diagnostic (all checks)

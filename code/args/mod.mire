@@ -33,7 +33,7 @@ pub fn value: (args :&vec[str], flag :&str) :str {
 }
 
 pub fn positional: (args :&vec[str]) :vec[str] {
-    /! Return all args that are not flags (don't start with -) !/
+    // Return all args that are not flags (don't start with -)
     set result = [] :vec[str] mut
     set n = vec::len(args)
     set i = 0 :i64 mut
@@ -41,7 +41,7 @@ pub fn positional: (args :&vec[str]) :vec[str] {
         set a = vec::get::str(args i)
         if len(a) > 0 {
             set first_code = use! strings::char_at(a 0) :i64 mut
-            if first_code != 45 {  /! ASCII '-' is 45 !/
+            if first_code != 45 {  // ASCII '-' is 45
                 set result = vec::push::str(result a)
             }
         }
@@ -52,19 +52,37 @@ pub fn positional: (args :&vec[str]) :vec[str] {
 
 }
 
-/! Map of subcommand -> allowed flags (short and long) !/
+// Map of subcommand -> allowed flags (short and long)
 pub fn allowed_flags: (subcmd :&str) :vec[str] {
     set result = [] :vec[str] mut
-    if subcmd == "build" || subcmd == "run" {
+    if subcmd == "build" {
         set result = vec::push::str(result "--release")
         set result = vec::push::str(result "-r")
+        set result = vec::push::str(result "--debug")
+        set result = vec::push::str(result "-d")
+        set result = vec::push::str(result "--opt-level")
+        set result = vec::push::str(result "-O")
         set result = vec::push::str(result "--no-analysis-cache")
         set result = vec::push::str(result "--lib-dir")
         set result = vec::push::str(result "-L")
+        set result = vec::push::str(result "-B")
+    } elif subcmd == "run" {
+        set result = vec::push::str(result "--release")
+        set result = vec::push::str(result "-r")
+        set result = vec::push::str(result "--debug")
+        set result = vec::push::str(result "-d")
+        set result = vec::push::str(result "--opt-level")
+        set result = vec::push::str(result "-O")
+        set result = vec::push::str(result "--no-analysis-cache")
+        set result = vec::push::str(result "--lib-dir")
+        set result = vec::push::str(result "-L")
+        set result = vec::push::str(result "-R")
     } elif subcmd == "test" {
         set result = vec::push::str(result "--release")
         set result = vec::push::str(result "-r")
         set result = vec::push::str(result "--debug")
+        set result = vec::push::str(result "-d")
+        set result = vec::push::str(result "-T")
         set result = vec::push::str(result "-d")
         set result = vec::push::str(result "--opt-level")
         set result = vec::push::str(result "-O")
@@ -108,7 +126,7 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
         set result = vec::push::str(result "remove")
         set result = vec::push::str(result "del")
     } elif subcmd == "new" {
-        /! no flags yet !/
+        // no flags yet
     } elif subcmd == "check" || subcmd == "checkup" {
         set result = vec::push::str(result "--cache")
         set result = vec::push::str(result "--deps")
@@ -119,8 +137,8 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
     } elif subcmd == "export" || subcmd == "e" {
         set result = vec::push::str(result "--dry-run")
     } elif subcmd == "info" {
-        /! info does implement --json; it was simply never declared here, so the
-           validator rejected the flag that the subcommand then went on to honour. !/
+        // info does implement --json; it was simply never declared here, so the
+        // validator rejected the flag that the subcommand then went on to honour.
         set result = vec::push::str(result "--json")
     } elif subcmd == "profile" {
         set result = vec::push::str(result "--json")
@@ -137,7 +155,7 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
         set result = vec::push::str(result "--yes")
         set result = vec::push::str(result "-y")
     } elif subcmd == "load" {
-        /! deprecated alias of install; shares install flags !/
+        // deprecated alias of install; shares install flags
         set result = vec::push::str(result "--target")
         set result = vec::push::str(result "-t")
         set result = vec::push::str(result "--lock")
@@ -150,22 +168,22 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
     }
     return result
 }
-/! Validate args for a subcommand, print tree-style error on unknown flags !/
+// Validate args for a subcommand, print tree-style error on unknown flags
 pub fn validate: (subcmd :&str, args :&vec[str]) :bool {
     set allowed = use! args::allowed_flags(subcmd)
     set n = vec::len(args)
-    /! argv[0] is the binary and argv[1] is the subcommand itself, so only the
-    arguments after it are flags of that subcommand. Starting the scan at 0 made
-    a top-level flag such as "owl --version" validate itself against the empty
-    flag list of a subcommand named "--version". !/
+    // argv[0] is the binary and argv[1] is the subcommand itself, so only the
+    // arguments after it are flags of that subcommand. Starting the scan at 0 made
+    // a top-level flag such as "owl --version" validate itself against the empty
+    // flag list of a subcommand named "--version".
     set i = 2 :i64 mut
     while i < n {
         set a = vec::get::str(args i)
         if use! util::startswith(a "-") {
-            /! Asking for help is never a mistake, so -h/--help pass validation
-               even for a subcommand that declares no flags of its own. Rejecting
-               them made 'owl info --help' fail with an unknown-flag error and
-               print the very usage line it was asking for. !/
+            // Asking for help is never a mistake, so -h/--help pass validation
+            // even for a subcommand that declares no flags of its own. Rejecting
+            // them made 'owl info --help' fail with an unknown-flag error and
+            // print the very usage line it was asking for.
             set known = a == "-h" || a == "--help" :bool mut
             set j = 0 :i64 mut
             set alen = vec::len(allowed)
@@ -174,7 +192,7 @@ pub fn validate: (subcmd :&str, args :&vec[str]) :bool {
                 set j += 1
             }
             if known == false {
-                /! Print tree-style error !/
+                // Print tree-style error
                 use dasu("error[E0012] CLI Error")
                 use dasu("+--[E0012: Unknown flag " + a + "]")
                 use dasu(strings::concat(strings::concat("|   flag '" + a + "' not recognized for subcommand '" subcmd) "'"))
@@ -185,10 +203,10 @@ pub fn validate: (subcmd :&str, args :&vec[str]) :bool {
                     set j += 1
                 }
                 use dasu(strings::concat(strings::concat("|   run 'owl " subcmd) " --help' for usage"))
-                /! Terminate here rather than returning false. The boolean came
-                   back as true at the call site, so a rejected flag printed its
-                   error and then let the subcommand run anyway, exiting 0. The
-                   caller cannot be trusted with this answer, so make it. !/
+                // Terminate here rather than returning false. The boolean came
+                // back as true at the call site, so a rejected flag printed its
+                // error and then let the subcommand run anyway, exiting 0. The
+                // caller cannot be trusted with this answer, so make it.
                 exit(1)
                 return false
             }

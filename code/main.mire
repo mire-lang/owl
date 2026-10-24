@@ -40,14 +40,14 @@ load! /code/os
 load! /code/deps_db
 load! /code/pkgbuild
 
-/! Print the resolved dependency tree.
-    Implemented here rather than as deps::tree in /code/deps: every call from the
-    ENTRY module into /code/deps fails to link with "use of undefined value
-    '@deps.<fn>'", while the same calls from build and util (41 of them) link
-    fine. Call resolution (mir/codegen/resolve.rs:79-106) looks the name up in
-    defined_fn_names, does not find it, and falls back to emitting the bare name.
-    Keeping this self-contained avoids depending on that. Move it back once the
-    entry module resolves like the others. !/
+// Print the resolved dependency tree.
+// Implemented here rather than as deps::tree in /code/deps: every call from the
+// ENTRY module into /code/deps fails to link with "use of undefined value
+// '@deps.<fn>'", while the same calls from build and util (41 of them) link
+// fine. Call resolution (mir/codegen/resolve.rs:79-106) looks the name up in
+// defined_fn_names, does not find it, and falls back to emitting the bare name.
+// Keeping this self-contained avoids depending on that. Move it back once the
+// entry module resolves like the others.
 fn deps_tree: () {
     if !use! util::has_project() {
         use dasu("Error: no owl.toml found")
@@ -64,16 +64,12 @@ fn deps_tree: () {
     set tree_any = false :bool mut
     while tree_i < tree_n {
         set tree_line = use! util::trim(vec::get::str(lock_lines tree_i))
-        // owl.lock writes `name     = "kioto"`; take the value after '='.
         if use! util::startswith(tree_line "name") {
             set tree_eq = strings::index(tree_line "=")
             if tree_eq >= 0 {
                 set tree_from = tree_eq + 1
                 set tree_slice = strings::substr(tree_line tree_from 200)
                 set tree_val = use! util::trim(tree_slice)
-                // The value keeps the quotes owl writes around it: stripping
-                // them needs strings::substr on a length-derived bound, and
-                // that form does not typecheck here. `"kioto"` is unambiguous.
                 use dasu("  " + tree_val)
                 set tree_any = true
             }
@@ -85,6 +81,44 @@ fn deps_tree: () {
     }
 }
 
+fn cmd_load: (args :&vec[str]) {
+    set n = vec::len(args)
+    if n < 3 {
+        use dasu("Usage: owl load <name> [version]")
+        return
+    }
+    set name = use! vec::get::str(args 2)
+    set ver = use! vec::get::str(args 3)
+    if !use! util::has_project() {
+        use dasu("  [FAIL] no owl.toml found")
+        return
+    }
+    set c = fs::read("owl.toml")
+    set marker = "[dependencies]"
+    set sec_pos = strings::index(c marker)
+    if sec_pos < 0 {
+        use dasu("  [FAIL] [dependencies] section not found in owl.toml")
+        return
+    }
+    set insert_pos = sec_pos + strings::len(marker)
+    set rem2 = len(c) - insert_pos
+    set before = strings::substr(c 0 insert_pos)
+    set after = strings::substr(c insert_pos rem2)
+    set dep_line = name + " = { version = \"" + ver + "\" }" :str mut
+    if ver == "" {
+        set dep_line = name + " = { path = \"~/.owl/libs/" + name + "\" }"
+    }
+    set new_c = before + "\n" + dep_line + after
+    use fs::write("owl.toml" new_c)
+    use dasu("  [OK]   added '" + name + "' to [dependencies]")
+    if ver != "" {
+        use dasu("         version = " + ver)
+    } else {
+        use dasu("         path = ~/.owl/libs/" + name)
+    }
+    use dasu("  run 'owl install' to resolve and install")
+}
+
 pub fn main: () {
     set args = env_args()
     set n = vec::len(args)
@@ -92,51 +126,129 @@ pub fn main: () {
         use! ui::help()
         return
     }
-    set cmd = args at 1
-    /! 'owl <subcommand> --help' asks for usage, not for that subcommand to run.
-       Validate first so a genuine typo is still reported, then answer the help
-       request before dispatching. !/
-    /! Bind the result before branching. Comparing the call result against
-       `false` directly in the condition made the branch never take, so a
-       rejected flag printed its error and then ran the subcommand anyway and
-       still exited 0. !/
-    set args_ok = use! args::validate(cmd args)
-    if !args_ok {
-        exit(1)
-    }
+    set cmd = use! vec::get::str(args 1)
+// 'owl <subcommand> --help' asks for usage, not for that subcommand to run.
     if use! args::flag::has(args "--help") || use! args::flag::has(args "-h") {
         use! ui::help()
         return
     }
-    match cmd {
-        "build" { use! build::compile(args false) }
-        "run" { use! build::compile(args true) }
-        "test" { use! check::run_tests(args) }
-        "check" { use! check::checkup(args) }
-        "info" { use! info::run(args) }
-        "checkup" { use! check::checkup(args) }
-        "profile" { use! profile::run(args) }
-        "new" { use! new::run(args) }
-        "clean" { use! gc::run(args) }
-        "load" { use dasu("load command not yet implemented") }
-        "install" { use! install::run_simple(args) }
-        "export" { use! export::run(args) }
-        "reg" { use! registry::sync_all() }
-        "deps" { use deps_tree() }
-        "clean-cache" { use! clean::run(args) }
-        "gc" { use! gc::run(args) }
-        "upgrade" { use! upgrade::run(args) }
-        "help" { use! ui::help() }
-        "server" { use! server::run(args) }
-        "sandbox" { use! sandbox::run(args) }
-        "os" { use! os::run(args) }
-        "deps-db" { use! deps_db::run(args) }
-        "pkgbuild" { use! pkgbuild::run(args) }
-        "-h" { use! ui::help() }
-        "--help" { use! ui::help() }
-        "version" { use! ui::banner() }
-        "-V" { use! ui::banner() }
-        "--version" { use! ui::banner() }
-        _ { use! ui::help() }
+// Validate flags for the subcommand before dispatching.
+    set args_ok = use! args::validate(cmd args)
+    if !args_ok { exit(1) }
+// Mire's match does not dispatch on string variables; use independent ifs with early return.
+// Mire moves `args` on the first call, so copy it per subcommand via util::copy_args.
+    if cmd == "build" {
+        use! build::compile(use! util::copy_args(args) false)
+        return
     }
+    if cmd == "run" {
+        use! build::compile(use! util::copy_args(args) true)
+        return
+    }
+    if cmd == "test" {
+        use! check::run_tests(use! util::copy_args(args))
+        return
+    }
+    if cmd == "check" {
+        use! check::checkup(use! util::copy_args(args))
+        return
+    }
+    if cmd == "info" {
+        use! info::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "checkup" {
+        use! check::checkup(use! util::copy_args(args))
+        return
+    }
+    if cmd == "profile" {
+        use! profile::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "new" {
+        use! new::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "clean" {
+        use! gc::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "load" {
+        use! cmd_load(use! util::copy_args(args))
+        return
+    }
+    if cmd == "install" {
+        use! install::run_simple(use! util::copy_args(args))
+        return
+    }
+    if cmd == "export" {
+        use! export::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "reg" {
+        use! registry::sync_all()
+        return
+    }
+    if cmd == "deps" {
+        use deps_tree()
+        return
+    }
+    if cmd == "clean-cache" {
+        use! clean::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "gc" {
+        use! gc::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "upgrade" {
+        use! upgrade::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "help" {
+        use! ui::help()
+        return
+    }
+    if cmd == "server" {
+        use! server::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "sandbox" {
+        use! sandbox::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "os" {
+        use! os::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "deps-db" {
+        use! deps_db::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "pkgbuild" {
+        use! pkgbuild::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "-h" {
+        use! ui::help()
+        return
+    }
+    if cmd == "--help" {
+        use! ui::help()
+        return
+    }
+    if cmd == "version" {
+        use! ui::banner()
+        return
+    }
+    if cmd == "-V" {
+        use! ui::banner()
+        return
+    }
+    if cmd == "--version" {
+        use! ui::banner()
+        return
+    }
+    use! ui::help()
+    return
 }

@@ -165,7 +165,7 @@ pub fn target: (target_val :str named :str) {
     }
 }
 
-pub fn run_simple: (args :vec[str]) :u8 {
+pub fn run_simple: (args :&vec[str]) :u8 {
     set has_l = false :bool mut
     set has_t = false :bool mut
     set no_verify = false :bool mut
@@ -179,7 +179,7 @@ pub fn run_simple: (args :vec[str]) :u8 {
     set n = use! vec::len(args)
     set i = 0 :i64 mut
     while i < n {
-        set a = args at i
+        set a = use! vec::get::str(args i)
         set matched = false :bool mut
         if a == "-l" || a == "--lock" { 
             set has_lock = true
@@ -191,7 +191,7 @@ pub fn run_simple: (args :vec[str]) :u8 {
         }
         if !matched && (a == "-t" || a == "--target") { 
             set i += 1
-            if i < n { set target_val = args at i }
+            if i < n { set target_val = use! vec::get::str(args i) }
             set matched = true 
         }
         if !matched && a == "--no-verify" { 

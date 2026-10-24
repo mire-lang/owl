@@ -283,11 +283,15 @@ pub fn compile: (args :&vec[str] is_run :bool) {
                             if use! util::startswith(a "-O") && len(a) > 2 {
                                 set cli_opt = use! util::replace(a "-O" "")
                             } else {
-                                if !use! util::startswith(a "-") && cli_file == "" {
-                                    set cli_file = a
+                                if a == "-B" || a == "-R" || a == "-T" {
+                                    /! Short file specifier flags; the file is resolved positionally. !/
                                 } else {
-                                    if use! util::startswith(a "-") {
-                                        set extra_flags = extra_flags + " " + a
+                                    if !use! util::startswith(a "-") && cli_file == "" {
+                                        set cli_file = a
+                                    } else {
+                                        if use! util::startswith(a "-") {
+                                            set extra_flags = extra_flags + " " + a
+                                        }
                                     }
                                 }
                             }

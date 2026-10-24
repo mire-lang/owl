@@ -27,27 +27,27 @@ pub fn run: (args :&vec[str]) {
     set kernel_val = "?" :str mut
 
     if has_proj {
-        set n_val = use! util::toml_get("owl.toml" "project" "name") :str mut
+        set n_val = use! util::toml_get("owl.toml" "project" "name")
         if n_val == "" { set n_val = "?" }
-        set v_val = use! util::toml_get("owl.toml" "project" "version") :str mut
+        set v_val = use! util::toml_get("owl.toml" "project" "version")
         if v_val == "" { set v_val = "?" }
-        set e_val = use! util::toml_get("owl.toml" "project" "entry") :str mut
+        set e_val = use! util::toml_get("owl.toml" "project" "entry")
         if e_val == "" { set e_val = "?" }
-        set p_val = use! util::toml_get("owl.toml" "build" "profile") :str mut
+        set p_val = use! util::toml_get("owl.toml" "build" "profile")
         if p_val == "" { set p_val = "?" }
-        set o_val = use! util::toml_get("owl.toml" "paths" "output") :str mut
+        set o_val = use! util::toml_get("owl.toml" "paths" "output")
         if o_val == "" { set o_val = "?" }
-        set c_val = use! util::toml_get("owl.toml" "paths" "cache") :str mut
+        set c_val = use! util::toml_get("owl.toml" "paths" "cache")
         if c_val == "" { set c_val = "?" }
 
         set uname_m = [] :vec[str] mut
         set uname_m = vec::push::str(uname_m "-m")
         set arch_raw = proc::run::output("uname" uname_m)
-        set arch_val = arch_raw :str mut
+        set arch_val = arch_raw
         set uname_s = [] :vec[str] mut
         set uname_s = vec::push::str(uname_s "-s")
         set kernel_raw = proc::run::output("uname" uname_s)
-        set kernel_val = kernel_raw :str mut
+        set kernel_val = kernel_raw
         if kernel_val != "" { set kernel_val = strings::lower(kernel_val) }
         if arch_val == "" { set arch_val = "?" }
         if kernel_val == "" { set kernel_val = "?" }
@@ -56,7 +56,8 @@ pub fn run: (args :&vec[str]) {
     set compiler_line = "?" :str mut
     set mire_ver = [] :vec[str] mut
     set mire_ver = vec::push::str(mire_ver "--version")
-    set compiler_out = proc::run::output("mire" mire_ver) :str mut
+    set compiler_cmd = use! util::compiler_cmd()
+    set compiler_out = proc::run::output(compiler_cmd mire_ver)
     if compiler_out != "" {
         set clines = use! util::split(compiler_out "\n")
         set compiler_line = use! util::list_get(clines 0)
@@ -64,7 +65,8 @@ pub fn run: (args :&vec[str]) {
 
     set llvm_ver = [] :vec[str] mut
     set llvm_ver = vec::push::str(llvm_ver "--version")
-    set llvm = proc::run::output("llvm-config" llvm_ver) :str mut
+    set llvm = "?" :str mut
+    set llvm = proc::run::output("llvm-config" llvm_ver)
     if llvm == "" { set llvm = "?" }
 
     set deps_raw = "" :str mut
@@ -96,12 +98,6 @@ pub fn run: (args :&vec[str]) {
     }
 
     if json_mode {
-        /! Collect the pieces in a vector and join once. Growing a ":str mut"
-           accumulator with `out = out + piece` reallocated and released the
-           buffer on every one of the roughly thirty lines below; one of those
-           releases handed the allocator a pointer it did not own and the
-           process aborted at exit with "free(): double free detected in tcache 2".
-           Joining a single time allocates exactly once. !/
         set parts = [] :vec[str] mut
         set parts = vec::push::str(parts "{")
         if has_proj {

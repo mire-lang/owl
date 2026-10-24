@@ -1,75 +1,127 @@
-# Cli - Command Reference v1.1.0
+# Cli - Command Reference v1.3.0
 
-## Owl v1.1.0 Release Notes
+## Owl v1.3.0 Release Notes
 
-The v1.1.0 release introduces several key improvements:
+- **CLI flag validation fixed** — `owl build -d`, `owl build --debug`, `owl build -O`, `owl build -B`, `owl run -d`, `owl run --debug`, `owl run -R`, `owl test --release`, `owl test -j` and other flags that `build::compile()`/`test_config()` already handled were rejected by `args::allowed_flags()` with `E0012: Unknown flag`. All flags the compiler supports are now declared.
+- **`owl load <name> [version]` implemented** — adds a dependency to `[dependencies]` in `owl.toml`. Without a version it uses a local path `~/.owl/libs/<name>`; with a version it declares a versioned registry dependency. Follow with `owl install`.
+- **Version unified** — README, `owl.toml`, and the fallback constant all report `v1.3.0`.
+- **`owl info`** now resolves the compiler through `util::compiler_cmd()` (honoring `owl.toml [build] compiler` and `MIRE_COMPILER`) instead of hardcoding `mire`.
+- **`owl new` template** uses `code/main.mire`, `pub fn main: ()`, and `[paths] sources = "code"`, matching the codebase convention.
 
-- **Lockfile V3 automatic generation** - No more manual lockfile management
-- **Configuration system `[cfg]`** - New `[lock]` and `update@lock` fields in owl.toml
-- **Dependency checksums** - SHA-512 verification for installed packages
-- **Exports verification** - Module export validation from lockfile
-- **Documentation reorganization** - All docs moved to owl/docs/ following Mire Documentation Standard
+## Global flags
 
-## owl new
+| Flag | Description |
+|------|-------------|
+| `-V`, `--version` | Show version |
+| `-h`, `--help` | Show help |
 
-Create a new Owl project.
+## Build commands
 
-```bash
-owl new <Name>
-```
-
-- Creates directory `<Name>/` with structure:
-  - `<Name>/code/main.mire` - main entry point
-  - `<Name>/owl.toml` - project configuration v1.1.0 format
-  - `<Name>/bin/` - output directory
-  - `<Name>/docs/` - documentation directory
-- Does NOT create `tests/` directory by default
-- Use `--init-tests` flag to add tests directory and smoke.mire
-- New projects include `[cfg]` section with `lock = 1`, `update@lock = "Build"` by default
-
-## owl build
-
-Build a Mire project.
+### `owl build`
 
 ```bash
-owl build -B <file> [--release] [--debug] [-O <n>]
+owl build [-B <file>] [-d|--debug|-r|--release] [-O <n>] [--lib-dir <path>] [--no-analysis-cache]
 ```
 
-- `-B <file>` - Build the specified file
-- `--release` - Release build profile
-- `--debug` - Debug build profile
-- `-O <n>` - Optimization level (0-3)
+- `-B <file>` — Build the specified file (same as positional argument)
+- `-d`, `--debug` — Debug build profile (opt-level 0)
+- `-r`, `--release` — Release build profile (opt-level 3)
+- `-O <n>`, `--opt-level <n>` — Optimization level (0, 1, 2, 3, s, z)
+- `--lib-dir <path>`, `-L <path>` — Extra package directory
+- `--no-analysis-cache` — Force full recompile
 
-## owl run
-
-Run a Mire project.
+### `owl run`
 
 ```bash
-owl run -R <file> [-- <args>]
+owl run [-R <file>] [-d|--debug|-r|--release] [-O <n>] [-- <args>]
 ```
 
-- `-R <file>` - Run the specified file
-- `-- <args>` - Pass arguments to the program
+- `-R <file>` — Run the specified file (same as positional argument)
+- `-d`, `--debug` — Debug build profile
+- `-r`, `--release` — Release build profile
+- `-O <n>`, `--opt-level <n>` — Optimization level
+- `-- <args>` — Pass arguments to the program after the `--` separator
 
-## owl test
-
-Run tests for a project.
+## `owl test`
 
 ```bash
-owl test -T <file> [--log] [--verbose] [--no-run]
+owl test [-T <file>] [--release|-r] [--debug|-d] [--opt-level|-O <n>] [--jobs|-j <n>] [--no-run] [--verbose|-v] [--log] [--no-warn] [--no-categorize] [--cache] [--cache-dir <path>] [--lib-dir|-L <path>] [--config <file>] [--target <triple>] [--runtime <tier>]
 ```
 
-- `-T <file>` - Test file or directory
-- `--log` - Show test logging
-- `--verbose` - Show per-test results
-- `--no-run` - Compile only, skip execution
+- `-T <file>` — Test file or directory
+- `-r`, `--release` — Release profile (opt-level 3)
+- `-d`, `--debug` — Debug profile (opt-level 0)
+- `-O <n>`, `--opt-level <n>` — Optimization level
+- `-j <n>`, `--jobs <n>` — Parallel compilation jobs
+- `--no-run` — Compile only, skip execution
+- `--verbose`, `-v` — Show per-test results
+- `--log` — Show test logging
+- `--no-warn` — Suppress warnings
+- `--no-categorize` — Disable warning categorization
 
-## owl --version
+**Testing always builds an executable** (`artifact = "bin"`), regardless of
+`[build] artifact` in `owl.toml`. A manifest declaring `runtime = "none"` is
+lifted to `minimal` for the test build.
 
-Show version information.
+## Project commands
 
-```bash
-owl --version
+### `owl new <Name>`
+
+Scaffold a new project:
+
+```
+<Name>/
+  owl.toml
+  bin/
+  code/
+    main.mire
 ```
 
-Output: `Owl v1.1.0 / Mire / Avenys v4.0.0`
+### `owl clean [--bin] [--cache] [--all|-A] [--global]`
+
+Remove build artifacts and cache.
+
+### `owl info [--json]`
+
+Show project and environment information.
+
+### `owl checkup [--fix <field> ...] [--cache] [--deps] [--loads]`
+
+Project diagnostics and repair.
+
+### `owl profile [--json]`
+
+Build metrics.
+
+## Package commands
+
+### `owl load <name> [version]`
+
+Add a dependency to `[dependencies]` in `owl.toml`. Without a version, uses a
+local path `~/.owl/libs/<name>`. With a version, declares a versioned registry
+dependency. Run `owl install` afterward to resolve and install.
+
+### `owl install <name> [ver]`
+
+Download and install a package. `owl install --lock` installs all packages from
+`owl.lock`.
+
+### `owl reg add <url>` / `reg list` / `reg sync` / `reg remove <name>`
+
+Manage package registries.
+
+### `owl export [--check|--dry-run]`
+
+Package and sign for registry publication.
+
+### `owl deps --prune`
+
+Remove unused dependencies from `owl.toml`.
+
+### `owl gc`
+
+Garbage collect orphaned packages.
+
+### `owl upgrade [--yes]`
+
+Self-update owl from source.
