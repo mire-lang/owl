@@ -32,6 +32,25 @@ pub fn run: (args :&vec[str]) :u8 {
         return 1 :u8
     }
 
+    /! ── status() verification ─────────────────────────────────────────
+        Mire Lang organization recommends every library expose a `status()`
+        function (phpinfo-style console report) so consumers can inspect
+        what a loaded library provides. Check whether the library being
+        exported defines `status`; warn if missing but do not block export. !/
+    set status_found = false :bool mut
+    set entry = use! util::toml_get("owl.toml" "project" "entry")
+    if len(entry) > 0 && use! fs::exists(entry) {
+        set content = use! fs::read(entry)
+        if use! strings::contains(content "pub fn status") {
+            set status_found = true
+        }
+    }
+    if !status_found {
+        use dasu("  [WARN] Mire Lang organization recommends adding a `status()` function to libraries.")
+        use dasu("         Add: pub fn status: () :str { ... } returning a phpinfo-style report.")
+        use dasu("         See: https://github.com/mire-lang/Avenys-rust#library-status")
+    }
+
     /! Resolve artifact types from [build] section or default to all !/
     set artifacts = use! export::resolve_artifacts()
 
