@@ -47,7 +47,7 @@ pub fn run: (args :&vec[str]) :u8 {
     }
     if !status_found {
         use dasu("  [WARN] Mire Lang organization recommends adding a `status()` function to libraries.")
-        use dasu("         Add: pub fn status: () :str { ... } returning a phpinfo-style report.")
+        use dasu("         Add: pub fn status: () :str returning a phpinfo-style report.")
         use dasu("         See: https://github.com/mire-lang/Avenys-rust#library-status")
     }
 
