@@ -164,13 +164,7 @@ pub fn ensure_project_dependencies: () :bool {
     } else {
         use dasu("  owl.lock was not found")
     }
-    use dasu("  resolve and install dependencies now? (Y/n)")
-    set answer = use! util::read_line_trim()
-    if answer == "n" || answer == "N" {
-        use dasu("  cancelled; run 'owl install' when ready")
-        return false
-    }
-
+    use dasu("  resolving dependencies...")
     set install_status = use! install::run(false false false false "" true "" "" false)
     if install_status != 0 {
         use dasu("  dependency resolution failed; compilation was not started")

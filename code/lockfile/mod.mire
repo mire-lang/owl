@@ -478,22 +478,11 @@ pub fn ensure: () :bool {
                  !/
                 set cfg_lock = use! util::toml_get("owl.toml" "cfg" "lock") :str mut
                 if cfg_lock == "" || cfg_lock == "1" {
-                    /! Default: active verification with interactive prompt.
+                    /! Default: auto-generate without interactive prompt.
                      !/
-                    use dasu("  [WARN] owl.toml has changed since last lockfile generation")
-                    use dasu("  [WARN] Update lockfile now? (y/N): ")
-                    set answer = use! util::read_line() :str mut
-                    if answer == "y" || answer == "Y" {
-                        use dasu("  [INFO] regenerating lockfile...")
-                        use! lockfile::generate()
-                        use dasu("  [OK]   lockfile updated")
-                    } else {
-                        use dasu("  [INFO] keeping existing lockfile (may be out of date)")
-                        /! Skip revalidation to avoid false failures.
-                         !/
-                        set ok = true
-                        return ok
-                    }
+                    use dasu("  [INFO] owl.toml changed, regenerating lockfile...")
+                    use! lockfile::generate()
+                    use dasu("  [OK]   lockfile updated")
                 } else {
                     /! lock = 0: verification disabled, generate without strict checks.
                      !/
