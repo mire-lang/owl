@@ -50,7 +50,7 @@ jobs:
 
       - name: Fetch mire standard library
         run: |
-          git clone --depth 1 -b main https://github.com/mire-lang/Mire.git /tmp/mire-lib
+          git clone --depth 1 -b main https://github.com/mire-lang/mire.git /tmp/mire-lib
           cp -r /tmp/mire-lib/src /tmp/libs/mire
 
       - name: Build owl
