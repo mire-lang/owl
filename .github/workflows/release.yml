@@ -48,6 +48,11 @@ jobs:
           git clone --depth 1 https://github.com/mire-lang/libs.git /tmp/libs
           ln -sfn /tmp/libs/kioto /tmp/kioto
 
+      - name: Fetch mire standard library
+        run: |
+          git clone --depth 1 -b main https://github.com/mire-lang/Mire.git /tmp/mire-lib
+          cp -r /tmp/mire-lib/src /tmp/libs/mire
+
       - name: Build owl
         run: |
           /tmp/mire-src/target/release/mire build code/main.mire --release \
