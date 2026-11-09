@@ -18,12 +18,15 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            target: linux-x86_64
+            target: x86_64-unknown-linux-gnu
+            artifact: linux-x86_64
           - os: ubuntu-22.04
-            target: linux-aarch64
+            target: aarch64-unknown-linux-gnu
+            artifact: linux-aarch64
             cross: true
           - os: ubuntu-22.04
-            target: linux-riscv64
+            target: riscv64gc-unknown-linux-gnu
+            artifact: linux-riscv64
             cross: true
 
     steps:
@@ -32,7 +35,6 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          target: ${{ matrix.target }}
 
       - name: Install LLVM 22 and cross-compilation toolchain
         run: |
@@ -73,18 +75,18 @@ jobs:
       - name: Package tarball
         run: |
           mkdir -p /tmp/archive
-          cp /tmp/mire-src/target/release/mire /tmp/archive/
+          cp /tmp/mire-src/target/${{ matrix.target }}/release/mire /tmp/archive/
           cp /tmp/owl-bin/owl /tmp/archive/
           cd /tmp/archive
-          tar czf "${{ github.workspace }}/owl-${{ matrix.target }}.tar.gz" \
+          tar czf "${{ github.workspace }}/owl-${{ matrix.artifact }}.tar.gz" \
             mire owl
           cd "${{ github.workspace }}"
-          shasum -a 256 "owl-${{ matrix.target }}.tar.gz" \
-            > "owl-${{ matrix.target }}.tar.gz.sha256"
+          shasum -a 256 "owl-${{ matrix.artifact }}.tar.gz" \
+            > "owl-${{ matrix.artifact }}.tar.gz.sha256"
 
       - name: Upload artifacts
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            owl-${{ matrix.target }}.tar.gz
-            owl-${{ matrix.target }}.tar.gz.sha256
+            owl-${{ matrix.artifact }}.tar.gz
+            owl-${{ matrix.artifact }}.tar.gz.sha256
