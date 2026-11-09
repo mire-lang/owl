@@ -19,30 +19,46 @@ jobs:
         include:
           - os: ubuntu-22.04
             target: linux-x86_64
-          - os: macos-13
-            target: darwin-x86_64
-          - os: macos-14
-            target: darwin-aarch64
+          - os: ubuntu-22.04
+            target: linux-aarch64
+            cross: true
+          - os: ubuntu-22.04
+            target: linux-riscv64
+            cross: true
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
 
-      - name: Install LLVM 22 (required by Mire compiler)
+      - name: Install LLVM 22 and cross-compilation toolchain
         run: |
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
           sudo apt-get update -qq
           sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev
+          if [[ "${{ matrix.cross }}" == "true" ]]; then
+            sudo apt-get install -y -qq gcc-aarch64-linux-gnu gcc-riscv64-linux-gnu
+            sudo apt-get install -y -qq libc6-dev-arm64-cross libc6-dev-riscv64-cross
+            rustup target add aarch64-unknown-linux-gnu riscv64gc-unknown-linux-gnu
+          fi
           echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
 
       - name: Build mire compiler
         env:
           LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
+          TARGET: ${{ matrix.target }}
         run: |
           git clone --depth 1 -b main \
             https://github.com/mire-lang/Avenys-rust.git /tmp/mire-src
-          cd /tmp/mire-src && cargo build --release
+          cd /tmp/mire-src
+          if [[ "${{ matrix.cross }}" == "true" ]]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
 
       - name: Fetch kioto standard library
         run: |
@@ -51,7 +67,7 @@ jobs:
 
       - name: Build owl
         run: |
-          /tmp/mire-src/target/release/mire build code/main.mire --release \
+          /tmp/mire-src/target/${{ matrix.target }}/release/mire build code/main.mire --release \
             --lib-dir /tmp/libs -o /tmp/owl-bin/owl
 
       - name: Package tarball
