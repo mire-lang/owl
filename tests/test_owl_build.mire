@@ -3,6 +3,10 @@ load kioto::strings
 load kioto::fs
 load mire::vec
 load kioto::proc
+load! /code/_externs
+
+// Use extern directly for i64_to_string
+fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
 
 @[test]
 pub fn owl_build_produces_binary: () :bool {
@@ -23,16 +27,16 @@ pub fn owl_build_produces_binary: () :bool {
     use proc::run::output("mkdir" mk)
 
     set toml_path = strings::concat(proj_dir "/owl.toml")
-    set toml_content = "[project]\nname = \"testbuild\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mr\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n"
+    set toml_content = "[project]\nname = \"testbuild\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\ncache = \"bin/.cache\"\n"
     use fs::write(toml_path toml_content)
 
-    set main_path = strings::concat(proj_dir "/src/main.mr")
-    set main_content = "pub fn main: () :i64 {\n  use dasu(\"Hello from testbuild\")\n  return 0\n}\n"
+    set main_path = strings::concat(proj_dir "/src/main.mire")
+    set main_content = "pub fn main: () {\n  use dasu(\"Hello from testbuild\")\n}\n"
     use fs::write(main_path main_content)
 
     set sh = [] :vec[str] mut
     set sh = vec::push::str(sh "-c")
-    set sh = vec::push::str(sh strings::concat(strings::concat(strings::concat("cd " proj_dir) " && ") "/home/Evelyn/.local/bin/owl build src/main.mr"))
+    set sh = vec::push::str(sh strings::concat(strings::concat(strings::concat("cd " proj_dir) " && ") "/home/nyx/.local/bin/owl build src/main.mire"))
     set build_out = proc::run::output("sh" sh)
     set compiler_exit_code = proc::run.last_exit()
 
@@ -47,7 +51,7 @@ pub fn owl_build_produces_binary: () :bool {
     set chk = vec::push::str(chk strings::concat(bin_dir "/main"))
     use proc::run::output("test" chk)
     set binary_ok = proc::run.last_exit() == 0
-    use dasu("BUILD_EXIT=" + strings::from::i64(compiler_exit_code))
+    use dasu("BUILD_EXIT=" + use! util::i64_to_string(compiler_exit_code))
     use dasu("BUILD_OUT=" + build_out)
     use dasu("BIN_DIR=" + produced)
     use dasu("BINARY_OK=" + strings::from::bool(binary_ok))

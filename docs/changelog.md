@@ -1,3 +1,16 @@
+## [1.3.1] - 2026-11-05
+
+### Changed
+- **Project directory renamed**: `code/` → `src/` (matches standard conventions)
+- **Output directory hardcoded**: Binary output always goes to `bin/` (removed `[paths].output` from `owl.toml`)
+- **New entry point config**: Added support for `[project].input` as alternative to `[project].entry` (input takes precedence)
+- **CLI file override preserved**: `owl run src/main.mire` still works and overrides config
+
+### Fixed
+- **Install script libsodium fix**: Properly handles bundled `libsodium.so.23` via RPATH or wrapper script
+- **tcc auto-installation**: Install script now attempts to install tcc via package manager
+- **Complete uninstaller**: Created `install/uninstall.sh` with `--force`, `--dry-run`, `--keep-libs`, `--keep-config`, `--keep-path` options
+
 ## [1.3.0] - 2026-10-21
 
 ### Added

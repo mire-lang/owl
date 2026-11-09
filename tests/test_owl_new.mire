@@ -3,6 +3,10 @@ load kioto::strings
 load kioto::fs
 load mire::vec
 load kioto::proc
+load! /code/_externs
+
+// Use extern directly for i64_to_string
+fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
 
 @[test]
 pub fn owl_new_creates_scaffold: () :bool {
@@ -16,7 +20,7 @@ pub fn owl_new_creates_scaffold: () :bool {
     set ts = strings::trim(proc::run::output("date" da))
     set test_base = strings::concat(strings::concat(strings::copy(home) "/.owl/tmp/owl_new_test_") ts)
     set proj_dir = strings::concat(test_base "/myapp")
-    set owl_bin = "/home/Evelyn/.local/bin/owl" :str mut
+    set owl_bin = "/home/nyx/.local/bin/owl" :str mut
     if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
 
     set mk = [] :vec[str] mut
@@ -27,12 +31,12 @@ pub fn owl_new_creates_scaffold: () :bool {
 
     // Write owl.toml directly (bypass owl new which uses fs::write that fails in this env)
     set toml_path = strings::concat(proj_dir "/owl.toml")
-    set toml_content = "[project]\nname = \"myapp\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mr\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n"
+    set toml_content = "[project]\nname = \"myapp\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\ncache = \"bin/.cache\"\n"
     use fs::write(toml_path toml_content)
 
-    // Write src/main.mr directly
-    set main_path = strings::concat(proj_dir "/src/main.mr")
-    set main_content = "pub fn main: () :i64 {\n  use dasu(\"Hello from myapp\")\n  return 0\n}\n"
+    // Write src/main.mire directly
+    set main_path = strings::concat(proj_dir "/src/main.mire")
+    set main_content = "pub fn main: () {\n  use dasu(\"Hello from myapp\")\n}\n"
     use fs::write(main_path main_content)
 
     set all_exist = true :bool mut
@@ -45,7 +49,7 @@ pub fn owl_new_creates_scaffold: () :bool {
 
     set exists_args = [] :vec[str] mut
     set exists_args = vec::push::str(exists_args "-e")
-    set exists_args = vec::push::str(exists_args strings::concat(proj_dir "/src/main.mr"))
+    set exists_args = vec::push::str(exists_args strings::concat(proj_dir "/src/main.mire"))
     use proc::run.output("test" exists_args)
     if proc::run.last_exit() != 0 { set all_exist = false }
 

@@ -1,4 +1,4 @@
-# Owl v1.3.0
+# Owl v1.3.1
 
 Package and project manager for the [Mire](https://github.com/mire-lang) (Avenys) language.
 Written in Mire, compiled by Avenys.
@@ -40,6 +40,21 @@ equivalent) is checked by the installer.
 Avenys 4.0.0 currently requires LLVM 22. The installer rejects older
 `llvm-config` versions so a CI image fails with an actionable toolchain error
 instead of a later `llvm-sys` linker failure.
+
+## Uninstallation
+
+To completely remove Owl, the Mire compiler, libraries, and configuration:
+
+```bash
+# Interactive uninstall (prompts for confirmation)
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/uninstall.sh | sh
+
+# Force uninstall everything without prompts
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/uninstall.sh | sh -s -- --force
+
+# Dry run to see what would be removed
+curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/uninstall.sh | sh -s -- --dry-run
+```
 
 ## Commands
 
@@ -143,6 +158,29 @@ owl load json 1.2.0      # versioned dep
 owl install              # resolve and install
 ```
 
+## Version History
+
+### v1.3.1 - 2026-11-05
+**Project Template & Config Changes**
+- **Project directory renamed**: `code/` → `src/` (matches standard conventions)
+- **Output directory hardcoded**: Binary output always goes to `bin/` (removed `[paths].output` from `owl.toml`)
+- **New entry point config**: Added support for `[project].input` as alternative to `[project].entry` (input takes precedence)
+- **CLI file override preserved**: `owl run src/main.mire` still works and overrides config
+
+### v1.3.0 - 2026-10-21
+**Added**
+- **`owl load <name> [version]`** — adds a dependency to `[dependencies]` in `owl.toml`. Without a version it uses a local path `~/.owl/libs/<name>`; with a version it declares a versioned registry dependency. Follow with `owl install` to resolve.
+
+**Fixed**
+- **CLI flag validation rejected valid flags** — `args::allowed_flags()` for `build`, `run`, and `test` did not declare flags that `build::compile()` and `build::test_config()` already handle. Every flag the compiler understands is now declared.
+- **Version inconsistency** — README said `v1.3.0`, `owl.toml` said `1.4.0`, and the fallback constant said `1.2.4`. All now report `v1.3.0`, read from `[project] version` in `owl.toml`.
+- **`owl info` hardcoded `mire`** — `info::run()` invoked `mire --version` directly instead of `util::compiler_cmd()`, ignoring `[build] compiler` and `MIRE_COMPILER`. Now resolves through `compiler_cmd()`.
+- **`owl new` template mismatch** — scaffolded `src/main.mr` with `pub fn main: () :i64`, but the codebase uses `code/main.mire` with `pub fn main: ()`. Template now matches codebase conventions.
+
+**Documentation**
+- `docs/Cli/overview.md` rewritten for v1.3.0 with complete flag listings.
+- `README.md` command table updated: `build`, `run`, `test` now list all flags the compiler accepts; added `owl load` and Build Profiles sections.
+
 ## `owl new` template
 
 `owl new <name>` scaffolds:
@@ -151,12 +189,19 @@ owl install              # resolve and install
 <name>/
   owl.toml
   bin/
-  code/
+  src/
     main.mire
 ```
 
-The manifest uses `entry = "code/main.mire"`, `sources = "code"`, and the entry
+The manifest uses `entry = "src/main.mire"`, `sources = "src"`, and the entry
 is `pub fn main: ()` (no return type). Build with `owl build`, run with `owl run`.
+
+The entry point can be configured via `[project].entry` or `[project].input` in `owl.toml`:
+```toml
+[project]
+entry = "src/main.mire"
+input = "src/alt.mire"  # takes precedence over entry when set
+```
 
 
 ```bash
