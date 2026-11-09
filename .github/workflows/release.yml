@@ -52,7 +52,7 @@ jobs:
 
       - name: Build owl
         run: |
-          /tmp/mire-src/target/release/mire build --release \
+          /tmp/mire-src/target/release/mire build code/main.mire --release \
             --lib-dir /tmp/libs -o /tmp/owl-bin/owl
 
       - name: Package tarball
