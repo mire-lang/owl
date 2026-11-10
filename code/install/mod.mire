@@ -127,8 +127,9 @@ fn field_val: (line :&str) :str {
    '|'-separated record or "" when nothing matches:
      name|version|registry|method|repo|ref|commit|tag|asset|tarball|sha256|sha512 !/
 fn index_lookup: (name :str want :str) :str {
-    // Authorize the owl home directory so fs::exists and fs::read work on ~/.owl/reg
-    use! fs::owl::authorise(use! fs::owl::home())
+    // Ensure owl home directory exists for registry access
+    // (fs::exists and fs::read work on absolute paths in current kioto)
+    use! util::owl_home()
     set reg_root = use! util::owl_home_registries()
     // fs::list() currently dereferences an invalid PAL directory handle for
     // absolute paths, so enumerate the registry directory with `ls -1`.
