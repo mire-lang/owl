@@ -57,7 +57,13 @@ jobs:
           git clone --depth 1 -b main https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/mire-lib.git /tmp/mire-lib
           cp -r /tmp/mire-lib /tmp/libs/mire
 
-      - name: Build owl
+      - name: Verify llc is available
+        run: |
+          export PATH="/usr/lib/llvm-22/bin:$PATH"
+          which llc
+          llc --version
+
+- name: Build owl
         run: |
           export PATH="/usr/lib/llvm-22/bin:$PATH"
           /tmp/mire-src/target/release/mire build code/main.mire --release \
