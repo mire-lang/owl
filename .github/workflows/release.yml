@@ -64,6 +64,9 @@ jobs:
           export PATH="/usr/lib/llvm-22/bin:$PATH"
           which llc
           llc --version
+          ls -la /usr/lib/llvm-22/bin/llc*
+          ls -la /usr/bin/llc* 2>/dev/null || true
+          ls -la /usr/local/bin/llc* 2>/dev/null || true
 
       - name: Build owl
         run: |
