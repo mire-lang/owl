@@ -28,11 +28,11 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install LLVM 22 and tcc (required by Mire compiler)
+      - name: Install LLVM 22, tcc, and libsodium (required by Mire compiler)
         run: |
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
           sudo apt-get update -qq
-          sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev tcc
+          sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev tcc libsodium-dev
           echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
 
       - name: Build mire compiler
