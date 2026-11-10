@@ -64,10 +64,9 @@ jobs:
           llc --version
 
       - name: Build owl
-        env:
-          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
-          PATH: "/usr/lib/llvm-22/bin:${{ env.PATH }}"
         run: |
+          export PATH="/usr/lib/llvm-22/bin:$PATH"
+          export LLVM_CONFIG_PATH=/usr/bin/llvm-config-22
           /tmp/mire-src/target/release/mire build code/main.mire --release \
             --lib-dir /tmp/libs -o /tmp/owl-bin/owl
 
