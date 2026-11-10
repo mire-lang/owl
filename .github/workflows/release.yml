@@ -44,9 +44,10 @@ jobs:
           cd /tmp/mire-src && cargo build --release
 
       - name: Fetch kioto standard library
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git clone --depth 1 https://github.com/mire-lang/libs.git /tmp/libs
-          ln -sfn /tmp/libs/kioto /tmp/kioto
+          git clone --depth 1 -b master https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/Kioto.git /tmp/libs/kioto
 
       - name: Fetch mire standard library
         env:
