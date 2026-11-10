@@ -52,7 +52,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git clone --depth 1 -b main https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/mire.git /tmp/mire-lib
+          git clone --depth 1 -b main https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/mire-lib.git /tmp/mire-lib
           cp -r /tmp/mire-lib/src /tmp/libs/mire
 
       - name: Build owl
