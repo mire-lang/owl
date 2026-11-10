@@ -63,7 +63,7 @@ jobs:
           which llc
           llc --version
 
-- name: Build owl
+      - name: Build owl
         run: |
           export PATH="/usr/lib/llvm-22/bin:$PATH"
           /tmp/mire-src/target/release/mire build code/main.mire --release \
