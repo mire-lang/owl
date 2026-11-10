@@ -37,6 +37,7 @@ jobs:
           echo "/usr/lib/llvm-22/bin" | sudo tee -a /etc/environment
           sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/local/bin/llc
           sudo ln -sf /usr/lib/llvm-22/bin/llvm-config /usr/local/bin/llvm-config-22
+          sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/bin/llc
 
       - name: Build mire compiler
         env:
