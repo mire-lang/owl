@@ -17,45 +17,59 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             artifact: linux-x86_64
+            avenys_artifact: mire-compiler-x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact: linux-aarch64
+            avenys_artifact: mire-compiler-aarch64-unknown-linux-gnu
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Install LLVM 22, tcc, and libsodium (required by Mire compiler)
-        run: |
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev tcc libsodium-dev
-          echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
-          sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/bin/llc
-
-      - name: Build mire compiler
+      - name: Download precompiled mire compiler from avenys release
         env:
-          LLVM_CONFIG_PATH: /usr/bin/llvm-config-22
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git clone --depth 1 -b main \
-            https://github.com/mire-lang/Avenys-rust.git /tmp/mire-src
-          cd /tmp/mire-src && cargo build --release
+          # Get the latest avenys release tag
+          AVENYS_TAG=$(gh api repos/mire-lang/Avenys-rust/releases/latest --jq .tag_name 2>/dev/null || echo "v4.4.17")
+          echo "Using avenys release: $AVENYS_TAG"
+          
+          # Download the mire compiler artifact for this target
+          gh release download "$AVENYS_TAG" \
+            --repo mire-lang/Avenys-rust \
+            --pattern "${{ matrix.avenys_artifact }}.tar.gz" \
+            --dir /tmp/compiler-artifacts
 
-      - name: Install mire system-wide (like avenys workflow)
+      - name: Install mire system-wide
         run: |
-          sudo install -m 0755 /tmp/mire-src/target/release/mire /usr/local/bin/mire
+          tar xzf /tmp/compiler-artifacts/${{ matrix.avenys_artifact }}.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/compiler/mire /usr/local/bin/mire
           sudo mkdir -p /usr/local/lib/mire
-          sudo cp -r /tmp/mire-src/src/runtime /usr/local/lib/mire/runtime
-          sudo cp -r /tmp/mire-src/src/pal /usr/local/lib/mire/pal
+          sudo cp -r /tmp/compiler/runtime /usr/local/lib/mire/runtime
+          sudo cp -r /tmp/compiler/pal /usr/local/lib/mire/pal
           mire --version
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            wget ca-certificates pkg-config build-essential gcc g++ make \
+            libsodium23 libsodium-dev libzstd-dev libarchive-dev zlib1g-dev \
+            tcc libtcc-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
+          sudo apt-get install -y -qq \
+            llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev
+          sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/bin/llc
+          echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
 
       - name: Fetch kioto standard library
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mkdir -p ~/.owl/libs
           git clone --depth 1 -b master https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/Kioto.git ~/.owl/libs/kioto
 
       - name: Fetch mire standard library
@@ -69,8 +83,13 @@ jobs:
           export PATH="/usr/lib/llvm-22/bin:$PATH"
           export LLVM_CONFIG_PATH=/usr/bin/llvm-config-22
           export LLVM_SYS_220_PREFIX=/usr/lib/llvm-22
-          mire build code/main.mire --release \
-            --lib-dir ~/.owl/libs -o owl-bin/owl
+          mire build code/main.mire --release -O3 --no-analysis-cache \
+            --lib-dir "$HOME/.owl/libs" -o owl-bin/owl
+
+      - name: Verify owl
+        run: |
+          chmod +x owl-bin/owl
+          ./owl-bin/owl -V
 
       - name: Package tarball
         run: |
