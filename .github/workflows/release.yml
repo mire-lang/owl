@@ -34,9 +34,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq llvm-22 llvm-22-dev llvm-22-tools clang-22 lld-22 libpolly-22-dev tcc libsodium-dev
           echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
-          echo "/usr/lib/llvm-22/bin" | sudo tee -a /etc/environment
-          sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/local/bin/llc
-          sudo ln -sf /usr/lib/llvm-22/bin/llvm-config /usr/local/bin/llvm-config-22
           sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/bin/llc
 
       - name: Build mire compiler
@@ -47,41 +44,39 @@ jobs:
             https://github.com/mire-lang/Avenys-rust.git /tmp/mire-src
           cd /tmp/mire-src && cargo build --release
 
+      - name: Install mire system-wide (like avenys workflow)
+        run: |
+          sudo install -m 0755 /tmp/mire-src/target/release/mire /usr/local/bin/mire
+          sudo mkdir -p /usr/local/lib/mire
+          sudo cp -r /tmp/mire-src/src/runtime /usr/local/lib/mire/runtime
+          sudo cp -r /tmp/mire-src/src/pal /usr/local/lib/mire/pal
+          mire --version
+
       - name: Fetch kioto standard library
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git clone --depth 1 -b master https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/Kioto.git /tmp/libs/kioto
+          git clone --depth 1 -b master https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/Kioto.git ~/.owl/libs/kioto
 
       - name: Fetch mire standard library
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git clone --depth 1 -b main https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/mire-lib.git /tmp/mire-lib
-          cp -r /tmp/mire-lib /tmp/libs/mire
-
-      - name: Verify llc is available
-        run: |
-          export PATH="/usr/lib/llvm-22/bin:$PATH"
-          which llc
-          llc --version
-          ls -la /usr/lib/llvm-22/bin/llc*
-          ls -la /usr/bin/llc* 2>/dev/null || true
-          ls -la /usr/local/bin/llc* 2>/dev/null || true
+          git clone --depth 1 -b main https://x-access-token:${GITHUB_TOKEN}@github.com/mire-lang/mire-lib.git ~/.owl/libs/mire
 
       - name: Build owl
         run: |
           export PATH="/usr/lib/llvm-22/bin:$PATH"
           export LLVM_CONFIG_PATH=/usr/bin/llvm-config-22
           export LLVM_SYS_220_PREFIX=/usr/lib/llvm-22
-          /tmp/mire-src/target/release/mire build code/main.mire --release \
-            --lib-dir /tmp/libs -o /tmp/owl-bin/owl
+          mire build code/main.mire --release \
+            --lib-dir ~/.owl/libs -o owl-bin/owl
 
       - name: Package tarball
         run: |
           mkdir -p /tmp/archive
-          cp /tmp/mire-src/target/release/mire /tmp/archive/
-          cp /tmp/owl-bin/owl /tmp/archive/
+          cp /usr/local/bin/mire /tmp/archive/
+          cp owl-bin/owl /tmp/archive/
           cd /tmp/archive
           tar czf "${{ github.workspace }}/owl-${{ matrix.artifact }}.tar.gz" \
             mire owl
