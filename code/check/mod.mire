@@ -883,7 +883,6 @@ pub fn takes_value: (flag :&str) :bool {
         || flag == "-L"
         || flag == "--lib-dir"
         || flag == "--config"
-        || flag == "--target"
         || flag == "--cache-dir"
 }
 
@@ -924,11 +923,15 @@ pub fn run_tests: (args :&vec[str]) {
     while i < vec::len(args) {
         set a = vec::get::str(args i)
         if use! util::startswith(a "-") {
-            set argv = vec::push::str(argv strings::copy(a))
-            if use! check::takes_value(a) {
-                if i + 1 < vec::len(args) {
-                    set i += 1
-                    set argv = vec::push::str(argv strings::copy(vec::get::str(args i)))
+            if a == "--target" {
+                set i += 1
+            } else {
+                set argv = vec::push::str(argv strings::copy(a))
+                if use! check::takes_value(a) {
+                    if i + 1 < vec::len(args) {
+                        set i += 1
+                        set argv = vec::push::str(argv strings::copy(vec::get::str(args i)))
+                    }
                 }
             }
         }

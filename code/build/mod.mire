@@ -213,7 +213,8 @@ if runtime == "" {
     if runtime == "none" { set runtime = "minimal" }
 }
 
-    set target = use! util::arg_value(args "--target") :str mut
+    set target = env::var("OWL_TEST_TARGET") :str mut
+    if target == "" { set target = use! util::arg_value(args "--target") }
     if target == "" { set target = "x86_64-unknown-linux-gnu" }
     set output = use! util::config_required("paths" "output")
     set cache = use! util::config_required("paths" "cache")

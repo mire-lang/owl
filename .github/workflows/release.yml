@@ -142,7 +142,7 @@ jobs:
         run: ./bin/main check --deps
 
       - name: Run Owl test suite on release target
-        run: ./bin/main test --target "${{ matrix.target }}" -v
+        run: ./bin/main test -v
 
       - name: Package owl tarball
         run: |

@@ -1,4 +1,4 @@
-## [1.6.8] - 2026-11-12
+## [1.6.9] - 2026-11-12
 
 ### Fixed
 - Dependency diagnostics now validate each package in a separate call frame. This avoids duplicate temporary-string cleanup when checking projects with several dependencies, including optimized ARM builds.
@@ -6,6 +6,7 @@
 
 ### Changed
 - Release validation resolves dependencies in a separate command, checks them, and runs the suite for the target architecture. This keeps clean-checkout failures attributable to the relevant stage.
+- `owl test` takes its target from `OWL_TEST_TARGET` or its CLI option, writes it into the Mire test configuration, and does not forward the Owl-only flag to Mire.
 
 ## [1.6.2] - 2026-11-10
 
