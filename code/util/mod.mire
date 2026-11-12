@@ -153,6 +153,19 @@ pub fn toml_array_literal: (items :&vec[str]) :str {
     return out + "]"
 }
 
+pub fn toml_array_merge: (base :&str, extra :&str) :str {
+    if extra == "" || extra == "[]" { return strings::copy(base) }
+    if base == "" || base == "[]" { return strings::copy(extra) }
+    set prefix = strings::substr(base 0 len(base) - 1)
+    set body = strings::substr(extra 1 len(extra) - 2)
+    return prefix + ", " + body + "]"
+}
+
+pub fn dependency_security_array: (manifest :str, key :str) :str {
+    set values = use! util::toml_get_array(manifest "security" key)
+    return use! util::toml_array_literal(values)
+}
+
 /!  
     Inserts or replaces `key = "value"` inside `[section]` of a TOML file,
     creating the section (and the file) when needed. Section names that are not
@@ -826,72 +839,29 @@ pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :
     /! Merge security settings from dependencies !/
     set dep_names_str = use! deps::get_dep_names()
     set dep_names = strings::split(dep_names_str "\n")
+    set sec_externs_toml = use! util::toml_array_literal(sec_externs) :str mut
+    set sec_extern_libs_toml = use! util::toml_array_literal(sec_extern_libs) :str mut
+    set sec_macros_toml = use! util::toml_array_literal(sec_macros) :str mut
+    set lib_dirs = strings::split(libs ":")
     set i = 0 :i64 mut
     while i < vec::len(dep_names) {
         set dep_name = use! util::trim(use! util::list_get(dep_names i))
         if dep_name != "" {
             /! Try to find dependency owl.toml in libs directories !/
-            set lib_dirs = strings::split(libs ":")
             set j = 0 :i64 mut
             while j < vec::len(lib_dirs) {
                 set lib_dir = use! util::trim(use! util::list_get(lib_dirs j))
                 if lib_dir != "" {
                     set dep_toml = lib_dir + "/" + dep_name + "/owl.toml"
                     if fs::exists(dep_toml) {
-                        /! Merge externs !/
-                        set dep_toml_ext = strings::copy(dep_toml) :str mut
-                        set dep_externs = use! util::toml_get_array(dep_toml_ext "security" "externs") :vec[str] mut
-                        set k = 0 :i64 mut
-                        while k < vec::len(dep_externs) {
-                            set ext = use! util::trim(use! util::list_get(dep_externs k))
-                            if ext != "" {
-                                set found = false :bool mut
-                                set m = 0 :i64 mut
-                                while m < vec::len(sec_externs) {
-                                    if use! util::list_get(sec_externs m) == ext { set found = true }
-                                    set m += 1
-                                }
-                                if !found { set sec_externs = vec::push::str(sec_externs ext) }
-                                set k += 1
-                            }
-                        }
-                        /! Merge extern-libs !/
-                        set dep_toml_ext = strings::copy(dep_toml) :str mut
-                        set dep_extern_libs = use! util::toml_get_array(dep_toml_ext "security" "extern-libs") :vec[str] mut
-                        set k = 0 :i64 mut
-                        while k < vec::len(dep_extern_libs) {
-                            set ext = use! util::trim(use! util::list_get(dep_extern_libs k))
-                            if ext != "" {
-                                set found = false :bool mut
-                                set m = 0 :i64 mut
-                                while m < vec::len(sec_extern_libs) {
-                                    if use! util::list_get(sec_extern_libs m) == ext { set found = true }
-                                    set m += 1
-                                }
-                                if !found { set sec_extern_libs = vec::push::str(sec_extern_libs ext) }
-                                set k += 1
-                            }
-                        }
-                        /! Merge macros !/
-                        set dep_toml_ext = strings::copy(dep_toml) :str mut
-                        set dep_macros = use! util::toml_get_array(dep_toml_ext "security" "macros") :vec[str] mut
-                        set k = 0 :i64 mut
-                        while k < vec::len(dep_macros) {
-                            set mac = use! util::trim(use! util::list_get(dep_macros k))
-                            if mac != "" {
-                                set found = false :bool mut
-                                set m = 0 :i64 mut
-                                while m < vec::len(sec_macros) {
-                                    if use! util::list_get(sec_macros m) == mac { set found = true }
-                                    set m += 1
-                                }
-                                if !found { set sec_macros = vec::push::str(sec_macros mac) }
-                                set k += 1
-                            }
-                        }
+                        set dep_exts = use! util::dependency_security_array(strings::copy(dep_toml) "externs")
+                        set sec_externs_toml = use! util::toml_array_merge(sec_externs_toml dep_exts)
+                        set dep_libs = use! util::dependency_security_array(strings::copy(dep_toml) "extern-libs")
+                        set sec_extern_libs_toml = use! util::toml_array_merge(sec_extern_libs_toml dep_libs)
+                        set dep_macros_toml = use! util::dependency_security_array(strings::copy(dep_toml) "macros")
+                        set sec_macros_toml = use! util::toml_array_merge(sec_macros_toml dep_macros_toml)
                         /! Merge allow-unsafe (if any dep allows unsafe, allow it) !/
-                        set dep_toml_ext = strings::copy(dep_toml) :str mut
-                        set dep_allow_unsafe = use! util::toml_get(dep_toml_ext "security" "allow-unsafe") :str mut
+                        set dep_allow_unsafe = use! util::toml_get(strings::copy(dep_toml) "security" "allow-unsafe") :str mut
                         if dep_allow_unsafe == "true" { set sec_allow_unsafe = "true" }
                         /! Break after first found (use first match) !/
                         set j = vec::len(lib_dirs) /! break outer loop !/
@@ -905,9 +875,9 @@ pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :
 
     set config = config + "[security]\n"
     set config = config + "mode = \"" + sec_mode + "\"\n"
-    set config = config + "externs = " + use! util::toml_array_literal(sec_externs) + "\n"
-    set config = config + "extern-libs = " + use! util::toml_array_literal(sec_extern_libs) + "\n"
-    set config = config + "macros = " + use! util::toml_array_literal(sec_macros) + "\n"
+    set config = config + "externs = " + sec_externs_toml + "\n"
+    set config = config + "extern-libs = " + sec_extern_libs_toml + "\n"
+    set config = config + "macros = " + sec_macros_toml + "\n"
     set config = config + "allow-unsafe = " + sec_allow_unsafe + "\n"
 
     fs::write(path config)
