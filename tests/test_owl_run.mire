@@ -3,6 +3,7 @@ load kioto::strings
 load kioto::fs
 load mire::vec
 load kioto::proc
+load kioto::env
 load! /code/_externs
 
 // Use extern directly for i64_to_string
@@ -27,7 +28,7 @@ pub fn owl_run_executes_project: () :bool {
     use proc::run::output("mkdir" mk)
 
     set toml_path = strings::concat(proj_dir "/owl.toml")
-    set toml_content = "[project]\nname = \"testrun\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\ncache = \"bin/.cache\"\n"
+    set toml_content = "[project]\nname = \"testrun\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n"
     use fs::write(toml_path toml_content)
 
     set main_path = strings::concat(proj_dir "/src/main.mire")
@@ -36,7 +37,10 @@ pub fn owl_run_executes_project: () :bool {
 
     set sh = [] :vec[str] mut
     set sh = vec::push::str(sh "-c")
-    set sh = vec::push::str(sh strings::concat(strings::concat(strings::concat("cd " proj_dir) " && ") "/home/nyx/.local/bin/owl run src/main.mire"))
+    set owl_bin = env::var("OWL_BIN") :str mut
+    if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
+    set command = strings::concat(strings::concat(strings::concat("cd " proj_dir) " && ") owl_bin)
+    set sh = vec::push::str(sh strings::concat(command " run src/main.mire 2>&1"))
     set run_out = proc::run::output("sh" sh)
     set run_exit_code = proc::run.last_exit()
     use dasu("RUN_EXIT=" + use! util::i64_to_string(run_exit_code))

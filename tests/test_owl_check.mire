@@ -3,6 +3,7 @@ load kioto::strings
 load kioto::fs
 load mire::vec
 load kioto::proc
+load kioto::env
 load! /code/_externs
 
 // Use extern directly for i64_to_string
@@ -20,7 +21,7 @@ pub fn owl_check_validates_project: () :bool {
     set ts = strings::trim(proc::run::output("date" da))
     set test_base = strings::concat(strings::concat(strings::copy(home) "/.owl/tmp/owl_check_test_") ts)
     set proj_dir = strings::concat(test_base "/testcheck")
-    set owl_bin = "/home/nyx/.local/bin/owl" :str mut
+    set owl_bin = env::var("OWL_BIN") :str mut
     if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
 
     set mk = [] :vec[str] mut
@@ -30,26 +31,21 @@ pub fn owl_check_validates_project: () :bool {
     use proc::run.output("mkdir" mk)
 
     set toml_path = strings::concat(proj_dir "/owl.toml")
-    set toml_content = "[project]\nname = \"testcheck\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\ncache = \"bin/.cache\"\n"
+    set toml_content = "[project]\nname = \"testcheck\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n"
     use fs::write(toml_path toml_content)
 
     set main_path = strings::concat(proj_dir "/src/main.mire")
     set main_content = "pub fn main: () {\n  return 0\n}\n"
     use fs::write(main_path main_content)
 
-    set ca = [] :vec[str] mut
-    set ca = vec::push::str(ca "check")
-    set ca = vec::push::str(ca ".")
     set check_cmd = [] :vec[str] mut
     set check_cmd = vec::push::str(check_cmd "-c")
-    set cc1 = strings::concat("cd " proj_dir)
-    set cc2 = strings::concat(cc1 " && ")
-    set cc3 = strings::concat(cc2 owl_bin)
-    set cc4 = strings::concat(cc3 " check .")
-    set check_cmd = vec::push::str(check_cmd cc4)
+    set check_cmd = vec::push::str(check_cmd "cd " + proj_dir + " && " + owl_bin + " check . 2>&1")
     set check_out = proc::run::output("sh" check_cmd)
     set check_exit = proc::run.last_exit()
-    set check_ok = strings::contains(check_out "[OK]")
+    set check_ok = check_exit == 0
+        && strings::contains(check_out "[OK]   [paths].output: bin")
+        && !strings::contains(check_out "[FAIL]")
     use dasu("CHECK_EXIT=" + use! util::i64_to_string(check_exit))
     use dasu("CHECK_OUT=" + check_out)
 

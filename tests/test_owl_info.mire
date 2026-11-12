@@ -3,6 +3,7 @@ load kioto::strings
 load kioto::fs
 load mire::vec
 load kioto::proc
+load kioto::env
 load! /code/_externs
 
 // Use extern directly for i64_to_string
@@ -20,7 +21,7 @@ pub fn owl_info_reports_project: () :bool {
     set ts = strings::trim(proc::run::output("date" da))
     set test_base = strings::concat(strings::concat(strings::copy(home) "/.owl/tmp/owl_info_test_") ts)
     set proj_dir = strings::concat(test_base "/testinfo")
-    set owl_bin = "/home/nyx/.local/bin/owl" :str mut
+    set owl_bin = env::var("OWL_BIN") :str mut
     if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
 
     set mk = [] :vec[str] mut
@@ -45,7 +46,7 @@ pub fn owl_info_reports_project: () :bool {
     set ic1 = strings::concat("cd " proj_dir)
     set ic2 = strings::concat(ic1 " && ")
     set ic3 = strings::concat(ic2 owl_bin)
-    set ic4 = strings::concat(ic3 " info .")
+    set ic4 = strings::concat(ic3 " info . 2>&1")
     set info_cmd = vec::push::str(info_cmd ic4)
     set info_out = proc::run::output("sh" info_cmd)
     set info_exit = proc::run.last_exit()
@@ -64,7 +65,7 @@ pub fn owl_info_reports_project: () :bool {
     set j1 = strings::concat("cd " proj_dir)
     set j2 = strings::concat(j1 " && ")
     set j3 = strings::concat(j2 owl_bin)
-    set j4 = strings::concat(j3 " info --json .")
+    set j4 = strings::concat(j3 " info --json . 2>&1")
     set jc = vec::push::str(jc j4)
     set info_json = proc::run::output("sh" jc)
     set json_exit = proc::run.last_exit()

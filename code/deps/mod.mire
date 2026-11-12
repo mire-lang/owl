@@ -1,6 +1,7 @@
 module deps
 
 load mire::vec
+load kioto::env
 load! /code/util
 load! /code/dep_resolver
 
@@ -146,6 +147,10 @@ pub fn get_dep_names: () :str {
    each dependency; the compiler receives these directories and does not parse
    the project's dependency table. !/
 pub fn compiler_lib_dirs: () :str {
+    set configured_dirs = env::var("OWL_COMPILER_LIBS")
+    if configured_dirs != "" {
+        return use! util::expand_home(configured_dirs)
+    }
     /! Avenys receives real filesystem paths, not the display form
        `~/.owl/libs`. Keeping the expansion here also makes local path
        dependencies reproducible when Owl is launched without a shell. !/

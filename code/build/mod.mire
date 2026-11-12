@@ -178,11 +178,6 @@ pub fn ensure_project_dependencies: () :bool {
    on Avenys to rediscover owl.toml would quietly reintroduce the old project
    manager boundary. !/
 pub fn test_config: (args :&vec[str]) :str {
-    if !use! build::ensure_project_dependencies() {
-        use! util::error_line("OWL0003" "dependencies are unresolved")
-        exit(1)
-    }
-
     set profile = use! util::config_required("build" "profile") :str mut
     set opt = use! util::config_required("build" "opt-level") :str mut
     if use! args::flag::has(args "--release") || use! args::flag::has(args "-r") {
