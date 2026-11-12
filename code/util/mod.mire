@@ -218,6 +218,24 @@ pub fn extract_install_status: (output :&str) :bool {
 }
 
 /! Filesystem operations !/
+/! Avenys roots absolute paths at the process working directory. A tool that
+   owns a store outside the project (~/.owl) must authorise exactly that
+   subtree; called once at startup, before any filesystem work.
+
+   The PAL resolves a root that does not exist through its deepest existing
+   ancestor and then rejects that ancestor as a symlink escape, so the store
+   has to exist before it can be authorised. Create it inside an explicit
+   unrestricted window and close the window before narrowing the policy to
+   the new directory. !/
+pub fn authorise_tool_home: (path :str) {
+    if !fs::exists(path) {
+        use fs::unrestricted::enter()
+        use! util::mkdir_p(strings::copy(path))
+        use fs::unrestricted::exit()
+    }
+    rt_sbx_set_tool_home(path)
+}
+
 pub fn mkdir_p: (path :&str) {
     if path == "" || path == "." { return }
     set absolute = use! util::startswith(path "/")
@@ -225,7 +243,7 @@ pub fn mkdir_p: (path :&str) {
     set current = "" :str mut
     if absolute { set current = "/" }
     set i = 0 :i64 mut
-    while i < len(parts) {
+    while i < vec::len(parts) {
         set part = use! util::list_get(parts i)
         if part != "" && part != "." {
             if current == "" || current == "/" {
@@ -269,11 +287,40 @@ pub fn rm_RF: (path :&str) {
     if fs::exists(path) { fs::remove_all(path) }
 }
 
+/! Directory entries, "." and ".." omitted. Kioto's fs::list cannot be used
+   here: it fills its result with a bare `rt_vecs_push_ptr` assignment, which
+   the compiler does not treat as a vector mutator, so it drops the old vector
+   before storing the new one and the returned length is garbage. Enumerating
+   through the raw PAL handles and pushing with `vec::push::str` keeps the
+   ownership path one the compiler understands. !/
+pub fn list_dir: (path :&str) :vec[str] {
+    set out = [] :vec[str] mut
+    set root = rt_pal_root_open(path)
+    if root > 0 {
+        set d = rt_pal_dir_open(root ".")
+        if d > 0 {
+            set entry = strings::repeat("\0" 256) :str mut
+            set n = rt_pal_dir_next_name(d entry 256) :i64 mut
+            while n > 0 {
+                set name = strings::substr(entry 0 n)
+                if name != "." {
+                    if name != ".." {
+                        set out = vec::push::str(out name)
+                    }
+                }
+                set n = rt_pal_dir_next_name(d entry 256)
+            }
+            rt_pal_dir_close(d)
+        }
+        rt_pal_root_close(root)
+    }
+    return out
+}
+
 // Returns directory entries in the same newline-separated shape used by the
-// old `ls -1` callers. The data comes directly from Kioto's PAL directory
-// API, so filenames are not parsed through a child process.
+// old `ls -1` callers.
 pub fn list_text: (path :&str) :str {
-    set entries = fs::list(path)
+    set entries = use! util::list_dir(path)
     return strings::join(entries "\n")
 }
 
@@ -294,9 +341,9 @@ pub fn tree_size: (path :&str) :i64 {
     if fs::is_file(path) { return use! util::file_size(path) }
     if !fs::exists(path) { return 0 }
     set total = 0 :i64 mut
-    set entries = fs::list(path)
+    set entries = use! util::list_dir(path)
     set i = 0 :i64 mut
-    while i < len(entries) {
+    while i < vec::len(entries) {
         set child = fs::path::join(path use! util::list_get(entries i))
         set total += use! util::tree_size(child)
         set i += 1
@@ -937,9 +984,9 @@ fn contains_load_tree: (path :&str pattern :&str) :bool {
         return strings::contains(source pattern)
     }
     if !fs::exists(path) { return false }
-    set entries = fs::list(path)
+    set entries = use! util::list_dir(path)
     set i = 0 :i64 mut
-    while i < len(entries) {
+    while i < vec::len(entries) {
         set entry_check = use! util::list_get(entries i)
         if entry_check != "." && entry_check != ".." {
             if contains_load_tree(fs::path::join(path use! util::list_get(entries i)) pattern) { return true }
@@ -987,9 +1034,9 @@ fn scan_load_tree: (path :&str, result :str) :str {
         return scan_source_loads(fs::read(path) strings::copy(output))
     }
     if !fs::exists(path) { return output }
-    set entries = fs::list(path)
+    set entries = use! util::list_dir(path)
     set i = 0 :i64 mut
-    while i < len(entries) {
+    while i < vec::len(entries) {
         set entry = use! util::list_get(entries i)
         if entry != "." && entry != ".." {
             set child = fs::path::join(path entry)

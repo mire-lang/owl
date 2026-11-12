@@ -39,6 +39,7 @@ load! sandbox
 load! /code/os
 load! /code/deps_db
 load! /code/pkgbuild
+load! /code/_externs
 
 // Print the resolved dependency tree.
 // Implemented here rather than as deps::tree in /code/deps: every call from the
@@ -120,6 +121,12 @@ fn cmd_load: (args :&vec[str]) {
 }
 
 pub fn main: () {
+    /! Avenys roots absolute filesystem paths at the process working directory;
+       owl's own package store (~/.owl) is authorised as a second, narrow root.
+       This has to happen before any other filesystem work. !/
+    set owl_home_for_sandbox = strings::concat(env::var("HOME") "/.owl")
+    use! util::authorise_tool_home(owl_home_for_sandbox)
+
     set args = env_args()
     set n = vec::len(args)
     if n < 2 {
@@ -186,7 +193,7 @@ pub fn main: () {
         return
     }
     if cmd == "reg" {
-        use! registry::sync_all()
+        use! registry::run(use! util::copy_args(args))
         return
     }
     if cmd == "deps" {

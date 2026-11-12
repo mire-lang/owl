@@ -20,6 +20,18 @@ pub extern fn pal_fs_exists: (path :&str) :bool lib "c"
 pub extern fn pal_fs_mkdir: (path :&str) :bool lib "c"
 pub extern fn pal_fs_remove: (path :&str) :bool lib "c"
 
+/! Directory enumeration by raw handle. Kioto's fs::list builds its result with
+    a bare rt_vecs_push_ptr assignment, which the compiler does not recognise as
+    a vector mutator and therefore drops the old vector first; the returned
+    length is garbage and the process segfaults on any non-empty directory.
+    Owl enumerates through these handles and pushes with `vec::push::str`,
+    which the compiler does recognise. !/
+pub extern fn rt_pal_root_open: (path :&str) :i64 lib "c"
+pub extern fn rt_pal_root_close: (root :i64) lib "c"
+pub extern fn rt_pal_dir_open: (root :i64, path :&str) :i64 lib "c"
+pub extern fn rt_pal_dir_next_name: (dir :i64, out :&mut str, cap :i64) :i64 lib "c"
+pub extern fn rt_pal_dir_close: (dir :i64) lib "c"
+
 /! Archive !/
 pub extern fn owl_archive_available: () :i32 lib "c"
 pub extern fn owl_archive_pack: (root :&str, output :&str) :i32 lib "c"
@@ -43,6 +55,9 @@ pub extern fn rt_read_tty: () :str lib "c"
 /! String/number conversion !/
 pub extern fn rt_string_to_i64: (value :str) :i64 lib "c"
 pub extern fn rt_i64_to_string: (value :i64) :str lib "c"
+
+/! Sandbox policy: authorise owl's own store (~/.owl) as a second root. !/
+pub extern fn rt_sbx_set_tool_home: (path :&str) lib "c"
 
 /! Memory/string ops !/
 pub extern fn rt_string_copy: (s :&str) :str lib "c"

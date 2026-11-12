@@ -127,7 +127,7 @@ pub fn collect_artifacts: (wanted :&vec[str]) :vec[str] {
     set bin_dir = "bin"
     if !use! fs::exists(bin_dir) { return result }
 
-    set entries = use! fs::list(bin_dir)
+    set entries = use! util::list_dir(bin_dir)
     set i = 0 :i64 mut
     while i < vec::len(entries) {
         set entry = vec::get::str(entries i)

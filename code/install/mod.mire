@@ -131,14 +131,8 @@ fn index_lookup: (name :str want :str) :str {
     // (fs::exists and fs::read work on absolute paths in current kioto)
     use! util::owl_home()
     set reg_root = use! util::owl_home_registries()
-    // fs::list() currently dereferences an invalid PAL directory handle for
-    // absolute paths, so enumerate the registry directory with `ls -1`.
-    set ls_args = [] :vec[str] mut
-    set ls_args = vec::push::str(ls_args "-1")
-    set ls_args = vec::push::str(ls_args strings::copy(reg_root))
-    set regs_text = use! proc::run::output("ls" ls_args)
-    if regs_text == "" { return "" }
-    set regs = strings::split(regs_text "\n")
+    set regs = use! util::list_dir(reg_root)
+    if vec::len(regs) == 0 { return "" }
     set nr = vec::len(regs)
     set ri = 0 :i64 mut
     while ri < nr {
@@ -173,7 +167,9 @@ fn index_lookup: (name :str want :str) :str {
                         if in_pkg {
                             // Save the completed package
                             set rec = cur_name + "|" + cur_ver + "|" + cur_method + "|" + cur_repo + "|" + cur_ref + "|" + cur_commit + "|" + cur_tag + "|" + cur_asset + "|" + cur_tarball + "|" + cur_sha256 + "|" + cur_sha512
-                            set packages = vec::push::str(packages rec)
+                            /! vec::push::str stores the reference, so copy: `rec` is reused
+                               for the next package and later for lookups. !/
+                            set packages = vec::push::str(packages strings::copy(rec))
                         }
                         // Start new package
                         set in_pkg = true
@@ -209,23 +205,38 @@ fn index_lookup: (name :str want :str) :str {
                 // Save the last package
                 if in_pkg {
                     set rec = cur_name + "|" + cur_ver + "|" + cur_method + "|" + cur_repo + "|" + cur_ref + "|" + cur_commit + "|" + cur_tag + "|" + cur_asset + "|" + cur_tarball + "|" + cur_sha256 + "|" + cur_sha512
-                    set packages = vec::push::str(packages rec)
+                    set packages = vec::push::str(packages strings::copy(rec))
                 }
-                // Search for matching package
+                // Search for matching package. A "latest" request has to pick
+                // the highest version, not the first block in the file: the
+                // index intentionally lists older releases first.
                 set np = vec::len(packages)
                 set pi = 0 :i64 mut
+                set best_rec = "" :str mut
+                set best_ver = "" :str mut
                 while pi < np {
                     set rec = use! util::list_get(packages pi)
                     set fields = strings::split(rec "|")
                     set pkg_name = use! util::list_get(fields 0)
                     set pkg_ver = use! util::list_get(fields 1)
                     if pkg_name == name {
-                        if want == "" || want == "latest" || want == "*" || want == pkg_ver {
-                            // Return full record with registry info prepended
-                            return pkg_name + "|" + pkg_ver + "|" + reg + "|" + use! util::list_get(fields 2) + "|" + use! util::list_get(fields 3) + "|" + use! util::list_get(fields 4) + "|" + use! util::list_get(fields 5) + "|" + use! util::list_get(fields 6) + "|" + use! util::list_get(fields 7) + "|" + use! util::list_get(fields 7) + "|" + use! util::list_get(fields 8) + "|" + use! util::list_get(fields 8) + "|" + use! util::list_get(fields 9) + "|" + use! util::list_get(fields 10)
+                        if want == "" || want == "latest" || want == "*" {
+                            if best_rec == "" || use! semver::compare_versions(pkg_ver best_ver) > 0 {
+                                set best_rec = strings::copy(rec)
+                                set best_ver = strings::copy(pkg_ver)
+                            }
+                        } else {
+                            if want == pkg_ver {
+                                /! name|version|registry|method|repo|ref|commit|tag|asset|tarball|sha256|sha512 !/
+                                return pkg_name + "|" + pkg_ver + "|" + reg + "|" + use! util::list_get(fields 2) + "|" + use! util::list_get(fields 3) + "|" + use! util::list_get(fields 4) + "|" + use! util::list_get(fields 5) + "|" + use! util::list_get(fields 6) + "|" + use! util::list_get(fields 7) + "|" + use! util::list_get(fields 8) + "|" + use! util::list_get(fields 9) + "|" + use! util::list_get(fields 10)
+                            }
                         }
                     }
                     set pi += 1
+                }
+                if best_rec != "" {
+                    set bf = strings::split(best_rec "|")
+                    return use! util::list_get(bf 0) + "|" + use! util::list_get(bf 1) + "|" + reg + "|" + use! util::list_get(bf 2) + "|" + use! util::list_get(bf 3) + "|" + use! util::list_get(bf 4) + "|" + use! util::list_get(bf 5) + "|" + use! util::list_get(bf 6) + "|" + use! util::list_get(bf 7) + "|" + use! util::list_get(bf 8) + "|" + use! util::list_get(bf 9) + "|" + use! util::list_get(bf 10)
                 }
             }
         }
@@ -402,7 +413,7 @@ pub fn clone: (name :str version :str repo :str ref_val :str commit_val :str) :u
     set ver_dir = use! util::owl_home_lib_versioned(name version)
     set ver_dir_copy = strings::copy(ver_dir)
     use! util::rm_RF(ver_dir_copy)
-    // DO NOT create ver_dir_copy - let mv create it
+    use! util::mkdir_p(use! util::owl_home_libs())
 
     set clone_url = repo :str mut
     set abs_url = false :bool mut
@@ -411,15 +422,8 @@ pub fn clone: (name :str version :str repo :str ref_val :str commit_val :str) :u
     if use! util::startswith(repo "/") { set abs_url = true }
     if !abs_url { set clone_url = "https://github.com/" + repo }
 
-    // Git creates a subdirectory named after the repo when the target
-    // directory name doesn't match the repo name. To avoid this, let git
-    // create the directory itself (don't pre-create it), then move the
-    // resulting repo directory to the versioned location.
-    set tmp_base = use! util::ensure_tmp_dir()
-    set tmp_clone = tmp_base + "/owl-clone-tmp"
-    use! util::rm_RF(tmp_clone)
-    // DO NOT create tmp_clone - let git create it
-
+    /! Clone straight into the versioned directory. Git creates it itself (the
+       parent exists), so there is no temp clone to move and no `.git` juggling. !/
     use dasu("  cloning " + clone_url + " ...")
     set git_args = [] :vec[str] mut
     set git_args = vec::push::str(git_args "clone")
@@ -430,53 +434,13 @@ pub fn clone: (name :str version :str repo :str ref_val :str commit_val :str) :u
         set git_args = vec::push::str(git_args strings::copy(ref_val))
     }
     set git_args = vec::push::str(git_args strings::copy(clone_url))
-    set git_args = vec::push::str(git_args tmp_clone)
+    set git_args = vec::push::str(git_args strings::copy(ver_dir_copy))
     use proc::run::output("git" git_args)
     if use proc::run::last_exit() != 0 {
+        use! util::rm_RF(ver_dir_copy)
         use dasu("  error: git clone failed")
-        use! util::rm_RF(tmp_clone)
         return 1 :u8
     }
-
-    // Git creates a subdirectory named after the repo; find it
-    set ls_args = [] :vec[str] mut
-    set ls_args = vec::push::str(ls_args "-1")
-    set ls_args = vec::push::str(ls_args tmp_clone)
-    set clone_contents = use! proc::run::output("ls" ls_args)
-    set entries = strings::split(clone_contents "\n")
-    set ne = vec::len(entries)
-    set ei = 0 :i64 mut
-    set repo_subdir = "" :str mut
-    while ei < ne {
-        set entry = use! util::trim(use! util::list_get(entries ei))
-        if len(entry) > 0 && entry != ".git" {
-            set repo_subdir = entry
-            break
-        }
-        set ei += 1
-    }
-    if repo_subdir == "" {
-        use dasu("  error: could not find repo contents in temp clone")
-        use! util::rm_RF(tmp_clone)
-        return 1 :u8
-    }
-    // Git created a separate git dir at tmp_clone root and working tree in subdir.
-    // We need to combine them: move .git from temp root, and working tree from subdir.
-    // Ensure versioned directory exists
-    use! util::mkdir_p(ver_dir_copy)
-    // Move .git from temp root to versioned directory
-    set mv_git = [] :vec[str] mut
-    set mv_git = vec::push::str(mv_git tmp_clone + "/.git")
-    set mv_git = vec::push::str(mv_git ver_dir_copy + "/.git")
-    use proc::run::output("mv" mv_git)
-    // Move working tree contents from subdir to versioned directory
-    set src_dir = tmp_clone + "/" + repo_subdir
-    set cp_args = [] :vec[str] mut
-    set cp_args = vec::push::str(cp_args "-a")
-    set cp_args = vec::push::str(cp_args src_dir + "/.")
-    set cp_args = vec::push::str(cp_args ver_dir_copy)
-    use proc::run::output("cp" cp_args)
-    use! util::rm_RF(tmp_clone)
 
     if commit_val != "" {
         set rev_args = [] :vec[str] mut
@@ -507,9 +471,10 @@ pub fn clone: (name :str version :str repo :str ref_val :str commit_val :str) :u
     use! util::fs_make_readonly(ver_dir_copy)
     set active_link = use! util::owl_home_lib_active(name)
     if fs::exists(active_link) { fs::remove(active_link) }
+    set link_target = name + "@" + version
     set ln_args = [] :vec[str] mut
     set ln_args = vec::push::str(ln_args "-sf")
-    set ln_args = vec::push::str(ln_args name + "@" + version)
+    set ln_args = vec::push::str(ln_args link_target)
     set ln_args = vec::push::str(ln_args strings::copy(active_link))
     use proc::run::output("ln" ln_args)
     use dasu("  installed " + name + " v" + version + " (clone from " + repo + ")")
