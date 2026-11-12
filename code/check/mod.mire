@@ -892,8 +892,11 @@ pub fn run_tests: (args :&vec[str]) {
         return
     }
 
-    /! Generate test configuration (same as build does for tests) !/
-    set test_config = use! build::test_config(args)
+    /! Generate test configuration (same as build does for tests). The
+        normalized file always lives under [paths].cache; deriving the path
+        here keeps it independent of the value returned by the writer. !/
+    use! build::test_config(args)
+    set cfg_file = use! util::config_required("paths" "cache") + "/mire-test-config.toml"
 
     /! Run the compiler's test command with proper flags !/
     set compiler = use! util::compiler_cmd()
@@ -902,7 +905,7 @@ pub fn run_tests: (args :&vec[str]) {
     set argv = [] :vec[str] mut
     set argv = vec::push::str(argv "test")
     set argv = vec::push::str(argv "--config")
-    set argv = vec::push::str(argv strings::copy(test_config))
+    set argv = vec::push::str(argv strings::copy(cfg_file))
     set argv = vec::push::str(argv "--lib-dir")
     set argv = vec::push::str(argv strings::copy(lib_dir))
 
