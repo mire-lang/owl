@@ -126,7 +126,10 @@ jobs:
       - name: Verify owl
         run: |
           chmod +x bin/main
-          expected="${GITHUB_REF_NAME#v}"
+          expected="$(sed -n 's/^version = "\([^"]*\)"/\1/p' owl.toml | head -1)"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            expected="${GITHUB_REF_NAME#v}"
+          fi
           actual="$(./bin/main --version 2>/dev/null || ./bin/main -V)"
           printf 'Expected tag version: %s\\nOwl reports: %s\\n' "$expected" "$actual"
           case "$actual" in
