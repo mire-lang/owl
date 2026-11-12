@@ -91,6 +91,7 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
         set result = vec::push::str(result "--lib-dir")
         set result = vec::push::str(result "-L")
         set result = vec::push::str(result "--config")
+        set result = vec::push::str(result "--target")
         set result = vec::push::str(result "--no-run")
         set result = vec::push::str(result "--no-warn")
         set result = vec::push::str(result "--no-categorize")

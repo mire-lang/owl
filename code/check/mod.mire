@@ -883,6 +883,7 @@ pub fn takes_value: (flag :&str) :bool {
         || flag == "-L"
         || flag == "--lib-dir"
         || flag == "--config"
+        || flag == "--target"
         || flag == "--cache-dir"
 }
 

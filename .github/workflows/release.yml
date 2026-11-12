@@ -127,13 +127,22 @@ jobs:
             *) echo "Owl version does not match release tag" >&2; exit 1 ;;
           esac
 
-      - name: Run Owl test suite on release target
+      - name: Configure release validation environment
         run: |
           chmod +x bin/main
-          export MIRE_COMPILER=/usr/local/bin/mire
-          export OWL_COMPILER_LIBS="$HOME/.owl/libs"
-          export OWL_BIN="$PWD/bin/main"
-          ./bin/main test -v
+          echo "MIRE_COMPILER=/usr/local/bin/mire" >> "$GITHUB_ENV"
+          echo "OWL_COMPILER_LIBS=$HOME/.owl/libs" >> "$GITHUB_ENV"
+          echo "OWL_BIN=$PWD/bin/main" >> "$GITHUB_ENV"
+          echo "OWL_TEST_TARGET=${{ matrix.target }}" >> "$GITHUB_ENV"
+
+      - name: Resolve release project dependencies
+        run: ./bin/main install --yes
+
+      - name: Validate release project dependencies
+        run: ./bin/main check --deps
+
+      - name: Run Owl test suite on release target
+        run: ./bin/main test --target "${{ matrix.target }}" -v
 
       - name: Package owl tarball
         run: |
