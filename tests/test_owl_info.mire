@@ -11,14 +11,10 @@ fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
 
 @[test]
 pub fn owl_info_reports_project: () :bool {
-    set home = env::var("HOME")
-    set da = [] :vec[str] mut
-    set da = vec::push::str(da "+%s")
-    set ts = strings::trim(proc::run::output("date" da))
-    set test_base = strings::concat(strings::concat(strings::copy(home) "/.owl/tmp/owl_info_test_") ts)
+    set test_base = "bin/.owl_test_info"
     set proj_dir = strings::concat(test_base "/testinfo")
     set owl_bin = env::var("OWL_BIN") :str mut
-    if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
+    if owl_bin == "" { set owl_bin = "../../../bin/debug/main" }
 
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")

@@ -11,11 +11,7 @@ fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
 
 @[test]
 pub fn owl_build_produces_binary: () :bool {
-    set home = env::var("HOME")
-    set da = [] :vec[str] mut
-    set da = vec::push::str(da "+%s")
-    set ts = strings::trim(proc::run::output("date" da))
-    set test_base = strings::concat(strings::concat(strings::copy(home) "/.owl/tmp/owl_build_test_") ts)
+    set test_base = "bin/.owl_test_build"
     set proj_dir = strings::concat(test_base "/testbuild")
 
     set mk = [] :vec[str] mut
@@ -35,7 +31,7 @@ pub fn owl_build_produces_binary: () :bool {
     set sh = [] :vec[str] mut
     set sh = vec::push::str(sh "-c")
     set owl_bin = env::var("OWL_BIN") :str mut
-    if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
+    if owl_bin == "" { set owl_bin = "../../../bin/debug/main" }
     set command = strings::concat(strings::concat(strings::concat("cd " proj_dir) " && ") owl_bin)
     set sh = vec::push::str(sh strings::concat(command " build src/main.mire 2>&1"))
     set build_out = proc::run::output("sh" sh)
