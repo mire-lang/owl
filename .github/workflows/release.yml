@@ -65,25 +65,32 @@ jobs:
           echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
           sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/bin/llc
 
-      - name: Fetch Kioto 2.5.2 (matches Owl dependency manifest)
+      - name: Fetch Kioto API used by the Owl test suite
         uses: actions/checkout@v4
         with:
           repository: mire-lang/Kioto
           path: kioto-src
-          ref: v2.5.2
+          ref: 867dc915dde104a094a3ac72826e6a0d8f06effb
 
-      - name: Fetch Mire stdlib 2.1.0-beta (matches Owl dependency manifest)
+      - name: Fetch Mire stdlib API used by the Owl test suite
         uses: actions/checkout@v4
         with:
           repository: mire-lang/mire-lib
           path: mire-src
-          ref: v2.1.0-beta
+          ref: 1378eaa6c6c565c12e9ba5a2f975631e5599d046
 
       - name: Setup owl dependency paths
         run: |
           mkdir -p ~/.owl/libs
           cp -a kioto-src ~/.owl/libs/kioto
           cp -a mire-src ~/.owl/libs/mire
+          # Remove the version aliases that point back to their own package
+          # roots. Preserve ordinary symlinks, including Kioto sandbox tests.
+          for alias in \
+            "$HOME/.owl/libs/kioto/kioto@3.1.0" \
+            "$HOME/.owl/libs/mire/mire@2.1.0-beta"; do
+            if [ -L "$alias" ]; then rm "$alias"; fi
+          done
 
       - name: Generate avenys config for the owl build
         run: |
@@ -148,7 +155,7 @@ jobs:
         run: |
           mkdir -p dist/owl/lib
           cp bin/main dist/owl/owl
-          cp -r kioto-src dist/owl/kioto
+          cp -r ~/.owl/libs/kioto dist/owl/kioto
           find /usr/lib -name 'libsodium.so.23*' -exec cp -a {} dist/owl/lib/ \;
           cd dist
           tar czf ../owl-${{ matrix.artifact }}.tar.gz owl/
