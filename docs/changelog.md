@@ -1,3 +1,8 @@
+## [1.6.11] - 2026-11-12
+
+### Fixed
+- Release builds use the Kioto and Mire stdlib tags declared by Owl instead of incompatible rolling branches.
+
 ## [1.6.10] - 2026-11-12
 
 ### Fixed

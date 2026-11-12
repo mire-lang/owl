@@ -65,19 +65,19 @@ jobs:
           echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
           sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/bin/llc
 
-      - name: Fetch kioto (official mire-lang/Kioto master)
+      - name: Fetch Kioto 2.5.2 (matches Owl dependency manifest)
         uses: actions/checkout@v4
         with:
           repository: mire-lang/Kioto
           path: kioto-src
-          ref: master
+          ref: v2.5.2
 
-      - name: Fetch mire stdlib (mire@2.1.0-beta, PAL bindings + nested namespaces)
+      - name: Fetch Mire stdlib 2.1.0-beta (matches Owl dependency manifest)
         uses: actions/checkout@v4
         with:
           repository: mire-lang/mire-lib
           path: mire-src
-          ref: main
+          ref: v2.1.0-beta
 
       - name: Setup owl dependency paths
         run: |
