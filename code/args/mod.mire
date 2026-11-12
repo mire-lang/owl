@@ -65,6 +65,7 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
         set result = vec::push::str(result "--no-analysis-cache")
         set result = vec::push::str(result "--lib-dir")
         set result = vec::push::str(result "-L")
+        set result = vec::push::str(result "--target")
         set result = vec::push::str(result "-B")
     } elif subcmd == "run" {
         set result = vec::push::str(result "--release")
@@ -76,6 +77,7 @@ pub fn allowed_flags: (subcmd :&str) :vec[str] {
         set result = vec::push::str(result "--no-analysis-cache")
         set result = vec::push::str(result "--lib-dir")
         set result = vec::push::str(result "-L")
+        set result = vec::push::str(result "--target")
         set result = vec::push::str(result "-R")
     } elif subcmd == "test" {
         set result = vec::push::str(result "--release")
