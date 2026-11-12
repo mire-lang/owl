@@ -1,3 +1,8 @@
+## [1.6.10] - 2026-11-12
+
+### Fixed
+- Dependency validation now makes independent owned copies of each path value before cleanup, avoiding double frees in optimized ARM builds.
+
 ## [1.6.9] - 2026-11-12
 
 ### Fixed
