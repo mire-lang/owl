@@ -88,10 +88,11 @@ jobs:
 
       - name: Generate avenys config for the owl build
         run: |
-          cat > native/mire-config.toml <<'EOF'
+          owl_version="${GITHUB_REF_NAME#v}"
+          cat > native/mire-config.toml <<EOF
           [project]
           name = "owl"
-          version = "1.6.1"
+          version = "${owl_version}"
           entry = "code/main.mire"
 
           [build]
@@ -119,7 +120,13 @@ jobs:
       - name: Verify owl
         run: |
           chmod +x bin/main
-          ./bin/main -V
+          expected="${GITHUB_REF_NAME#v}"
+          actual="$(./bin/main --version 2>/dev/null || ./bin/main -V)"
+          printf 'Expected tag version: %s\\nOwl reports: %s\\n' "$expected" "$actual"
+          case "$actual" in
+            *"$expected"*) ;;
+            *) echo "Owl version does not match release tag" >&2; exit 1 ;;
+          esac
 
       - name: Package owl tarball
         run: |
