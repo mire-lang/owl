@@ -11,11 +11,7 @@ fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
 
 @[test]
 pub fn owl_new_creates_scaffold: () :bool {
-    set home_parts = [] :vec[str] mut
-    set home_parts = vec::push::str(home_parts "-c")
-    set home_parts = vec::push::str(home_parts "echo $HOME")
-    set home_out = proc::run::output("sh" home_parts)
-    set home = strings::trim(home_out)
+    set home = env::var("HOME")
     set da = [] :vec[str] mut
     set da = vec::push::str(da "+%s")
     set ts = strings::trim(proc::run::output("date" da))

@@ -218,22 +218,15 @@ pub fn extract_install_status: (output :&str) :bool {
 }
 
 /! Filesystem operations !/
-/! Avenys roots absolute paths at the process working directory. A tool that
-   owns a store outside the project (~/.owl) must authorise exactly that
-   subtree; called once at startup, before any filesystem work.
-
-   The PAL resolves a root that does not exist through its deepest existing
-   ancestor and then rejects that ancestor as a symlink escape, so the store
-   has to exist before it can be authorised. Create it inside an explicit
-   unrestricted window and close the window before narrowing the policy to
-   the new directory. !/
+/! Avenys roots absolute paths at the process working directory. Authorise the
+   exact tool store before creating it. The PAL resolves a not-yet-existing
+   path through its deepest existing ancestor and reattaches the remaining
+   components, so no unrestricted filesystem window is needed. !/
 pub fn authorise_tool_home: (path :str) {
-    if !fs::exists(path) {
-        use fs::unrestricted::enter()
-        use! util::mkdir_p(strings::copy(path))
-        use fs::unrestricted::exit()
-    }
     rt_sbx_set_tool_home(path)
+    if !fs::exists(path) {
+        use! util::mkdir_p(strings::copy(path))
+    }
 }
 
 pub fn mkdir_p: (path :&str) {
@@ -546,7 +539,7 @@ pub fn owl_version: () :str {
             return v
         }
     }
-    return "1.6.4"
+    return "1.6.5"
 }
 
 pub fn compiler_version: () :str {
