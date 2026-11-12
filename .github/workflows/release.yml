@@ -34,7 +34,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Use the known working avenys release
-          AVENYS_TAG="v4.4.17"
+          AVENYS_TAG="v4.4.43"
           echo "Using avenys release: $AVENYS_TAG"
           
           # Download the mire compiler artifact for this target
