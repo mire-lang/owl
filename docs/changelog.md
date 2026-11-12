@@ -1,3 +1,9 @@
+## [1.6.12] - 2026-11-12
+
+### Fixed
+- Release validation now uses immutable Kioto and Mire stdlib revisions compatible with Owl's test suite.
+- Manual workflow runs validate the manifest version without trying to publish a GitHub release.
+
 ## [1.6.11] - 2026-11-12
 
 ### Fixed

@@ -552,7 +552,7 @@ pub fn owl_version: () :str {
             return v
         }
     }
-    return "1.6.11"
+    return "1.6.12"
 }
 
 pub fn compiler_version: () :str {
