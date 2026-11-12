@@ -1,4 +1,9 @@
-## [1.3.1] - 2026-11-05
+## [1.6.2] - 2026-11-10
+
+### Added
+- **`--lib-dir <path>`** on `owl build`, `owl run` and `owl test`, repeatable, for extra package directories.
+- **`owl test`** builds and runs the project's test sources and reports failures with file and line.
+- **Lockfile V3** uses `name@version:src|binary|auto` to record how each dependency is supplied.
 
 ### Changed
 - **Project directory renamed**: `code/` → `src/` (matches standard conventions)
@@ -7,6 +12,7 @@
 - **CLI file override preserved**: `owl run src/main.mire` still works and overrides config
 
 ### Fixed
+- **Version reporting**: `owl --version` / `owl -v` reports the build version (`1.6.2`); another project's `owl.toml` is only trusted when `[project] name == "owl"`.
 - **Install script libsodium fix**: Properly handles bundled `libsodium.so.23` via RPATH or wrapper script
 - **tcc auto-installation**: Install script now attempts to install tcc via package manager
 - **Complete uninstaller**: Created `install/uninstall.sh` with `--force`, `--dry-run`, `--keep-libs`, `--keep-config`, `--keep-path` options

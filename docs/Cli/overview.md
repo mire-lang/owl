@@ -1,4 +1,12 @@
-# Cli - Command Reference v1.3.0
+# Cli - Command Reference v1.6.2
+
+## Owl v1.6.2 Release Notes
+
+- **Version reporting fixed** — `owl --version` / `owl -v` now reports the build version (`1.6.2`) unless it is run inside owl's own project, so a user project's `owl.toml` can no longer leak its version into the output.
+- **`owl test` works again** — the test runner builds each test file against the configured test sources and reports failures with their file and line.
+- **`--lib-dir`** — `owl build`, `owl run` and `owl test` accept an extra package directory, repeatable, alongside `-L`.
+- **Lockfile V3 only** — new lockfiles use `name@version:src|binary|auto`; older lockfile versions are still read and rewritten.
+- **`--lib-dir`, working `owl test`, V3-only lockfile, `name@version:src|binary|auto`** — see the changelog for the full list.
 
 ## Owl v1.3.0 Release Notes
 
@@ -12,7 +20,7 @@
 
 | Flag | Description |
 |------|-------------|
-| `-V`, `--version` | Show version |
+| `-V`, `-v`, `--version` | Show version |
 | `-h`, `--help` | Show help |
 
 ## Build commands

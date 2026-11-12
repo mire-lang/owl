@@ -489,13 +489,17 @@ pub fn owl_home_cache_resolution_file: () :str {
 
 /! Version and compiler info !/
 pub fn owl_version: () :str {
-    /! The manifest is the single source of truth for the version; the constant
-    is only a fallback for when owl runs outside a project directory. !/
-    set v = use! util::toml_get("owl.toml" "project" "version")
-    if v != "" {
-        return v
+    /! The manifest is the single source of truth only when owl runs inside its
+    own project; every user project also has an owl.toml whose version must
+    not leak into `owl -v`. The constant is the build version. !/
+    set pname = use! util::toml_get("owl.toml" "project" "name")
+    if pname == "owl" {
+        set v = use! util::toml_get("owl.toml" "project" "version")
+        if v != "" {
+            return v
+        }
     }
-    return "1.3.0"
+    return "1.6.2"
 }
 
 pub fn compiler_version: () :str {

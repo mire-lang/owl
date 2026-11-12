@@ -41,7 +41,7 @@ pub fn help: () {
     use dasu("  upgrade [--yes]      self-update owl from source")
     use dasu("")
     use dasu("Global:")
-    use dasu("  -V, --version     Show version")
+    use dasu("  -V, -v, --version  Show version")
     use dasu("  -h, --help        Show this help")
 }
 

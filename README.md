@@ -1,4 +1,4 @@
-# Owl v1.3.1
+# Owl v1.6.2
 
 Package and project manager for the [Mire](https://github.com/mire-lang) (Avenys) language.
 Written in Mire, compiled by Avenys.
@@ -100,7 +100,7 @@ curl -fsSL https://raw.githubusercontent.com/mire-lang/Avenys-rust/main/install/
 
 | Flag | Description |
 |------|-------------|
-| `-V`, `--version` | Show version |
+| `-V`, `-v`, `--version` | Show version |
 | `-h`, `--help` | Show help |
 
 ## Testing
@@ -160,12 +160,22 @@ owl install              # resolve and install
 
 ## Version History
 
-### v1.3.1 - 2026-11-05
+### v1.6.2 - 2026-11-10
+**Added**
+- **`--lib-dir <path>`** on `owl build`, `owl run` and `owl test`, repeatable, for extra package directories.
+- **`owl test`** builds and runs the project's test sources and reports failures with file and line.
+- **Lockfile V3** records each dependency as `name@version:src|binary|auto`.
+- **`sandbox`, `os`, `deps_db` and `pkgbuild` modules**, and temporary directories moved from `/tmp` to `~/.owl/tmp/`.
+
 **Project Template & Config Changes**
 - **Project directory renamed**: `code/` → `src/` (matches standard conventions)
 - **Output directory hardcoded**: Binary output always goes to `bin/` (removed `[paths].output` from `owl.toml`)
 - **New entry point config**: Added support for `[project].input` as alternative to `[project].entry` (input takes precedence)
 - **CLI file override preserved**: `owl run src/main.mire` still works and overrides config
+
+**Fixed**
+- **Version reporting** — `owl -v` now reports the build version (`1.6.2`); another project's `owl.toml` is trusted only when `[project] name == "owl"`.
+- **Fallback constant** — the hardcoded fallback was still `1.2.4`; it now matches the release.
 
 ### v1.3.0 - 2026-10-21
 **Added**

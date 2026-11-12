@@ -245,6 +245,10 @@ pub fn main: () {
         use! ui::banner()
         return
     }
+    if cmd == "-v" {
+        use! ui::banner()
+        return
+    }
     if cmd == "--version" {
         use! ui::banner()
         return
