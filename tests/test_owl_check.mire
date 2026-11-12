@@ -30,6 +30,27 @@ pub fn owl_check_validates_project: () :bool {
     set main_content = "pub fn main: () {\n  return 0\n}\n"
     use fs::write(main_path main_content)
 
+    /! Three local dependencies exercise the loop's per-package ownership
+       cleanup, including the path used by the ARM release build. !/
+    set dep1 = strings::concat(proj_dir "/deps/dep1")
+    set dep2 = strings::concat(proj_dir "/deps/dep2")
+    set dep3 = strings::concat(proj_dir "/deps/dep3")
+    set dep_mk = [] :vec[str] mut
+    set dep_mk = vec::push::str(dep_mk "-p")
+    set dep_mk = vec::push::str(dep_mk dep1)
+    set dep_mk = vec::push::str(dep_mk dep2)
+    set dep_mk = vec::push::str(dep_mk dep3)
+    use proc::run.output("mkdir" dep_mk)
+    set dep_toml = "[project]\nname = \"dependency\"\nversion = \"1.0.0\"\n"
+    use fs::write(strings::concat(dep1 "/owl.toml") dep_toml)
+    use fs::write(strings::concat(dep2 "/owl.toml") dep_toml)
+    use fs::write(strings::concat(dep3 "/owl.toml") dep_toml)
+    use fs::write(strings::concat(dep1 "/mod.mire") "module dep1\n")
+    use fs::write(strings::concat(dep2 "/mod.mire") "module dep2\n")
+    use fs::write(strings::concat(dep3 "/mod.mire") "module dep3\n")
+    set deps_table = "\n[dependencies]\ndep1 = { path = \"./deps/dep1\", version = \"1.0.0\" }\ndep2 = { path = \"./deps/dep2\", version = \"1.0.0\" }\ndep3 = { path = \"./deps/dep3\", version = \"1.0.0\" }\n"
+    use fs::write(toml_path toml_content + deps_table)
+
     set check_cmd = [] :vec[str] mut
     set check_cmd = vec::push::str(check_cmd "-c")
     set check_cmd = vec::push::str(check_cmd "cd " + proj_dir + " && " + owl_bin + " check . 2>&1")
@@ -37,6 +58,7 @@ pub fn owl_check_validates_project: () :bool {
     set check_exit = proc::run.last_exit()
     set check_ok = check_exit == 0
         && strings::contains(check_out "[OK]   [paths].output: bin")
+        && strings::contains(check_out "[OK]   deps: 3/3 packages loadable")
         && !strings::contains(check_out "[FAIL]")
     use dasu("CHECK_EXIT=" + use! util::i64_to_string(check_exit))
     use dasu("CHECK_OUT=" + check_out)

@@ -388,70 +388,10 @@ pub fn checkup_deps: () :bool {
 
         if pkg != "" {
             set checked += 1
-            set pkg2 = pkg
-            set dep_path = use! deps::get_dep_field(pkg2 "path")
-            if dep_path == "" {
-                use dasu("  [FAIL] deps/" + pkg + ": no path configured")
-                set ok = false
+            if use! check::checkup_one_dep(pkg) {
+                set loadable += 1
             } else {
-                set dp_check = dep_path :str mut
-                set dp_msg = dep_path :str
-                set dp_find = dep_path :str mut
-                if use! util::startswith(dp_check "~") {
-                    set dp_check = use! util::expand_home(dp_check)
-                    set dp_find = dp_check :str
-                }
-                if !fs::exists(dp_check) {
-                    use dasu("  [FAIL] deps/" + pkg + ": path not found (" + dp_msg + ")")
-                    set ok = false
-                } else {
-                    set toml_check = dp_check + "/owl.toml"
-                    set toml_msg = toml_check :str
-                    set toml_name = toml_check :str
-                    set toml_ver = toml_check :str
-                    if !fs::exists(toml_check) {
-                        if use! util::startswith(dp_msg "./") {
-                            set local_find_args = [] :vec[str] mut
-                            set local_find_args = vec::push::str(local_find_args "-L")
-                            set local_find_args = vec::push::str(local_find_args strings::copy(dp_find))
-                            set local_find_args = vec::push::str(local_find_args "-name")
-                            set local_find_args = vec::push::str(local_find_args "*.mire")
-                            set local_mire_files = proc::run::output("find" local_find_args)
-                            if len(local_mire_files) > 0 {
-                                use dasu("  [OK]   deps/" + pkg + " -> local source " + dp_msg)
-                                set loadable += 1
-                            } else {
-                                use dasu("  [FAIL] deps/" + pkg + ": no .mire files at " + dp_msg)
-                                set ok = false
-                            }
-                        } else {
-                            use dasu("  [FAIL] deps/" + pkg + ": no owl.toml at " + dp_msg)
-                            set ok = false
-                        }
-                    } else {
-                        set pkg_name = use! util::toml_get(toml_name "project" "name")
-                        if pkg_name == "" {
-                            use dasu("  [FAIL] deps/" + pkg + ": owl.toml has no [project].name")
-                            set ok = false
-                        } else {
-                            set find_args = [] :vec[str] mut
-                            set find_args = vec::push::str(find_args "-L")
-                            set find_args = vec::push::str(find_args strings::copy(dp_find))
-                            set find_args = vec::push::str(find_args "-name")
-                            set find_args = vec::push::str(find_args "*.mire")
-                            set mire_files = proc::run::output("find" find_args)
-                            set mire_count = len(use! util::split(mire_files "\n"))
-                            if mire_count == 0 {
-                                use dasu("  [FAIL] deps/" + pkg + ": no .mire files (cannot be loaded)")
-                                set ok = false
-                            } else {
-                                set dep_ver = use! util::toml_get(toml_ver "project" "version")
-                                use dasu("  [OK]   deps/" + pkg + " v" + dep_ver + " -> " + dp_msg)
-                                set loadable += 1
-                            }
-                        }
-                    }
-                }
+                set ok = false
             }
         }
     }
@@ -464,6 +404,72 @@ pub fn checkup_deps: () :bool {
     }
 
     return ok
+}
+
+/! Validate one dependency in its own call frame. Besides keeping the main
+   loop small, this gives each package's temporary strings one lexical owner;
+   reusing all of those locals across loop iterations caused duplicate drops
+   in optimized ARM builds once a project had several dependencies. !/
+pub fn checkup_one_dep: (pkg :str) :bool {
+    set dep_path = use! deps::get_dep_field(pkg "path")
+    if dep_path == "" {
+        use dasu("  [FAIL] deps/" + pkg + ": no path configured")
+        return false
+    }
+
+    set dp_check = dep_path :str mut
+    set dp_msg = dep_path :str
+    set dp_find = dep_path :str mut
+    if use! util::startswith(dp_check "~") {
+        set dp_check = use! util::expand_home(dp_check)
+        set dp_find = dp_check :str
+    }
+    if !fs::exists(dp_check) {
+        use dasu("  [FAIL] deps/" + pkg + ": path not found (" + dp_msg + ")")
+        return false
+    }
+
+    set toml_check = dp_check + "/owl.toml"
+    if !fs::exists(toml_check) {
+        if use! util::startswith(dp_msg "./") {
+            set find_args = [] :vec[str] mut
+            set find_args = vec::push::str(find_args "-L")
+            set find_args = vec::push::str(find_args strings::copy(dp_find))
+            set find_args = vec::push::str(find_args "-name")
+            set find_args = vec::push::str(find_args "*.mire")
+            set mire_files = proc::run::output("find" find_args)
+            if len(mire_files) > 0 {
+                use dasu("  [OK]   deps/" + pkg + " -> local source " + dp_msg)
+                return true
+            }
+            use dasu("  [FAIL] deps/" + pkg + ": no .mire files at " + dp_msg)
+            return false
+        }
+        use dasu("  [FAIL] deps/" + pkg + ": no owl.toml at " + dp_msg)
+        return false
+    }
+
+    set pkg_name = use! util::toml_get(toml_check "project" "name")
+    if pkg_name == "" {
+        use dasu("  [FAIL] deps/" + pkg + ": owl.toml has no [project].name")
+        return false
+    }
+
+    set find_args = [] :vec[str] mut
+    set find_args = vec::push::str(find_args "-L")
+    set find_args = vec::push::str(find_args strings::copy(dp_find))
+    set find_args = vec::push::str(find_args "-name")
+    set find_args = vec::push::str(find_args "*.mire")
+    set mire_files = proc::run::output("find" find_args)
+    set mire_count = len(use! util::split(mire_files "\n"))
+    if mire_count == 0 {
+        use dasu("  [FAIL] deps/" + pkg + ": no .mire files (cannot be loaded)")
+        return false
+    }
+
+    set dep_ver = use! util::toml_get(toml_check "project" "version")
+    use dasu("  [OK]   deps/" + pkg + " v" + dep_ver + " -> " + dp_msg)
+    return true
 }
 
 /! Validate load statements resolve !/
