@@ -127,6 +127,14 @@ jobs:
             *) echo "Owl version does not match release tag" >&2; exit 1 ;;
           esac
 
+      - name: Run Owl test suite on release target
+        run: |
+          chmod +x bin/main
+          export MIRE_COMPILER=/usr/local/bin/mire
+          export OWL_COMPILER_LIBS="$HOME/.owl/libs"
+          export OWL_BIN="$PWD/bin/main"
+          ./bin/main test -v
+
       - name: Package owl tarball
         run: |
           mkdir -p dist/owl/lib

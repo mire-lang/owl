@@ -1,3 +1,9 @@
+## [1.6.7] - 2026-11-12
+
+### Fixed
+- Dependency diagnostics now validate each package in a separate call frame. This avoids duplicate temporary-string cleanup when checking projects with several dependencies, including optimized ARM builds.
+- The Owl release workflow runs the complete Owl suite on each release target before packaging its binary.
+
 ## [1.6.2] - 2026-11-10
 
 ### Added
