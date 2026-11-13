@@ -505,53 +505,131 @@ pub fn decode_security_policy: (payload :&str) :DecodedSecurityPolicy {
 }
 
 fn compile_request_payload_is_valid: (payload :&str) :bool {
-    if use! messages::is_valid_message_payload(payload) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 1 0) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 2 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 3 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 4 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 5 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 6 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 7 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 8 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 9 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 10 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 11 2) == false { return false }
-    if use! messages::field_wire_types_are_valid(payload 12 2) == false { return false }
+    if use! messages::is_valid_message_payload(payload) == false {
+        use dasu("CPV_BASE")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 1 0) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 2 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 3 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 4 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 5 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 6 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 7 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 8 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 9 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 10 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 11 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
+    if use! messages::field_wire_types_are_valid(payload 12 2) == false {
+        use dasu("CPV_TYPES")
+        return false
+    }
 
-    if use! messages::read_varint_field(payload 1) != 1 { return false }
-    if use! messages::payload_has_field(payload 1) == false { return false }
-    if use! messages::string_field_values_are_valid(payload 2) == false { return false }
-    if use! messages::string_field_values_are_valid(payload 3) == false { return false }
-    if use! messages::string_field_values_are_valid(payload 8) == false { return false }
-    if use! messages::string_field_values_are_valid(payload 9) == false { return false }
-    if use! messages::string_field_values_are_valid(payload 10) == false { return false }
-    if use! messages::string_field_values_are_valid(payload 11) == false { return false }
-    if use! messages::string_field_values_are_valid(payload 12) == false { return false }
+    if use! messages::read_varint_field(payload 1) != 1 {
+        use dasu("CPV_SCALAR")
+        return false
+    }
+    if use! messages::payload_has_field(payload 1) == false {
+        use dasu("CPV_SCALAR")
+        return false
+    }
+    if use! messages::string_field_values_are_valid(payload 2) == false {
+        use dasu("CPV_SCALAR")
+        return false
+    }
+    if use! messages::string_field_values_are_valid(payload 3) == false {
+        use dasu("CPV_SCALAR")
+        return false
+    }
+    if use! messages::string_field_values_are_valid(payload 8) == false {
+        use dasu("CPV_SCALAR")
+        return false
+    }
+    if use! messages::string_field_values_are_valid(payload 9) == false {
+        use dasu("CPV_SCALAR")
+        return false
+    }
+    if use! messages::string_field_values_are_valid(payload 10) == false {
+        use dasu("CPV_SCALAR")
+        return false
+    }
+    if use! messages::string_field_values_are_valid(payload 11) == false {
+        use dasu("CPV_SCALAR")
+        return false
+    }
+    if use! messages::string_field_values_are_valid(payload 12) == false {
+        use dasu("CPV_SCALAR")
+        return false
+    }
 
     if use! messages::payload_has_field(payload 4) {
         set load_policy = use! messages::read_bytes_field(payload 4)
         set decoded_load_policy = use! messages::decode_load_policy(load_policy)
-        if decoded_load_policy.valid == false { return false }
+        if decoded_load_policy.valid == false {
+        use dasu("CPV_LOAD")
+        return false
+    }
     }
     if use! messages::payload_has_field(payload 7) {
         set security_policy = use! messages::read_bytes_field(payload 7)
         set decoded_security_policy = use! messages::decode_security_policy(security_policy)
-        if decoded_security_policy.valid == false { return false }
+        if decoded_security_policy.valid == false {
+        use dasu("CPV_SECURITY")
+        return false
+    }
     }
 
     set manifest = use! messages::read_repeated_bytes_fields(payload 5)
     set entry_index = 0 mut
     while entry_index < vec::len(manifest) {
         set manifest_payload = vec::get::str(manifest entry_index)
-        if use! messages::source_entry_payload_is_valid(manifest_payload) == false { return false }
+        if use! messages::source_entry_payload_is_valid(manifest_payload) == false {
+        use dasu("CPV_MANIFEST")
+        return false
+    }
         set entry_index = entry_index + 1
     }
     set c_artifacts = use! messages::read_repeated_bytes_fields(payload 6)
     set artifact_index = 0 mut
     while artifact_index < vec::len(c_artifacts) {
         set artifact_payload = vec::get::str(c_artifacts artifact_index)
-        if use! messages::c_artifact_payload_is_valid(artifact_payload) == false { return false }
+        if use! messages::c_artifact_payload_is_valid(artifact_payload) == false {
+        use dasu("CPV_ARTIFACT")
+        return false
+    }
         set artifact_index = artifact_index + 1
     }
     return true
