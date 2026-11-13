@@ -278,6 +278,10 @@ pub fn compile_request_wire: () :bool {
             use dasu("CRQ_INVALID_VERSION_ABSENT")
             return false
         }
+        if use! messages::read_varint_field(decoded_request_golden 1) != 1 {
+            use dasu("CRQ_INVALID_VERSION_VALUE")
+            return false
+        }
         set load_policy_probe = use! messages::read_bytes_field(decoded_request_golden 4)
         set decoded_load_policy_probe = use! messages::decode_load_policy(load_policy_probe)
         if decoded_load_policy_probe.valid == false {
