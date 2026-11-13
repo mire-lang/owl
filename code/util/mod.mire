@@ -713,7 +713,6 @@ pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :
             set debug_path = strings::concat(tmp_dir "/mire_write_mire_config_called.txt")
         use fs::write(debug_path "write_mire_config called with path=[" + path + "]\n")
     }
-    set artifact_copy = strings::copy(artifact)
     use! util::mkdir_p(strings::copy(fs::path::dir(path)))
 
     set proj_name = use! util::toml_get("owl.toml" "project" "name") :str mut
@@ -727,18 +726,6 @@ pub fn write_mire_config: (path :str entry :str profile :str opt :str artifact :
     set artifact_from_toml = use! util::config_default("build" "artifact" artifact)
 
     use! util::mkdir_p(strings::copy(fs::path::dir(path)))
-
-    set config = "" :str mut
-    set config = config + "[build]\n"
-    set config = config + "compiler = \"mire\"\n"
-    set config = config + "profile = \"" + profile + "\"\n"
-    set config = config + "opt-level = " + opt + "\n"
-    set config = config + "artifact = \"" + artifact_from_toml + "\"\n"
-    set config = config + "runtime = \"" + runtime + "\"\n"
-    set config = config + "target = \"" + target + "\"\n"
-    set config = config + "panic = \"abort\"\n"
-    set config = config + "incremental = true\n"
-    set config = config + "debug-info = true\n\n"
 
     set config = "[project]\n" :str mut
     set config = config + "name = \"" + proj_name + "\"\n"
