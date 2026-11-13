@@ -295,6 +295,11 @@ pub fn compile_request_wire: () :bool {
             use dasu("CRQ_INVALID_MANIFEST_COUNT")
             return false
         }
+        set direct_manifest_probe = use! messages::read_bytes_field(decoded_request_golden 5)
+        if direct_manifest_probe != use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1) {
+            use dasu("CRQ_MANIFEST_DIRECT_BYTES")
+            return false
+        }
         set source_entry_probe = vec::get::str(request_manifest_probe 0)
         if strings::len(source_entry_probe) != strings::len(use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1)) {
             use dasu("CRQ_MANIFEST_LENGTH")
