@@ -632,13 +632,22 @@ fn compile_request_payload_is_valid: (payload :&str) :bool {
         set entry_index = entry_index + 1
     }
     set c_artifacts = use! messages::read_repeated_bytes_fields(payload 6)
+    set raw_artifact_payload = use! messages::read_bytes_field(payload 6)
+    if use! messages::c_artifact_payload_is_valid(raw_artifact_payload) == false {
+        use dasu("CPV_RAW_ARTIFACT")
+        return false
+    }
     set artifact_index = 0 mut
     while artifact_index < vec::len(c_artifacts) {
         set artifact_payload = vec::get::str(c_artifacts artifact_index)
+        if artifact_payload != raw_artifact_payload {
+            use dasu("CPV_ARTIFACT_BYTES")
+            return false
+        }
         if use! messages::c_artifact_payload_is_valid(artifact_payload) == false {
-        use dasu("CPV_ARTIFACT")
-        return false
-    }
+            use dasu("CPV_ARTIFACT_VECTOR")
+            return false
+        }
         set artifact_index = artifact_index + 1
     }
     return true
