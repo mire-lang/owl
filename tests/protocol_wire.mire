@@ -462,6 +462,10 @@ pub fn compile_request_wire: () :bool {
 
     set manifest_entries = use! messages::read_repeated_bytes_fields(decoded_request_golden 5)
     set source_entry_crudo = vec::get::str(manifest_entries 0)
+    if source_entry_crudo != use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1) {
+        use dasu("CRQ_FAIL_SE1_BYTES")
+        return false
+    }
     if use! messages::read_string_field(source_entry_crudo 1) != "main" {
         use dasu("CRQ_FAIL_SE1_BEFORE_DECODE")
         return false
