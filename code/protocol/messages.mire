@@ -490,8 +490,14 @@ pub fn decode_compile_request: (payload :&str) :DecodedCompileRequest {
     if version != 1 { set valid = false }
     if use! messages::payload_has_field(payload 1) == false { set valid = false }
     if use! messages::string_field_values_are_valid(payload 2) == false || use! messages::string_field_values_are_valid(payload 3) == false || use! messages::string_field_values_are_valid(payload 8) == false || use! messages::string_field_values_are_valid(payload 9) == false || use! messages::string_field_values_are_valid(payload 10) == false || use! messages::string_field_values_are_valid(payload 11) == false || use! messages::string_field_values_are_valid(payload 12) == false { set valid = false }
-    if use! messages::payload_has_field(payload 4) && use! messages::decode_load_policy(load_policy).valid == false { set valid = false }
-    if use! messages::payload_has_field(payload 7) && use! messages::decode_security_policy(security_policy).valid == false { set valid = false }
+    if use! messages::payload_has_field(payload 4) {
+        set decoded_load_policy = use! messages::decode_load_policy(load_policy)
+        if decoded_load_policy.valid == false { set valid = false }
+    }
+    if use! messages::payload_has_field(payload 7) {
+        set decoded_security_policy = use! messages::decode_security_policy(security_policy)
+        if decoded_security_policy.valid == false { set valid = false }
+    }
     set entry_index = 0 mut
     while entry_index < vec::len(manifest) {
         set manifest_entry = use! messages::decode_source_entry(vec::get::str(manifest entry_index))
