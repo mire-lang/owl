@@ -296,6 +296,58 @@ pub fn compile_request_wire: () :bool {
             return false
         }
         set source_entry_probe = vec::get::str(request_manifest_probe 0)
+        if strings::len(source_entry_probe) != strings::len(use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1)) {
+            use dasu("CRQ_MANIFEST_LENGTH")
+            return false
+        }
+        if source_entry_probe != use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1) {
+            use dasu("CRQ_MANIFEST_BYTES")
+            return false
+        }
+        if use! messages::is_valid_message_payload(source_entry_probe) == false {
+            use dasu("CRQ_MANIFEST_WIRE")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 1 2) == false {
+            use dasu("CRQ_MANIFEST_FIELD_1")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 2 2) == false {
+            use dasu("CRQ_MANIFEST_FIELD_2")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 3 2) == false {
+            use dasu("CRQ_MANIFEST_FIELD_3")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 4 0) == false {
+            use dasu("CRQ_MANIFEST_FIELD_4")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 5 0) == false {
+            use dasu("CRQ_MANIFEST_FIELD_5")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(source_entry_probe 1) == false {
+            use dasu("CRQ_MANIFEST_STRING_1")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(source_entry_probe 2) == false {
+            use dasu("CRQ_MANIFEST_STRING_2")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(source_entry_probe 3) == false {
+            use dasu("CRQ_MANIFEST_STRING_3")
+            return false
+        }
+        if use! messages::read_varint_field(source_entry_probe 4) != 3 {
+            use dasu("CRQ_MANIFEST_SIZE")
+            return false
+        }
+        if use! messages::read_varint_field(source_entry_probe 5) != 1 {
+            use dasu("CRQ_MANIFEST_FLAGS")
+            return false
+        }
         if use! messages::source_entry_payload_is_valid(source_entry_probe) == false {
             use dasu("CRQ_INVALID_MANIFEST_ENTRY")
             return false
