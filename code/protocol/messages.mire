@@ -504,6 +504,59 @@ pub fn decode_security_policy: (payload :&str) :DecodedSecurityPolicy {
     return use! messages::DecodedSecurityPolicy(valid mode externs external_libraries macros allowed_builtins unsafe_value == 1 assembly_value == 1)
 }
 
+fn compile_request_payload_is_valid: (payload :&str) :bool {
+    if use! messages::is_valid_message_payload(payload) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 1 0) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 2 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 3 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 4 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 5 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 6 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 7 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 8 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 9 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 10 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 11 2) == false { return false }
+    if use! messages::field_wire_types_are_valid(payload 12 2) == false { return false }
+
+    if use! messages::read_varint_field(payload 1) != 1 { return false }
+    if use! messages::payload_has_field(payload 1) == false { return false }
+    if use! messages::string_field_values_are_valid(payload 2) == false { return false }
+    if use! messages::string_field_values_are_valid(payload 3) == false { return false }
+    if use! messages::string_field_values_are_valid(payload 8) == false { return false }
+    if use! messages::string_field_values_are_valid(payload 9) == false { return false }
+    if use! messages::string_field_values_are_valid(payload 10) == false { return false }
+    if use! messages::string_field_values_are_valid(payload 11) == false { return false }
+    if use! messages::string_field_values_are_valid(payload 12) == false { return false }
+
+    if use! messages::payload_has_field(payload 4) {
+        set load_policy = use! messages::read_bytes_field(payload 4)
+        set decoded_load_policy = use! messages::decode_load_policy(load_policy)
+        if decoded_load_policy.valid == false { return false }
+    }
+    if use! messages::payload_has_field(payload 7) {
+        set security_policy = use! messages::read_bytes_field(payload 7)
+        set decoded_security_policy = use! messages::decode_security_policy(security_policy)
+        if decoded_security_policy.valid == false { return false }
+    }
+
+    set manifest = use! messages::read_repeated_bytes_fields(payload 5)
+    set entry_index = 0 mut
+    while entry_index < vec::len(manifest) {
+        set manifest_payload = vec::get::str(manifest entry_index)
+        if use! messages::source_entry_payload_is_valid(manifest_payload) == false { return false }
+        set entry_index = entry_index + 1
+    }
+    set c_artifacts = use! messages::read_repeated_bytes_fields(payload 6)
+    set artifact_index = 0 mut
+    while artifact_index < vec::len(c_artifacts) {
+        set artifact_payload = vec::get::str(c_artifacts artifact_index)
+        if use! messages::c_artifact_payload_is_valid(artifact_payload) == false { return false }
+        set artifact_index = artifact_index + 1
+    }
+    return true
+}
+
 pub fn decode_compile_request: (payload :&str) :DecodedCompileRequest {
     set version = use! messages::read_varint_field(payload 1) mut
     set request_id = use! messages::read_string_field(payload 2)
@@ -517,48 +570,7 @@ pub fn decode_compile_request: (payload :&str) :DecodedCompileRequest {
     set target = use! messages::read_string_field(payload 10)
     set cache_directory = use! messages::read_string_field(payload 11)
     set output_directory = use! messages::read_string_field(payload 12)
-    set valid = use! messages::is_valid_message_payload(payload) mut
-    if use! messages::field_wire_types_are_valid(payload 1 0) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 2 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 3 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 4 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 5 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 6 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 7 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 8 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 9 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 10 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 11 2) == false { set valid = false }
-    if use! messages::field_wire_types_are_valid(payload 12 2) == false { set valid = false }
-    if version != 1 { set valid = false }
-    if use! messages::payload_has_field(payload 1) == false { set valid = false }
-    if use! messages::string_field_values_are_valid(payload 2) == false { set valid = false }
-    if use! messages::string_field_values_are_valid(payload 3) == false { set valid = false }
-    if use! messages::string_field_values_are_valid(payload 8) == false { set valid = false }
-    if use! messages::string_field_values_are_valid(payload 9) == false { set valid = false }
-    if use! messages::string_field_values_are_valid(payload 10) == false { set valid = false }
-    if use! messages::string_field_values_are_valid(payload 11) == false { set valid = false }
-    if use! messages::string_field_values_are_valid(payload 12) == false { set valid = false }
-    if use! messages::payload_has_field(payload 4) {
-        set decoded_load_policy = use! messages::decode_load_policy(load_policy)
-        if decoded_load_policy.valid == false { set valid = false }
-    }
-    if use! messages::payload_has_field(payload 7) {
-        set decoded_security_policy = use! messages::decode_security_policy(security_policy)
-        if decoded_security_policy.valid == false { set valid = false }
-    }
-    set entry_index = 0 mut
-    while entry_index < vec::len(manifest) {
-        set manifest_payload = vec::get::str(manifest entry_index)
-        if use! messages::source_entry_payload_is_valid(manifest_payload) == false { set valid = false }
-        set entry_index = entry_index + 1
-    }
-    set artifact_index = 0 mut
-    while artifact_index < vec::len(c_artifacts) {
-        set artifact_payload = vec::get::str(c_artifacts artifact_index)
-        if use! messages::c_artifact_payload_is_valid(artifact_payload) == false { set valid = false }
-        set artifact_index = artifact_index + 1
-    }
+    set valid = use! messages::compile_request_payload_is_valid(payload)
     if version < 0 { set version = 0 }
     return use! messages::DecodedCompileRequest(valid version request_id entry load_policy manifest c_artifacts security_policy flags artifact target cache_directory output_directory)
 }
