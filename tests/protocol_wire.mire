@@ -186,6 +186,16 @@ fn build_compile_request_load_policy: () :str {
 }
 
 @[test]
+pub fn repeated_bytes_large_vector_preserves_payload: () :bool {
+    set expected = use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1)
+    set container = use! wire::write_bytes_field(5 expected)
+    set values = use! messages::read_repeated_bytes_fields(container 5)
+    if vec::len(values) != 1 { return false }
+    set observed = vec::get::str(values 0)
+    return observed == expected
+}
+
+@[test]
 pub fn compile_request_wire: () :bool {
     set request_payload = build_compile_request_payload()
     set request_golden_hex = strings::trim(fs::read("code/protocol/golden/v1_compile_req.hex"))
