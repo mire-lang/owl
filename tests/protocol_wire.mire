@@ -362,7 +362,53 @@ pub fn compile_request_wire: () :bool {
             use dasu("CRQ_INVALID_ARTIFACT_COUNT")
             return false
         }
+        set expected_artifact_probe = use! messages::encode_c_artifact("lib.o" "beef" "object" "entry")
+        set direct_artifact_probe = use! messages::read_bytes_field(decoded_request_golden 6)
+        if direct_artifact_probe != expected_artifact_probe {
+            use dasu("CRQ_ARTIFACT_DIRECT_BYTES")
+            return false
+        }
         set artifact_entry_probe = vec::get::str(request_artifacts_probe 0)
+        if artifact_entry_probe != expected_artifact_probe {
+            use dasu("CRQ_ARTIFACT_VECTOR_BYTES")
+            return false
+        }
+        if use! messages::is_valid_message_payload(artifact_entry_probe) == false {
+            use dasu("CRQ_ARTIFACT_WIRE")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(artifact_entry_probe 1 2) == false {
+            use dasu("CRQ_ARTIFACT_FIELD_1")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(artifact_entry_probe 2 2) == false {
+            use dasu("CRQ_ARTIFACT_FIELD_2")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(artifact_entry_probe 3 2) == false {
+            use dasu("CRQ_ARTIFACT_FIELD_3")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(artifact_entry_probe 4 2) == false {
+            use dasu("CRQ_ARTIFACT_FIELD_4")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(artifact_entry_probe 1) == false {
+            use dasu("CRQ_ARTIFACT_STRING_1")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(artifact_entry_probe 2) == false {
+            use dasu("CRQ_ARTIFACT_STRING_2")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(artifact_entry_probe 3) == false {
+            use dasu("CRQ_ARTIFACT_STRING_3")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(artifact_entry_probe 4) == false {
+            use dasu("CRQ_ARTIFACT_STRING_4")
+            return false
+        }
         if use! messages::c_artifact_payload_is_valid(artifact_entry_probe) == false {
             use dasu("CRQ_INVALID_ARTIFACT_ENTRY")
             return false
