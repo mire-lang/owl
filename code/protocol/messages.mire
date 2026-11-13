@@ -486,10 +486,28 @@ pub fn decode_compile_request: (payload :&str) :DecodedCompileRequest {
     set target = use! messages::read_string_field(payload 10)
     set cache_directory = use! messages::read_string_field(payload 11)
     set output_directory = use! messages::read_string_field(payload 12)
-    set valid = use! messages::is_valid_message_payload(payload) && use! messages::field_wire_types_are_valid(payload 1 0) && use! messages::field_wire_types_are_valid(payload 2 2) && use! messages::field_wire_types_are_valid(payload 3 2) && use! messages::field_wire_types_are_valid(payload 4 2) && use! messages::field_wire_types_are_valid(payload 5 2) && use! messages::field_wire_types_are_valid(payload 6 2) && use! messages::field_wire_types_are_valid(payload 7 2) && use! messages::field_wire_types_are_valid(payload 8 2) && use! messages::field_wire_types_are_valid(payload 9 2) && use! messages::field_wire_types_are_valid(payload 10 2) && use! messages::field_wire_types_are_valid(payload 11 2) && use! messages::field_wire_types_are_valid(payload 12 2) mut
+    set valid = use! messages::is_valid_message_payload(payload) mut
+    if use! messages::field_wire_types_are_valid(payload 1 0) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 2 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 3 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 4 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 5 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 6 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 7 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 8 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 9 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 10 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 11 2) == false { set valid = false }
+    if use! messages::field_wire_types_are_valid(payload 12 2) == false { set valid = false }
     if version != 1 { set valid = false }
     if use! messages::payload_has_field(payload 1) == false { set valid = false }
-    if use! messages::string_field_values_are_valid(payload 2) == false || use! messages::string_field_values_are_valid(payload 3) == false || use! messages::string_field_values_are_valid(payload 8) == false || use! messages::string_field_values_are_valid(payload 9) == false || use! messages::string_field_values_are_valid(payload 10) == false || use! messages::string_field_values_are_valid(payload 11) == false || use! messages::string_field_values_are_valid(payload 12) == false { set valid = false }
+    if use! messages::string_field_values_are_valid(payload 2) == false { set valid = false }
+    if use! messages::string_field_values_are_valid(payload 3) == false { set valid = false }
+    if use! messages::string_field_values_are_valid(payload 8) == false { set valid = false }
+    if use! messages::string_field_values_are_valid(payload 9) == false { set valid = false }
+    if use! messages::string_field_values_are_valid(payload 10) == false { set valid = false }
+    if use! messages::string_field_values_are_valid(payload 11) == false { set valid = false }
+    if use! messages::string_field_values_are_valid(payload 12) == false { set valid = false }
     if use! messages::payload_has_field(payload 4) {
         set decoded_load_policy = use! messages::decode_load_policy(load_policy)
         if decoded_load_policy.valid == false { set valid = false }
