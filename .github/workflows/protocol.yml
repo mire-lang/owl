@@ -43,11 +43,14 @@ jobs:
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Fetch selected Kioto and Mire library branches
+      - name: Fetch Kioto and Mire libraries
         run: |
-          git clone --depth 1 -b pr/2.5.0 \
-            https://github.com/Evelynx-Dev/Kioto-1.git kioto-src
-          git clone --depth 1 -b pr/1.0.0 \
+          # Official branches only. The previous pin cloned a personal
+          # Kioto fork and a mire-lib branch (pr/1.0.0) that does not exist,
+          # so the job failed before it could decode anything.
+          git clone --depth 1 -b main \
+            https://github.com/mire-lang/Kioto.git kioto-src
+          git clone --depth 1 -b main \
             https://github.com/mire-lang/mire-lib.git mire-src
           mkdir -p "$HOME/.owl/libs-beta"
           cp -a kioto-src "$HOME/.owl/libs-beta/kioto"
