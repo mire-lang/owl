@@ -1,8 +1,8 @@
 [project]
 name = "owl"
-version = "1.6.2"
+version = "1.6.12"
 description = "Package and project manager for the Mire (Avenys) language"
-entry = "code/main.mire"
+entry = "src/main.mire"
 languages = ["mire"]
 
 [build]
@@ -17,7 +17,7 @@ incremental = true
 debug-info = true
 
 [paths]
-sources = "code"
+sources = "src"
 tests = "tests"
 output = "bin"
 cache = "bin/.cache"
@@ -31,32 +31,32 @@ cache = "~/.owl/cache"
 libs = "~/.owl/libs"
 
 [exports]
-owl = "code/main.mire"
-util = "code/util"
-crypto = "code/crypto"
-trust = "code/trust"
-registry = "code/registry"
-install = "code/install"
-build = "code/build"
-check = "code/check"
-info = "code/info"
-ui = "code/ui"
-args = "code/args"
-deps = "code/deps"
-dep_resolver = "code/dep_resolver"
-lockfile = "code/lockfile"
-gc = "code/gc"
-profile = "code/profile"
-export = "code/export"
-upgrade = "code/upgrade"
-sandbox = "code/sandbox"
-os = "code/os"
-_externs = "code/_externs"
+owl = "src/main.mire"
+util = "src/util"
+crypto = "src/crypto"
+trust = "src/trust"
+registry = "src/registry"
+install = "src/install"
+build = "src/build"
+check = "src/check"
+info = "src/info"
+ui = "src/ui"
+args = "src/args"
+deps = "src/deps"
+dep_resolver = "src/dep_resolver"
+lockfile = "src/lockfile"
+gc = "src/gc"
+profile = "src/profile"
+export = "src/export"
+upgrade = "src/upgrade"
+sandbox = "src/sandbox"
+os = "src/os"
+_externs = "src/_externs"
 
 [dependencies]
 kioto = { path = "~/.owl/libs/kioto" }
 mire = { path = "~/.owl/libs/mire" }
-crypto = { path = "./code/crypto" }
+crypto = { path = "./src/crypto" }
 
 ["owl@lock"]
 version = "3"

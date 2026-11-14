@@ -33,8 +33,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Use the known working avenys release
-          AVENYS_TAG="v4.4.17"
+          AVENYS_TAG="v4.4.44"
           echo "Using avenys release: $AVENYS_TAG"
           
           # Download the mire compiler artifact for this target
@@ -66,33 +65,41 @@ jobs:
           echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
           sudo ln -sf /usr/lib/llvm-22/bin/llc /usr/bin/llc
 
-      - name: Fetch kioto (official mire-lang/Kioto master)
+      - name: Fetch Kioto API used by the Owl test suite
         uses: actions/checkout@v4
         with:
           repository: mire-lang/Kioto
           path: kioto-src
-          ref: master
+          ref: 867dc915dde104a094a3ac72826e6a0d8f06effb
 
-      - name: Fetch mire stdlib (mire@2.1.0-beta, PAL bindings + nested namespaces)
+      - name: Fetch Mire stdlib API used by the Owl test suite
         uses: actions/checkout@v4
         with:
           repository: mire-lang/mire-lib
           path: mire-src
-          ref: main
+          ref: 1378eaa6c6c565c12e9ba5a2f975631e5599d046
 
       - name: Setup owl dependency paths
         run: |
           mkdir -p ~/.owl/libs
           cp -a kioto-src ~/.owl/libs/kioto
           cp -a mire-src ~/.owl/libs/mire
+          # Remove the version aliases that point back to their own package
+          # roots. Preserve ordinary symlinks, including Kioto sandbox tests.
+          for alias in \
+            "$HOME/.owl/libs/kioto/kioto@3.1.0" \
+            "$HOME/.owl/libs/mire/mire@2.1.0-beta"; do
+            if [ -L "$alias" ]; then rm "$alias"; fi
+          done
 
       - name: Generate avenys config for the owl build
         run: |
-          cat > native/mire-config.toml <<'EOF'
+          owl_version="${GITHUB_REF_NAME#v}"
+          cat > native/mire-config.toml <<EOF
           [project]
           name = "owl"
-          version = "1.6.1"
-          entry = "code/main.mire"
+          version = "${owl_version}"
+          entry = "src/main.mire"
 
           [build]
           profile = "release"
@@ -114,18 +121,44 @@ jobs:
 
       - name: Build owl
         run: |
-          mire build code/main.mire --release -O3 --no-analysis-cache --config native/mire-config.toml --lib-dir "$HOME/.owl/libs"
+          mire build src/main.mire --release -O3 --no-analysis-cache --config native/mire-config.toml --lib-dir "$HOME/.owl/libs"
 
       - name: Verify owl
         run: |
           chmod +x bin/main
-          ./bin/main -V
+          expected="$(sed -n 's/^version = "\([^"]*\)"/\1/p' owl.toml | head -1)"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            expected="${GITHUB_REF_NAME#v}"
+          fi
+          actual="$(./bin/main --version 2>/dev/null || ./bin/main -V)"
+          printf 'Expected tag version: %s\\nOwl reports: %s\\n' "$expected" "$actual"
+          case "$actual" in
+            *"$expected"*) ;;
+            *) echo "Owl version does not match release tag" >&2; exit 1 ;;
+          esac
+
+      - name: Configure release validation environment
+        run: |
+          chmod +x bin/main
+          echo "MIRE_COMPILER=/usr/local/bin/mire" >> "$GITHUB_ENV"
+          echo "OWL_COMPILER_LIBS=$HOME/.owl/libs" >> "$GITHUB_ENV"
+          echo "OWL_BIN=$PWD/bin/main" >> "$GITHUB_ENV"
+          echo "OWL_TEST_TARGET=${{ matrix.target }}" >> "$GITHUB_ENV"
+
+      - name: Resolve release project dependencies
+        run: ./bin/main install --yes
+
+      - name: Validate release project dependencies
+        run: ./bin/main check --deps
+
+      - name: Run Owl test suite on release target
+        run: ./bin/main test -v
 
       - name: Package owl tarball
         run: |
           mkdir -p dist/owl/lib
           cp bin/main dist/owl/owl
-          cp -r kioto-src dist/owl/kioto
+          cp -r ~/.owl/libs/kioto dist/owl/kioto
           find /usr/lib -name 'libsodium.so.23*' -exec cp -a {} dist/owl/lib/ \;
           cd dist
           tar czf ../owl-${{ matrix.artifact }}.tar.gz owl/
@@ -133,6 +166,7 @@ jobs:
           sha256sum owl-${{ matrix.artifact }}.tar.gz > owl-${{ matrix.artifact }}.sha256
 
       - name: Upload artifacts
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           files: |

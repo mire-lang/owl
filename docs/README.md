@@ -1,6 +1,6 @@
-# Owl Documentation v1.1.0
+# Owl Documentation v1.6.12
 
-This is the documentation for Owl v1.1.0+, the package and project manager for the Mire language.
+This is the documentation for Owl v1.6.12+, the package and project manager for the Mire language.
 
 ## Overview
 

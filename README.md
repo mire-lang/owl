@@ -1,4 +1,4 @@
-# Owl v1.6.2
+# Owl v1.6.12
 
 Package and project manager for the [Mire](https://github.com/mire-lang) (Avenys) language.
 Written in Mire, compiled by Avenys.
@@ -160,6 +160,15 @@ owl install              # resolve and install
 
 ## Version History
 
+### v1.6.12 - 2026-11-12
+**Changed**
+- **The source tree is `src/`.** Owl now uses the same layout it scaffolds and documents: `owl.toml [paths].sources = "src"`, `entry = "src/main.mire"`, and every internal `load!` path is `/src/...`. Builds that pinned the old `code/` path must update their generated config.
+- **Kioto 3.1.0 or newer is required.** Owl authorises `~/.owl` through `fs::unrestricted`, which the 2.5.0 `core/` tree does not provide.
+
+**Fixed**
+- Release validation uses immutable Kioto and Mire revisions compatible with Owl's suite.
+- Manual workflow runs validate the manifest version without publishing a GitHub release.
+
 ### v1.6.2 - 2026-11-10
 **Added**
 - **`--lib-dir <path>`** on `owl build`, `owl run` and `owl test`, repeatable, for extra package directories.
@@ -174,7 +183,7 @@ owl install              # resolve and install
 - **CLI file override preserved**: `owl run src/main.mire` still works and overrides config
 
 **Fixed**
-- **Version reporting** — `owl -v` now reports the build version (`1.6.2`); another project's `owl.toml` is trusted only when `[project] name == "owl"`.
+- **Version reporting** — `owl -v` now reports the build version (`1.6.12`); another project's `owl.toml` is trusted only when `[project] name == "owl"`.
 - **Fallback constant** — the hardcoded fallback was still `1.2.4`; it now matches the release.
 
 ### v1.3.0 - 2026-10-21
@@ -249,7 +258,7 @@ owl checkup --fix loads
 ### External packages (from `[dependencies]`)
 
 ```mire
-# In code/main.mire
+# In src/main.mire
 load kioto              # makes kioto namespace available
 load blu::parse         # specific submodule from blu
 load sdl::sdl3          # submodule from sdl
@@ -284,8 +293,8 @@ pub fn main: () {
 ### Local modules (within project)
 
 ```mire
-# In code/main.mire
-load! code/lib/utils    # local module from code/lib/utils/mod.mire
+# In src/main.mire
+load! /src/lib/utils   # local module from src/lib/utils/mod.mire
 
 # Usage requires use!
 pub fn main: () {
@@ -298,7 +307,7 @@ pub fn main: () {
 | Rule | Description |
 |------|-------------|
 | `load X` | External package from `[dependencies]`. **Must be in owl.toml**. |
-| `load! X` | Local module (`code/...`). Path relative to `sources` dir. |
+| `load! X` | Local module (`src/...`). Path relative to `sources` dir. |
 | `use! mod::fn()` | **Mandatory** for ALL cross-module calls. |
 | `load X::Y` | Submodule of external package. |
 | `load! X::Y` | NOT valid — local modules loaded as single unit. |
@@ -318,7 +327,7 @@ owl check                 # Validate dependencies
 ```
 myproject/
   owl.toml          # Project manifest
-  code/main.mire    # Entry point
+  src/main.mire     # Entry point
   tests/            # Test files
   bin/
     debug/          # Debug binaries
@@ -333,7 +342,7 @@ myproject/
 name = "myproject"
 version = "0.1.0"
 description = ""
-entry = "code/main.mire"
+entry = "src/main.mire"
 
 [build]
 compiler = "mire"

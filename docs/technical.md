@@ -1,14 +1,14 @@
 # Owl Technical Notes
 
-## Architecture (v1.1.2)
+## Architecture (v1.6.12)
 
 ### CLI core
-- Entrypoint: `code/main.mire` (slim dispatcher)
-- Codebase modularized into 18 sub-packages under `code/`:
+- Entrypoint: `src/main.mire` (slim dispatcher)
+- Codebase modularized into 18 sub-packages under `src/`:
   `util`, `crypto`, `trust`, `registry`, `build`, `check`, `info`, `ui`,
   `args`, `deps`, `export`, `gc`, `install`, `lockfile`, `profile`, `semver`, `upgrade`
 - All internal modules imported via `load!` (local) with `use!` calls
-- `load!` modules use path prefixes (`/code/util`, `/code/crypto`, etc.)
+- `load!` modules use path prefixes (`/src/util`, `/src/crypto`, etc.)
 - Supports both long commands and pacman-style short flags (`-B`, `-T`, `-S`, etc.)
 
 ### Command dispatch
@@ -84,7 +84,7 @@ as proof of integrity, and package installation still requires the registry
 checksum and Ed25519 verification unless `--no-verify` is explicitly chosen.
 
 ### Module resolution
-- Internal modules: `load!` with path prefixes (`/code/util`, `/code/crypto`)
+- Internal modules: `load!` with path prefixes (`/src/util`, `/src/crypto`)
 - External packages: `load kioto` (from `owl.toml [dependencies]`)
 - `use!` mandatory for all calls into `load!`-imported modules
 - `--lib-dir` flag enables custom library search path

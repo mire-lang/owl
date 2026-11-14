@@ -1,0 +1,265 @@
+load mire::vec
+load mire::map
+load kioto::strings
+load kioto::time
+load kioto::fs
+load kioto::env
+load kioto::proc
+load kioto::async
+load kioto::mem
+load kioto::cpu
+load kioto::math
+load kioto::net
+load kioto::log
+load kioto::cli
+load kioto::crypto
+load! semver
+load! util
+load! /src/crypto
+load! trust
+load! registry
+load! build
+load! cache
+load! /src/cache/clean
+load! check
+load! info
+load! ui
+load! /src/deps
+load! args
+load! lockfile
+load! dload
+load! install
+load! export
+load! gc
+load! profile
+load! upgrade
+load! /src/new
+load! server
+load! sandbox
+load! /src/os
+load! /src/deps_db
+load! /src/pkgbuild
+load! /src/_externs
+
+// Print the resolved dependency tree.
+// Implemented here rather than as deps::tree in /src/deps: every call from the
+// ENTRY module into /src/deps fails to link with "use of undefined value
+// '@deps.<fn>'", while the same calls from build and util (41 of them) link
+// fine. Call resolution (mir/codegen/resolve.rs:79-106) looks the name up in
+// defined_fn_names, does not find it, and falls back to emitting the bare name.
+// Keeping this self-contained avoids depending on that. Move it back once the
+// entry module resolves like the others.
+fn deps_tree: () {
+    if !use! util::has_project() {
+        use dasu("Error: no owl.toml found")
+        return
+    }
+    set lock_text = fs::read("owl.lock")
+    if lock_text == "" {
+        use dasu("  (no lockfile; run a build first)")
+        return
+    }
+    set lock_lines = strings::split(lock_text "\n")
+    set tree_i = 0 :i64 mut
+    set tree_n = vec::len(lock_lines)
+    set tree_any = false :bool mut
+    while tree_i < tree_n {
+        set tree_line = use! util::trim(vec::get::str(lock_lines tree_i))
+        if use! util::startswith(tree_line "name") {
+            set tree_eq = strings::index(tree_line "=")
+            if tree_eq >= 0 {
+                set tree_from = tree_eq + 1
+                set tree_slice = strings::substr(tree_line tree_from 200)
+                set tree_val = use! util::trim(tree_slice)
+                use dasu("  " + tree_val)
+                set tree_any = true
+            }
+        }
+        set tree_i = tree_i + 1
+    }
+    if !tree_any {
+        use dasu("  (no dependencies)")
+    }
+}
+
+fn cmd_load: (args :&vec[str]) {
+    set n = vec::len(args)
+    if n < 3 {
+        use dasu("Usage: owl load <name> [version]")
+        return
+    }
+    set name = use! vec::get::str(args 2)
+    set ver = use! vec::get::str(args 3)
+    if !use! util::has_project() {
+        use dasu("  [FAIL] no owl.toml found")
+        return
+    }
+    set c = fs::read("owl.toml")
+    set marker = "[dependencies]"
+    set sec_pos = strings::index(c marker)
+    if sec_pos < 0 {
+        use dasu("  [FAIL] [dependencies] section not found in owl.toml")
+        return
+    }
+    set insert_pos = sec_pos + strings::len(marker)
+    set rem2 = len(c) - insert_pos
+    set before = strings::substr(c 0 insert_pos)
+    set after = strings::substr(c insert_pos rem2)
+    set dep_line = name + " = { version = \"" + ver + "\" }" :str mut
+    if ver == "" {
+        set dep_line = name + " = { path = \"~/.owl/libs/" + name + "\" }"
+    }
+    set new_c = before + "\n" + dep_line + after
+    use fs::write("owl.toml" new_c)
+    use dasu("  [OK]   added '" + name + "' to [dependencies]")
+    if ver != "" {
+        use dasu("         version = " + ver)
+    } else {
+        use dasu("         path = ~/.owl/libs/" + name)
+    }
+    use dasu("  run 'owl install' to resolve and install")
+}
+
+pub fn main: () {
+    /! Avenys roots absolute filesystem paths at the process working directory;
+       owl's own package store (~/.owl) is authorised as a second, narrow root.
+       This has to happen before any other filesystem work. !/
+    set owl_home_for_sandbox = strings::concat(env::var("HOME") "/.owl")
+    use! util::authorise_tool_home(owl_home_for_sandbox)
+
+    set args = env_args()
+    set n = vec::len(args)
+    if n < 2 {
+        use! ui::help()
+        return
+    }
+    set cmd = use! vec::get::str(args 1)
+// 'owl <subcommand> --help' asks for usage, not for that subcommand to run.
+    if use! args::flag::has(args "--help") || use! args::flag::has(args "-h") {
+        use! ui::help()
+        return
+    }
+// Validate flags for the subcommand before dispatching.
+    set args_ok = use! args::validate(cmd args)
+    if !args_ok { exit(1) }
+// Mire's match does not dispatch on string variables; use independent ifs with early return.
+// Mire moves `args` on the first call, so copy it per subcommand via util::copy_args.
+    if cmd == "build" {
+        use! build::compile(use! util::copy_args(args) false)
+        return
+    }
+    if cmd == "run" {
+        use! build::compile(use! util::copy_args(args) true)
+        return
+    }
+    if cmd == "test" {
+        use! check::run_tests(use! util::copy_args(args))
+        return
+    }
+    if cmd == "check" {
+        use! check::checkup(use! util::copy_args(args))
+        return
+    }
+    if cmd == "info" {
+        use! info::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "checkup" {
+        use! check::checkup(use! util::copy_args(args))
+        return
+    }
+    if cmd == "profile" {
+        use! profile::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "new" {
+        use! new::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "clean" {
+        use! gc::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "load" {
+        use! cmd_load(use! util::copy_args(args))
+        return
+    }
+    if cmd == "install" {
+        use! install::run_simple(use! util::copy_args(args))
+        return
+    }
+    if cmd == "export" {
+        use! export::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "reg" {
+        use! registry::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "deps" {
+        use deps_tree()
+        return
+    }
+    if cmd == "clean-cache" {
+        use! clean::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "gc" {
+        use! gc::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "upgrade" {
+        use! upgrade::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "help" {
+        use! ui::help()
+        return
+    }
+    if cmd == "server" {
+        use! server::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "sandbox" {
+        use! sandbox::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "os" {
+        use! os::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "deps-db" {
+        use! deps_db::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "pkgbuild" {
+        use! pkgbuild::run(use! util::copy_args(args))
+        return
+    }
+    if cmd == "-h" {
+        use! ui::help()
+        return
+    }
+    if cmd == "--help" {
+        use! ui::help()
+        return
+    }
+    if cmd == "version" {
+        use! ui::banner()
+        return
+    }
+    if cmd == "-V" {
+        use! ui::banner()
+        return
+    }
+    if cmd == "-v" {
+        use! ui::banner()
+        return
+    }
+    if cmd == "--version" {
+        use! ui::banner()
+        return
+    }
+    use! ui::help()
+    return
+}

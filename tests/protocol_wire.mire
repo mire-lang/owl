@@ -4,8 +4,8 @@ load kioto::strings
 load kioto::fs
 load kioto::env
 load mire::vec
-load! /code/protocol/wire
-load! /code/protocol/messages
+load! /src/protocol/wire
+load! /src/protocol/messages
 
 fn hexadecimal_digit_value: (character_code :i64) :i64 {
     if character_code >= 48 && character_code <= 57 { return character_code - 48 }
@@ -118,7 +118,7 @@ fn build_compile_response_payload: () :str {
 @[test]
 pub fn compile_response_wire: () :bool {
     set response_payload = build_compile_response_payload()
-    set response_golden_hex = strings::trim(fs::read("code/protocol/golden/v1_compile_resp.hex"))
+    set response_golden_hex = strings::trim(fs::read("src/protocol/golden/v1_compile_resp.hex"))
     set encoded_response_golden = decode_hexadecimal_payload(response_golden_hex)
     if encoded_response_golden != response_payload { return false }
 
@@ -186,14 +186,247 @@ fn build_compile_request_load_policy: () :str {
 }
 
 @[test]
+pub fn repeated_bytes_large_vector_preserves_payload: () :bool {
+    set expected = use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1)
+    set container = use! wire::write_bytes_field(5 expected)
+    set values = use! messages::read_repeated_bytes_fields(container 5)
+    if vec::len(values) != 1 { return false }
+    set observed = vec::get::str(values 0)
+    return observed == expected
+}
+
+@[test]
 pub fn compile_request_wire: () :bool {
     set request_payload = build_compile_request_payload()
-    set request_golden_hex = strings::trim(fs::read("code/protocol/golden/v1_compile_req.hex"))
+    set request_golden_hex = strings::trim(fs::read("src/protocol/golden/v1_compile_req.hex"))
     set decoded_request_golden = decode_hexadecimal_payload(request_golden_hex)
     if decoded_request_golden != request_payload { return false }
 
     set decoded_request = use! messages::decode_compile_request(decoded_request_golden)
     if !decoded_request.valid {
+        if use! messages::is_valid_message_payload(decoded_request_golden) == false {
+            use dasu("CRQ_INVALID_WIRE")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 1 0) == false {
+            use dasu("CRQ_INVALID_FIELD_1")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 2 2) == false {
+            use dasu("CRQ_INVALID_FIELD_2")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 3 2) == false {
+            use dasu("CRQ_INVALID_FIELD_3")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 4 2) == false {
+            use dasu("CRQ_INVALID_FIELD_4")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 5 2) == false {
+            use dasu("CRQ_INVALID_FIELD_5")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 6 2) == false {
+            use dasu("CRQ_INVALID_FIELD_6")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 7 2) == false {
+            use dasu("CRQ_INVALID_FIELD_7")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 8 2) == false {
+            use dasu("CRQ_INVALID_FIELD_8")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 9 2) == false {
+            use dasu("CRQ_INVALID_FIELD_9")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 10 2) == false {
+            use dasu("CRQ_INVALID_FIELD_10")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 11 2) == false {
+            use dasu("CRQ_INVALID_FIELD_11")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(decoded_request_golden 12 2) == false {
+            use dasu("CRQ_INVALID_FIELD_12")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(decoded_request_golden 2) == false {
+            use dasu("CRQ_INVALID_STRING_2")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(decoded_request_golden 3) == false {
+            use dasu("CRQ_INVALID_STRING_3")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(decoded_request_golden 8) == false {
+            use dasu("CRQ_INVALID_STRING_8")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(decoded_request_golden 9) == false {
+            use dasu("CRQ_INVALID_STRING_9")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(decoded_request_golden 10) == false {
+            use dasu("CRQ_INVALID_STRING_10")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(decoded_request_golden 11) == false {
+            use dasu("CRQ_INVALID_STRING_11")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(decoded_request_golden 12) == false {
+            use dasu("CRQ_INVALID_STRING_12")
+            return false
+        }
+        if use! messages::payload_has_field(decoded_request_golden 1) == false {
+            use dasu("CRQ_INVALID_VERSION_ABSENT")
+            return false
+        }
+        if use! messages::read_varint_field(decoded_request_golden 1) != 1 {
+            use dasu("CRQ_INVALID_VERSION_VALUE")
+            return false
+        }
+        set load_policy_probe = use! messages::read_bytes_field(decoded_request_golden 4)
+        set decoded_load_policy_probe = use! messages::decode_load_policy(load_policy_probe)
+        if decoded_load_policy_probe.valid == false {
+            use dasu("CRQ_INVALID_LOAD_POLICY")
+            return false
+        }
+        set security_policy_probe = use! messages::read_bytes_field(decoded_request_golden 7)
+        set decoded_security_policy_probe = use! messages::decode_security_policy(security_policy_probe)
+        if decoded_security_policy_probe.valid == false {
+            use dasu("CRQ_INVALID_SECURITY_POLICY")
+            return false
+        }
+        set request_manifest_probe = use! messages::read_repeated_bytes_fields(decoded_request_golden 5)
+        if vec::len(request_manifest_probe) != 1 {
+            use dasu("CRQ_INVALID_MANIFEST_COUNT")
+            return false
+        }
+        set direct_manifest_probe = use! messages::read_bytes_field(decoded_request_golden 5)
+        if direct_manifest_probe != use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1) {
+            use dasu("CRQ_MANIFEST_DIRECT_BYTES")
+            return false
+        }
+        set source_entry_probe = vec::get::str(request_manifest_probe 0)
+        if strings::len(source_entry_probe) != strings::len(use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1)) {
+            use dasu("CRQ_MANIFEST_LENGTH")
+            return false
+        }
+        if source_entry_probe != use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1) {
+            use dasu("CRQ_MANIFEST_BYTES")
+            return false
+        }
+        if use! messages::is_valid_message_payload(source_entry_probe) == false {
+            use dasu("CRQ_MANIFEST_WIRE")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 1 2) == false {
+            use dasu("CRQ_MANIFEST_FIELD_1")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 2 2) == false {
+            use dasu("CRQ_MANIFEST_FIELD_2")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 3 2) == false {
+            use dasu("CRQ_MANIFEST_FIELD_3")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 4 0) == false {
+            use dasu("CRQ_MANIFEST_FIELD_4")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(source_entry_probe 5 0) == false {
+            use dasu("CRQ_MANIFEST_FIELD_5")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(source_entry_probe 1) == false {
+            use dasu("CRQ_MANIFEST_STRING_1")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(source_entry_probe 2) == false {
+            use dasu("CRQ_MANIFEST_STRING_2")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(source_entry_probe 3) == false {
+            use dasu("CRQ_MANIFEST_STRING_3")
+            return false
+        }
+        if use! messages::read_varint_field(source_entry_probe 4) != 3 {
+            use dasu("CRQ_MANIFEST_SIZE")
+            return false
+        }
+        if use! messages::read_varint_field(source_entry_probe 5) != 1 {
+            use dasu("CRQ_MANIFEST_FLAGS")
+            return false
+        }
+        if use! messages::source_entry_payload_is_valid(source_entry_probe) == false {
+            use dasu("CRQ_INVALID_MANIFEST_ENTRY")
+            return false
+        }
+        set request_artifacts_probe = use! messages::read_repeated_bytes_fields(decoded_request_golden 6)
+        if vec::len(request_artifacts_probe) != 1 {
+            use dasu("CRQ_INVALID_ARTIFACT_COUNT")
+            return false
+        }
+        set expected_artifact_probe = use! messages::encode_c_artifact("lib.o" "beef" "object" "entry")
+        set direct_artifact_probe = use! messages::read_bytes_field(decoded_request_golden 6)
+        if direct_artifact_probe != expected_artifact_probe {
+            use dasu("CRQ_ARTIFACT_DIRECT_BYTES")
+            return false
+        }
+        set artifact_entry_probe = vec::get::str(request_artifacts_probe 0)
+        if artifact_entry_probe != expected_artifact_probe {
+            use dasu("CRQ_ARTIFACT_VECTOR_BYTES")
+            return false
+        }
+        if use! messages::is_valid_message_payload(artifact_entry_probe) == false {
+            use dasu("CRQ_ARTIFACT_WIRE")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(artifact_entry_probe 1 2) == false {
+            use dasu("CRQ_ARTIFACT_FIELD_1")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(artifact_entry_probe 2 2) == false {
+            use dasu("CRQ_ARTIFACT_FIELD_2")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(artifact_entry_probe 3 2) == false {
+            use dasu("CRQ_ARTIFACT_FIELD_3")
+            return false
+        }
+        if use! messages::field_wire_types_are_valid(artifact_entry_probe 4 2) == false {
+            use dasu("CRQ_ARTIFACT_FIELD_4")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(artifact_entry_probe 1) == false {
+            use dasu("CRQ_ARTIFACT_STRING_1")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(artifact_entry_probe 2) == false {
+            use dasu("CRQ_ARTIFACT_STRING_2")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(artifact_entry_probe 3) == false {
+            use dasu("CRQ_ARTIFACT_STRING_3")
+            return false
+        }
+        if use! messages::string_field_values_are_valid(artifact_entry_probe 4) == false {
+            use dasu("CRQ_ARTIFACT_STRING_4")
+            return false
+        }
+        if use! messages::c_artifact_payload_is_valid(artifact_entry_probe) == false {
+            use dasu("CRQ_INVALID_ARTIFACT_ENTRY")
+            return false
+        }
         use dasu("CRQ_FAIL_VALID")
         return false
     }
@@ -239,6 +472,14 @@ pub fn compile_request_wire: () :bool {
 
     set manifest_entries = use! messages::read_repeated_bytes_fields(decoded_request_golden 5)
     set source_entry_crudo = vec::get::str(manifest_entries 0)
+    if source_entry_crudo != use! messages::encode_source_entry("main" "/work/p/main.mire" "abcd" 3 1) {
+        use dasu("CRQ_FAIL_SE1_BYTES")
+        return false
+    }
+    if use! messages::read_string_field(source_entry_crudo 1) != "main" {
+        use dasu("CRQ_FAIL_SE1_BEFORE_DECODE")
+        return false
+    }
     set decoded_source_entry = use! messages::decode_source_entry(source_entry_crudo)
     if use! messages::read_string_field(source_entry_crudo 1) != "main" {
         use dasu("CRQ_FAIL_SE1")

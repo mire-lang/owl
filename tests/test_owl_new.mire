@@ -3,25 +3,18 @@ load kioto::strings
 load kioto::fs
 load mire::vec
 load kioto::proc
-load! /code/_externs
+load kioto::env
+load! /src/_externs
 
 // Use extern directly for i64_to_string
 fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
 
 @[test]
 pub fn owl_new_creates_scaffold: () :bool {
-    set home_parts = [] :vec[str] mut
-    set home_parts = vec::push::str(home_parts "-c")
-    set home_parts = vec::push::str(home_parts "echo $HOME")
-    set home_out = proc::run::output("sh" home_parts)
-    set home = strings::trim(home_out)
-    set da = [] :vec[str] mut
-    set da = vec::push::str(da "+%s")
-    set ts = strings::trim(proc::run::output("date" da))
-    set test_base = strings::concat(strings::concat(strings::copy(home) "/.owl/tmp/owl_new_test_") ts)
+    set test_base = "bin/.owl_test_new"
     set proj_dir = strings::concat(test_base "/myapp")
-    set owl_bin = "/home/nyx/.local/bin/owl" :str mut
-    if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
+    set owl_bin = env::var("OWL_BIN") :str mut
+    if owl_bin == "" { set owl_bin = "../../../bin/debug/main" }
 
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")
