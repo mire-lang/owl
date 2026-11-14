@@ -1,7 +1,7 @@
 [project]
 name = "owl"
-version = "1.6.2"
-entry = "code/main.mire"
+version = "1.6.12"
+entry = "src/main.mire"
 
 [build]
 profile = "release"

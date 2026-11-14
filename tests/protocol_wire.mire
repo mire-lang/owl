@@ -4,8 +4,8 @@ load kioto::strings
 load kioto::fs
 load kioto::env
 load mire::vec
-load! /code/protocol/wire
-load! /code/protocol/messages
+load! /src/protocol/wire
+load! /src/protocol/messages
 
 fn hexadecimal_digit_value: (character_code :i64) :i64 {
     if character_code >= 48 && character_code <= 57 { return character_code - 48 }
@@ -118,7 +118,7 @@ fn build_compile_response_payload: () :str {
 @[test]
 pub fn compile_response_wire: () :bool {
     set response_payload = build_compile_response_payload()
-    set response_golden_hex = strings::trim(fs::read("code/protocol/golden/v1_compile_resp.hex"))
+    set response_golden_hex = strings::trim(fs::read("src/protocol/golden/v1_compile_resp.hex"))
     set encoded_response_golden = decode_hexadecimal_payload(response_golden_hex)
     if encoded_response_golden != response_payload { return false }
 
@@ -198,7 +198,7 @@ pub fn repeated_bytes_large_vector_preserves_payload: () :bool {
 @[test]
 pub fn compile_request_wire: () :bool {
     set request_payload = build_compile_request_payload()
-    set request_golden_hex = strings::trim(fs::read("code/protocol/golden/v1_compile_req.hex"))
+    set request_golden_hex = strings::trim(fs::read("src/protocol/golden/v1_compile_req.hex"))
     set decoded_request_golden = decode_hexadecimal_payload(request_golden_hex)
     if decoded_request_golden != request_payload { return false }
 

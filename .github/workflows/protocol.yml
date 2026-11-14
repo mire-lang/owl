@@ -5,7 +5,7 @@ on:
     branches: [main, master]
     paths:
       - '.github/workflows/protocol.yml'
-      - 'code/protocol/**'
+      - 'src/protocol/**'
       - 'scripts/verify-protocol-cross-decode.sh'
       - 'tests/protocol_wire.mire'
   workflow_dispatch:

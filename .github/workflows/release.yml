@@ -99,7 +99,7 @@ jobs:
           [project]
           name = "owl"
           version = "${owl_version}"
-          entry = "code/main.mire"
+          entry = "src/main.mire"
 
           [build]
           profile = "release"
@@ -121,7 +121,7 @@ jobs:
 
       - name: Build owl
         run: |
-          mire build code/main.mire --release -O3 --no-analysis-cache --config native/mire-config.toml --lib-dir "$HOME/.owl/libs"
+          mire build src/main.mire --release -O3 --no-analysis-cache --config native/mire-config.toml --lib-dir "$HOME/.owl/libs"
 
       - name: Verify owl
         run: |

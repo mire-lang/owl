@@ -1,0 +1,132 @@
+module upgrade
+
+load mire::vec
+load! /src/util
+load kioto::proc
+load! /src/args
+
+pub fn run: (args :&vec[str]) :i64 {
+    set yes = use! args::flag::has(args "--yes") || use! args::flag::has(args "-y")
+    set url_flag = use! args::flag::value(args "--url")
+
+    use dasu("owl upgrade -- self-update")
+    use dasu("")
+
+    set owl_bin = find_owl_binary()
+    if owl_bin == "" {
+        use dasu("error: could not find owl binary in PATH")
+        return 1
+    }
+    use dasu("current binary: " + owl_bin)
+    use dasu("current version: " + use! util::owl_version())
+    use dasu("")
+
+    set remote_url = "https://github.com/Evelynx-Dev/owl.git" mut
+    if url_flag != "" {
+        set remote_url = url_flag
+    }
+
+    use dasu("source: " + remote_url)
+
+    set tmp_dir = use! util::ensure_tmp_dir() :str mut
+    if tmp_dir == "" {
+        use dasu("error: could not create temporary directory")
+        return 1
+    }
+    set tmp_dir = strings::concat(tmp_dir "/owl-upgrade")
+
+    if !yes {
+        use dasu("This will clone the repository and build a new owl binary.")
+        use dasu("")
+    }
+
+    use dasu("cloning repository...")
+    use! util::rm_RF(tmp_dir)
+    set clone_args = [] :vec[str] mut
+    set clone_args = vec::push::str(clone_args "--depth")
+    set clone_args = vec::push::str(clone_args "1")
+    set clone_args = vec::push::str(clone_args strings::copy(remote_url))
+    set clone_args = vec::push::str(clone_args strings::copy(tmp_dir))
+    set clone_out = use! proc::run::output("git" clone_args)
+    set clone_ok = clone_out
+    if strings::index(clone_ok "fatal") >= 0 || strings::index(clone_ok "error") >= 0 {
+        use dasu("error: git clone failed")
+        use dasu(clone_ok)
+        use! util::rm_RF(tmp_dir)
+        return 1
+    }
+    use dasu("  clone ok")
+
+    use dasu("building owl (this may take a moment)...")
+    set new_bin = tmp_dir + "/bin/release/main"
+
+    set owl_home = use! util::owl_home()
+    set ln_args = [] :vec[str] mut
+    set ln_args = vec::push::str(ln_args "-sfn")
+    set ln_args = vec::push::str(ln_args owl_home + "/lib/kioto")
+    set ln_args = vec::push::str(ln_args tmp_dir + "/../kioto")
+    use proc::run::output("ln" ln_args)
+
+    set build_args = [] :vec[str] mut
+    set build_args = vec::push::str(build_args "build")
+    set build_args = vec::push::str(build_args "src/main.mire")
+    set build_args = vec::push::str(build_args "--release")
+    set build_cwd = strings::copy(tmp_dir)
+    set build_out = proc::run::output_cwd("mire" build_args build_cwd true)
+    if !fs::exists(new_bin) {
+        use dasu("error: build failed")
+        use dasu(build_out)
+        use! util::rm_RF(tmp_dir)
+        return 1
+    }
+    use dasu("  build ok")
+
+    use dasu("")
+    if !yes {
+        use dasu("ready to replace " + owl_bin + " with the new binary.")
+        use dasu("(use --yes to skip this prompt)")
+        use dasu("")
+    }
+
+    use dasu("installing...")
+    set inst_args = [] :vec[str] mut
+    set inst_args = vec::push::str(inst_args "-m")
+    set inst_args = vec::push::str(inst_args "0755")
+    set inst_args = vec::push::str(inst_args strings::copy(new_bin))
+    set inst_args = vec::push::str(inst_args strings::copy(owl_bin))
+    set inst_out = use! proc::run::output("install" inst_args)
+    set install_ok = use! util::extract_install_status(inst_out)
+    if !install_ok {
+        use dasu("error: install failed - permission denied or path not found")
+        use dasu("try running with sudo:")
+        use dasu("  sudo install -m 0755 " + new_bin + " " + owl_bin)
+        use! util::rm_RF(tmp_dir)
+        return 1
+    }
+
+    use! util::rm_RF(tmp_dir)
+    use dasu("done! owl has been updated.")
+    use dasu("restart your shell or run: hash -r")
+    return 0
+}
+
+fn find_owl_binary: () :str {
+    set path_val = env::var("PATH")
+    set dirs = strings::split(path_val ":")
+    set n = len(dirs)
+    set i = 0 :i64 mut
+    while i < n {
+        set dir = vec::get::str(dirs i)
+        set candidate = dir + "/owl"
+        if fs::exists(candidate) {
+            return candidate
+        }
+        set i += 1
+    }
+    set home = env::var("HOME")
+    set fallback = strings::concat(home "/.local/bin/owl")
+    if fs::exists(fallback) {
+        return fallback
+    }
+    return ""
+}
