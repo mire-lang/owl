@@ -427,13 +427,13 @@ pub fn checkup_one_dep: (pkg :str) :bool {
         set dp_check = use! util::expand_home(dp_check)
         set dp_find = dp_check :str
     }
-    if !fs::exists(dp_check) {
+    if !use! util::trusted_path_exists(dp_check) {
         use dasu("  [FAIL] deps/" + pkg + ": path not found (" + dp_msg + ")")
         return false
     }
 
     set toml_check = dp_check + "/owl.toml"
-    if !fs::exists(toml_check) {
+    if !use! util::trusted_path_exists(toml_check) {
         if use! util::startswith(dp_msg "./") {
             set find_args = [] :vec[str] mut
             set find_args = vec::push::str(find_args "-L")
@@ -452,7 +452,7 @@ pub fn checkup_one_dep: (pkg :str) :bool {
         return false
     }
 
-    set pkg_name = use! util::toml_get(toml_check "project" "name")
+    set pkg_name = use! util::toml_get_trusted(toml_check "project" "name")
     if pkg_name == "" {
         use dasu("  [FAIL] deps/" + pkg + ": owl.toml has no [project].name")
         return false
@@ -470,7 +470,7 @@ pub fn checkup_one_dep: (pkg :str) :bool {
         return false
     }
 
-    set dep_ver = use! util::toml_get(toml_check "project" "version")
+    set dep_ver = use! util::toml_get_trusted(toml_check "project" "version")
     use dasu("  [OK]   deps/" + pkg + " v" + dep_ver + " -> " + dp_msg)
     return true
 }
@@ -486,6 +486,7 @@ pub fn checkup_loads: () :bool {
     }
 
     set lib_dir = use! util::owl_home_libs()
+    set project_name = use! util::toml_get("owl.toml" "project" "name")
     set scanned_len = len(scanned)
     set pos = 0 :i64 mut
     set total = 0 :i64 mut
@@ -499,8 +500,11 @@ pub fn checkup_loads: () :bool {
         set line = strings::substr(scanned pos end - pos)
         set pkg = use! util::trim(line)
         set pos = end + 1
+        set pkg_has_slash = use! util::contains(pkg "/")
+        set pkg_has_at = use! util::contains(pkg "@")
+        set pkg_is_dot = use! util::startswith(pkg ".")
 
-        if pkg != "" {
+        if pkg != "" && !pkg_has_slash && !pkg_has_at && !pkg_is_dot {
             set total += 1
             set found = false :bool mut
 
@@ -515,18 +519,22 @@ pub fn checkup_loads: () :bool {
                 use dasu("  [OK]   loads/" + pkg + " -> (from deps)")
                 set found = true
             } else {
-                /! Fallback: check ~/.owl/libs/ using base package name !/
-                set pkg_dir = lib_dir + "/" + pkg_base :str mut
-                if fs::exists(pkg_dir) {
-                    set toml_path = pkg_dir + "/owl.toml" :str mut
-                    if fs::exists(toml_path) {
-                        use dasu("  [OK]   loads/" + pkg + " -> " + pkg_dir + " (from libs)")
-                        set found = true
-                    } else {
-                        use dasu("  [WARN] loads/" + pkg + ": directory exists but no owl.toml")
-                    }
+                if pkg_base == project_name {
+                    use dasu("  [OK]   loads/" + pkg + " -> (current project)")
+                    set found = true
                 } else {
-                    use dasu("  [FAIL] loads/" + pkg + ": not found in deps or " + use! util::owl_home_libs_display())
+                    set pkg_dir = lib_dir + "/" + pkg_base :str mut
+                    if use! util::trusted_path_exists(pkg_dir) {
+                        set toml_path = pkg_dir + "/owl.toml" :str mut
+                        if use! util::trusted_path_exists(toml_path) {
+                            use dasu("  [OK]   loads/" + pkg + " -> " + pkg_dir + " (from libs)")
+                            set found = true
+                        } else {
+                            use dasu("  [WARN] loads/" + pkg + ": directory exists but no owl.toml")
+                        }
+                    } else {
+                        use dasu("  [FAIL] loads/" + pkg + ": not found in deps or " + use! util::owl_home_libs_display())
+                    }
                 }
             }
 
@@ -884,10 +892,18 @@ pub fn takes_value: (flag :&str) :bool {
         || flag == "-O"
         || flag == "--opt-level"
         || flag == "-L"
+        || flag == "--link"
+        || flag == "-H"
+        || flag == "--hash"
+        || flag == "--link-dir"
+        || flag == "--bundle"
         || flag == "--lib-dir"
         || flag == "--target"
         || flag == "--config"
         || flag == "--cache-dir"
+        || flag == "--error-format"
+        || flag == "--message-format"
+        || flag == "--color"
 }
 
 /! Run the compiler's test command with proper configuration !/

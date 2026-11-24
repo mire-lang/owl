@@ -16,6 +16,22 @@ load kioto::cli
 load kioto::crypto
 load! /src/_externs
 
+pub fn trusted_path_exists: (path :&str) :bool {
+    return fs::unrestricted::exists(path)
+}
+
+pub fn trusted_read: (path :&str) :str {
+    return fs::unrestricted::read(path)
+}
+
+pub fn toml_get_trusted: (file :str section :str key :str) :str {
+    set content = use! util::trusted_read(file)
+    if content == "" {
+        return ""
+    }
+    return use! util::toml_get_from_string(content section key)
+}
+
 // NOTE: 9999 is used as "rest of string" length in strings::substr calls
 // throughout the codebase. It works because substr clamps to string bounds.
 
@@ -964,14 +980,21 @@ fn scan_source_loads: (source :&str, result :str) :str {
     set output = result :str mut
     set i = 0 :i64 mut
     while i < n {
-        set line = use! util::trim(use! util::list_get(lines i))
-        if use! util::startswith(line "load ") && !use! util::startswith(line "load!") {
-            set pkg = strings::substr(line 5 9999) :str mut
-            if pkg != "" {
-                set space = strings::index(pkg " ")
-                if space >= 0 { set pkg = strings::substr(pkg 0 space) }
-                if pkg != "" && !use! util::contains(output pkg + "\n") && !use! util::startswith(output pkg + "\n") && output != pkg {
-                    if output == "" { set output = pkg } else { set output = output + "\n" + pkg }
+        set line = strings::copy(use! util::trim(use! util::list_get(lines i)))
+        set is_load = use! util::startswith(line "load ")
+        set is_local = use! util::startswith(line "load!")
+        if is_load && !is_local {
+            set line_len = strings::len(line)
+            if line_len > 5 {
+                set pkg = strings::copy(strings::substr(line 5 line_len - 5)) :str mut
+                if pkg != "" {
+                    set space = strings::index(pkg " ")
+                    if space >= 0 { set pkg = strings::copy(strings::substr(pkg 0 space)) }
+                    set has_nl = use! util::contains(output pkg + "\n")
+                    set starts_with = use! util::startswith(output pkg + "\n")
+                    if pkg != "" && !has_nl && !starts_with && output != pkg {
+                        if output == "" { set output = strings::copy(pkg) } else { set output = output + "\n" + pkg }
+                    }
                 }
             }
         }
@@ -983,14 +1006,17 @@ fn scan_source_loads: (source :&str, result :str) :str {
 fn scan_load_tree: (path :&str, result :str) :str {
     set output = result :str mut
     if fs::is_file(path) {
-        return scan_source_loads(fs::read(path) strings::copy(output))
+        if use! strings::ends::with(path ".mire") || use! strings::ends::with(path ".mr") {
+            return scan_source_loads(fs::read(path) strings::copy(output))
+        }
+        return output
     }
     if !fs::exists(path) { return output }
     set entries = use! util::list_dir(path)
     set i = 0 :i64 mut
     while i < vec::len(entries) {
         set entry = use! util::list_get(entries i)
-        if entry != "." && entry != ".." {
+        if entry != "." && entry != ".." && entry != "bin" && entry != "target" && entry != ".owl" && entry != ".git" && entry != ".cache" {
             set child = fs::path::join(path entry)
             set output = scan_load_tree(child output)
         }
