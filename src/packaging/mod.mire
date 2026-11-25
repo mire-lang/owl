@@ -1,0 +1,274 @@
+module packaging
+
+load mire::vec
+load! /src/util
+load kioto::proc
+load! /src/deps
+
+// Supported artifact types for library packagingpub enum ArtifactType {
+    Bin,          // executable (default)
+    SharedLib,    // .so / .dylib
+    StaticLib,    // .a
+    ObjectFile,   // .o
+    HeaderOnly,   // .h only (no compilation)
+}
+
+// Parse artifact type from stringpub fn parse_artifact_type: (s :str) :ArtifactType {
+    if s == "bin" { return ArtifactType::Bin }
+    elif s == "shared" || s == "shared-lib" || s == "so" || s == "dylib" {
+        return ArtifactType::SharedLib
+    }
+    elif s == "static" || s == "static-lib" || s == "a" || s == "lib" {
+        return ArtifactType::StaticLib
+    }
+    elif s == "obj" || s == "object" || s == "o" {
+        return ArtifactType::ObjectFile
+    }
+    elif s == "header" || s == "header-only" {
+        return ArtifactType::HeaderOnly
+    }
+    return ArtifactType::Bin
+}
+
+// Get file extension for artifact type and platformpub fn artifact_extension: (at :ArtifactType) :str {
+    if at == ArtifactType::Bin { return "" }
+    elif at == ArtifactType::SharedLib {
+        if use! util::is_macos() { return ".dylib" }
+        return ".so"
+    }
+    elif at == ArtifactType::StaticLib { return ".a" }
+    elif at == ArtifactType::ObjectFile { return ".o" }
+    elif at == ArtifactType::HeaderOnly { return ".h" }
+    return ""
+}
+
+// Get compiler flags for artifact typepub fn artifact_flags: (at :ArtifactType) :vec[str] {
+    set flags = [] :vec[str] mut
+    if at == ArtifactType::SharedLib {
+        set flags = vec::push::str(flags "--shared")
+    } elif at == ArtifactType::StaticLib {
+        set flags = vec::push::str(flags "--static")
+    } elif at == ArtifactType::ObjectFile {
+        set flags = vec::push::str(flags "-c")
+    } elif at == ArtifactType::HeaderOnly {
+        set flags = vec::push::str(flags "--header-only")
+    }
+    return flags
+}
+
+// Get output filename for artifactpub fn artifact_filename: (name :str, at :ArtifactType) :str {
+    set ext = use! packaging::artifact_extension(at)
+    if at == ArtifactType::HeaderOnly {
+        return name + ".h"
+    }
+    if at == ArtifactType::Bin {
+        return name
+    }
+    if use! util::is_macos() {
+        if at == ArtifactType::SharedLib {
+            return "lib" + name + ".dylib"
+        }
+        if at == ArtifactType::StaticLib {
+            return "lib" + name + ".a"
+        }
+    } else {
+        if at == ArtifactType::SharedLib {
+            return "lib" + name + ".so"
+        }
+        if at == ArtifactType::StaticLib {
+            return "lib" + name + ".a"
+        }
+    }
+    if at == ArtifactType::ObjectFile {
+        return name + ".o"
+    }
+    return name + ext
+}
+
+// Package a library into multiple artifact formatspub fn package_library: (name :str, version :str, artifacts :vec[ArtifactType]) :bool {
+    use dasu("  [PACKAGE] " + name + " v" + version)
+    set ok = true :bool mut
+    set i = 0 :i64 mut
+    while i < vec::len(artifacts) {
+        set at = vec::get(artifacts i)
+        set ok = use! packaging::build_artifact(name, at) && ok
+        set i += 1
+    }
+    return ok
+}
+
+// Build a single artifact typepub fn build_artifact: (name :str, at :ArtifactType) :bool {
+    set profile = use! util::config_required("build" "profile")
+    set artifact = use! packaging::artifact_type_to_compiler(at)
+    set out_dir = use! util::config_required("paths" "output")
+    set src = use! util::config_required("project" "entry")
+    
+    set out_file = name
+    if at != ArtifactType::Bin && at != ArtifactType::HeaderOnly {
+        set out_file = use! packaging::artifact_filename(name, at)
+    }
+    
+    set out_path = "bin/" + profile + "/" + out_file
+    set argv = [] :vec[str] mut
+    set argv = vec::push::str(argv "build")
+    set argv = vec::push::str(argv "--artifact")
+    set argv = vec::push::str(argv artifact)
+    set argv = vec::push::str(argv "--output")
+    set argv = vec::push::str(argv out_path)
+    
+    set compiler = use! util::compiler_cmd()
+    set out = use! proc::run::output(compiler ["build" "--artifact" artifact "--output" out_path "src/lib.mire"])
+    if use proc::run::last_exit() != 0 {
+        use dasu("  [FAIL] " + name + ": " + artifact + " build failed")
+        return false
+    }
+    
+    use dasu("  [OK]   " + name + " -> " + out_path)
+    return true
+}
+
+pub fn artifact_type_to_compiler: (at :ArtifactType) :str {
+    if at == ArtifactType::Bin { return "bin" }
+    elif at == ArtifactType::SharedLib { return "shared" }
+    elif at == ArtifactType::StaticLib { return "static" }
+    elif at == ArtifactType::ObjectFile { return "obj" }
+    elif at == ArtifactType::HeaderOnly { return "header" }
+    return "bin"
+}
+
+// Create a distribution package with all artifactspub fn create_distribution: (name :str, version :str, artifacts :vec[ArtifactType]) :str {
+    set dist_dir = "dist/" + name + "-" + version
+    use! util::mkdir_p(dist_dir)
+    
+    set i = 0 :i64 mut
+    while i < vec::len(artifacts) {
+        set at = vec::get(artifacts i)
+        set ext = use! packaging::artifact_extension(at)
+        set src_file = name
+        if at != ArtifactType::Bin && at != ArtifactType::HeaderOnly {
+            set src_file = use! packaging::artifact_filename(name, at)
+        }
+        set src_path = "bin/release/" + src_file
+        if fs::exists(src_path) {
+            set dst = dist_dir + "/" + src_file
+            use fs::copy(src_path dst)
+            use dasu("  [DIST] " + dst)
+        }
+        set i += 1
+    }
+    
+// Copy headers if present    set include_dir = "include"
+    if fs::exists(include_dir) {
+        use! util::mkdir_p(dist_dir + "/include")
+        use proc::run::output("cp -r" [include_dir "/*" dist_dir + "/include/"])
+    }
+    
+// Create package manifest    set manifest = dist_dir + "/MANIFEST"
+    set content = "name = \"" + name + "\"\nversion = \"" + version + "\"\n"
+    set content = content + "artifacts = [\n"
+    set i = 0 :i64 mut
+    while i < vec::len(artifacts) {
+        set at = vec::get(artifacts i)
+        set content = content + "  \"" + use! packaging::artifact_type_to_string(at) + "\",\n"
+        set i += 1
+    }
+    set content = content + "]\n"
+    use fs::write(manifest content)
+    
+    return dist_dir
+}
+
+pub fn artifact_type_to_string: (at :ArtifactType) :str {
+    if at == ArtifactType::Bin { return "bin" }
+    elif at == ArtifactType::SharedLib { return "shared" }
+    elif at == ArtifactType::StaticLib { return "static" }
+    elif at == ArtifactType::ObjectFile { return "object" }
+    elif at == ArtifactType::HeaderOnly { return "header" }
+    return "bin"
+}
+
+// Install packaged artifacts to system or local prefixpub fn install_distribution: (dist_dir :str, prefix :str) :bool {
+    use dasu("  [INSTALL] " + dist_dir + " -> " + prefix)
+    set libdir = prefix + "/lib"
+    set includedir = prefix + "/include"
+    use! util::mkdir_p(libdir)
+    use! util::mkdir_p(includedir)
+    
+// Install libraries    set lib_files = use! util::list_text(dist_dir)
+    if lib_files != "" {
+        set files = strings::split(lib_files "\n")
+        set n = len(files)
+        set i = 0 :i64 mut
+        while i < n {
+            set f = use! util::trim(use! util::list_get(files i))
+            if f != "" && (use! util::endswith(f ".so") || use! util::endswith(f ".a") || use! util::endswith(f ".dylib")) {
+                set src = dist_dir + "/" + f
+                set dst = libdir + "/" + f
+                use fs::copy(src dst)
+                use dasu("  [INSTALL] lib " + f + " -> " + dst)
+            }
+            set i += 1
+        }
+    }
+    
+// Install headers    set inc_src = dist_dir + "/include"
+    if fs::exists(inc_src) {
+        use proc::run::output("cp -r" [inc_src "/*" prefix + "/include/"])
+        use dasu("  [INSTALL] headers -> " + prefix + "/include")
+    }
+    
+// Update ldconfig if on Linux    if !use! util::is_macos() {
+        use proc::run::output("ldconfig" [libdir])
+    }
+    
+    return true
+}
+
+// Parse dependencies with source/binary selectionpub fn parse_dependency_spec: (spec :str) :DependencySpec {
+// spec format: "name@version:source" where source is "src", "binary", "auto"
+       e.g., "mire@2.1.0-beta:src" or "mire@2.1.0-beta:binary" or "mire@2.1.0-beta:auto"
+    set spec_copy = spec :str mut
+    set source = "auto" :str mut
+    set version = "" :str mut
+    set name = "" :str mut
+    
+// Split by : for source    set colon = strings::index(spec ":")
+    if colon >= 0 {
+        set source = strings::substr(spec colon + 1 9999)
+        set spec_copy = strings::substr(spec 0 colon)
+    }
+    
+// Split by @ for version    set at = strings::index(spec_copy "@")
+    if at >= 0 {
+        set version = strings::substr(spec_copy at + 1 9999)
+        set name = strings::substr(spec_copy 0 at)
+    } else {
+        set name = spec_copy
+    }
+    
+    return DependencySpec { name: name, version: version, source: source }
+}
+
+pub struct DependencySpec {
+    pub name :str
+    pub version :str
+    pub source :str  //"src", "binary", "auto"}
+
+// Resolve dependency based on source preferencepub fn resolve_dependency: (spec :DependencySpec) :bool {
+    use dasu("  [RESOLVE] " + spec.name + (if spec.version != "" { "@" + spec.version } else { "" }) + " [" + spec.source + "]")
+    
+    if spec.source == "src" || spec.source == "source" {
+// Force source build - clone and build from source        use dasu("  [SRC]   " + spec.name + ": building from source")
+        return use! deps::resolve_from_source(spec.name, spec.version)
+    } elif spec.source == "binary" || spec.source == "bin" {
+// Force binary download        use dasu("  [BIN]   " + spec.name + ": downloading binary")
+        return use! deps::resolve_binary(spec.name, spec.version)
+    } else {
+// Auto: try binary first, fallback to source        use dasu("  [AUTO]  " + spec.name + ": trying binary, fallback to source")
+        if !use! deps::resolve_binary(spec.name, spec.version) {
+            use dasu("  [FALLBACK] binary not available, building from source")
+            return use! deps::resolve_from_source(spec.name, spec.version)
+        }
+        return true
+    }
+}

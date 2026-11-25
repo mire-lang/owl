@@ -3,25 +3,18 @@ load kioto::strings
 load kioto::fs
 load mire::vec
 load kioto::proc
-load! /code/_externs
+load kioto::env
+load! /src/_externs
 
 // Use extern directly for i64_to_string
 fn i64_to_string: (v :i64) :str { return rt_i64_to_string(v) }
 
 @[test]
 pub fn owl_check_validates_project: () :bool {
-    set home_parts = [] :vec[str] mut
-    set home_parts = vec::push::str(home_parts "-c")
-    set home_parts = vec::push::str(home_parts "echo $HOME")
-    set home_out = proc::run::output("sh" home_parts)
-    set home = strings::trim(home_out)
-    set da = [] :vec[str] mut
-    set da = vec::push::str(da "+%s")
-    set ts = strings::trim(proc::run::output("date" da))
-    set test_base = strings::concat(strings::concat(strings::copy(home) "/.owl/tmp/owl_check_test_") ts)
+    set test_base = "bin/.owl_test_check"
     set proj_dir = strings::concat(test_base "/testcheck")
-    set owl_bin = "/home/nyx/.local/bin/owl" :str mut
-    if owl_bin == "" { set owl_bin = strings::concat(strings::copy(home) "/.local/bin/owl") }
+    set owl_bin = env::var("OWL_BIN") :str mut
+    if owl_bin == "" { set owl_bin = "../../../bin/debug/main" }
 
     set mk = [] :vec[str] mut
     set mk = vec::push::str(mk "-p")
@@ -30,26 +23,57 @@ pub fn owl_check_validates_project: () :bool {
     use proc::run.output("mkdir" mk)
 
     set toml_path = strings::concat(proj_dir "/owl.toml")
-    set toml_content = "[project]\nname = \"testcheck\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\ncache = \"bin/.cache\"\n"
+    set toml_content = "[project]\nname = \"testcheck\"\nversion = \"0.1.0\"\ndescription = \"\"\nentry = \"src/main.mire\"\n\n[build]\ncompiler = \"mire\"\nprofile = \"debug\"\nopt-level = \"0\"\nartifact = \"bin\"\nruntime = \"minimal\"\n\n[paths]\nsources = \"src\"\ntests = \"tests\"\noutput = \"bin\"\ncache = \"bin/.cache\"\n"
     use fs::write(toml_path toml_content)
 
     set main_path = strings::concat(proj_dir "/src/main.mire")
     set main_content = "pub fn main: () {\n  return 0\n}\n"
     use fs::write(main_path main_content)
 
-    set ca = [] :vec[str] mut
-    set ca = vec::push::str(ca "check")
-    set ca = vec::push::str(ca ".")
+    /! Three local dependencies exercise the loop's per-package ownership
+       cleanup, including the path used by the ARM release build. !/
+    set dep1 = strings::concat(proj_dir "/deps/dep1")
+    set dep2 = strings::concat(proj_dir "/deps/dep2")
+    set dep3 = strings::concat(proj_dir "/deps/dep3")
+    set dep_mk = [] :vec[str] mut
+    set dep_mk = vec::push::str(dep_mk "-p")
+    set dep_mk = vec::push::str(dep_mk dep1)
+    set dep_mk = vec::push::str(dep_mk dep2)
+    set dep_mk = vec::push::str(dep_mk dep3)
+    use proc::run.output("mkdir" dep_mk)
+    set dep_toml = "[project]\nname = \"dependency\"\nversion = \"1.0.0\"\n"
+    use fs::write(strings::concat(dep1 "/owl.toml") dep_toml)
+    use fs::write(strings::concat(dep2 "/owl.toml") dep_toml)
+    use fs::write(strings::concat(dep3 "/owl.toml") dep_toml)
+    use fs::write(strings::concat(dep1 "/mod.mire") "module dep1\n")
+    use fs::write(strings::concat(dep2 "/mod.mire") "module dep2\n")
+    use fs::write(strings::concat(dep3 "/mod.mire") "module dep3\n")
+    set deps_table = "\n[dependencies]\ndep1 = { path = \"./deps/dep1\", version = \"1.0.0\" }\ndep2 = { path = \"./deps/dep2\", version = \"1.0.0\" }\ndep3 = { path = \"./deps/dep3\", version = \"1.0.0\" }\n"
+    use fs::write(toml_path toml_content + deps_table)
+
     set check_cmd = [] :vec[str] mut
     set check_cmd = vec::push::str(check_cmd "-c")
-    set cc1 = strings::concat("cd " proj_dir)
-    set cc2 = strings::concat(cc1 " && ")
-    set cc3 = strings::concat(cc2 owl_bin)
-    set cc4 = strings::concat(cc3 " check .")
-    set check_cmd = vec::push::str(check_cmd cc4)
+    set check_cmd = vec::push::str(check_cmd "cd " + proj_dir + " && " + owl_bin + " check . 2>&1")
     set check_out = proc::run::output("sh" check_cmd)
     set check_exit = proc::run.last_exit()
-    set check_ok = strings::contains(check_out "[OK]")
+    set check_ok = check_exit == 0
+        && strings::contains(check_out "[OK]   [paths].output: bin")
+        && strings::contains(check_out "[OK]   deps: 3/3 packages loadable")
+        && !strings::contains(check_out "[FAIL]")
+
+    /! A clean project must also resolve and write its first lockfile before
+       Owl can prepare a compiler test invocation. Keep the lock absent here
+       to exercise that continuation path. !/
+    set test_cmd = [] :vec[str] mut
+    set test_cmd = vec::push::str(test_cmd "-c")
+    set test_args = "test --no-run" :str
+    set test_cmd = vec::push::str(test_cmd "cd " + proj_dir + " && " + owl_bin + " " + test_args + " 2>&1")
+    set test_out = proc::run::output("sh" test_cmd)
+    set test_exit = proc::run::last_exit()
+    set test_ok = test_exit == 0
+        && strings::contains(test_out "dependencies resolved and locked")
+        && !strings::contains(test_out "double free")
+        && !strings::contains(test_out "test path not found")
     use dasu("CHECK_EXIT=" + use! util::i64_to_string(check_exit))
     use dasu("CHECK_OUT=" + check_out)
 
@@ -58,5 +82,5 @@ pub fn owl_check_validates_project: () :bool {
     set rm = vec::push::str(rm test_base)
     use proc::run.output("rm" rm)
 
-    return check_ok
+    return check_ok && test_ok
 }

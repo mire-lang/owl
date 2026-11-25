@@ -14,7 +14,7 @@
 - **`owl load <name> [version]` implemented** — adds a dependency to `[dependencies]` in `owl.toml`. Without a version it uses a local path `~/.owl/libs/<name>`; with a version it declares a versioned registry dependency. Follow with `owl install`.
 - **Version unified** — README, `owl.toml`, and the fallback constant all report `v1.3.0`.
 - **`owl info`** now resolves the compiler through `util::compiler_cmd()` (honoring `owl.toml [build] compiler` and `MIRE_COMPILER`) instead of hardcoding `mire`.
-- **`owl new` template** uses `code/main.mire`, `pub fn main: ()`, and `[paths] sources = "code"`, matching the codebase convention.
+- **`owl new` template** uses `src/main.mire`, `pub fn main: ()`, and `[paths] sources = "src"`, matching the codebase convention.
 
 ## Global flags
 
@@ -81,7 +81,7 @@ Scaffold a new project:
 <Name>/
   owl.toml
   bin/
-  code/
+  src/
     main.mire
 ```
 

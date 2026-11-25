@@ -200,7 +200,7 @@ A package is distributed as a `.tar.zst` archive (tar compressed with zstd).
 ```
 kioto-strings-1.2.0.tar.zst
  owl.toml ← project manifest
- code/ ← source code
+ src/ ← source code
  tests/ ← test files (optional)
  docs/ ← documentation (optional)
  README.md ← readme (optional)
@@ -208,7 +208,7 @@ kioto-strings-1.2.0.tar.zst
 
 The archive is created from the project root. The top-level directory structure
 mirrors the source project. No nested parent directory is added — extracting
-creates `owl.toml`, `code/`, `tests/`, etc. directly in the current directory.
+creates `owl.toml`, `src/`, `tests/`, etc. directly in the current directory.
 
 ### Naming convention
 

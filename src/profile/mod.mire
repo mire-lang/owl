@@ -1,0 +1,55 @@
+module profile
+
+load! /src/util
+
+pub fn run: (args :&vec[str]) {
+    if !use! util::has_project() {
+        use dasu("error: no owl.toml found")
+        return
+    }
+
+    set mire = use! util::compiler_cmd()
+    set status_path = use! util::owl_home() + "/cache/build_status.toml"
+
+    use dasu("  Build profile for " + use! util::toml_get("owl.toml" "project" "name"))
+    use dasu("")
+    use dasu("  Compiler:  " + mire)
+    use dasu("  Profile:   " + use! util::toml_get("owl.toml" "build" "profile"))
+    use dasu("  Opt level: " + use! util::toml_get("owl.toml" "build" "opt-level"))
+    use dasu("  Output:    " + use! util::toml_get("owl.toml" "paths" "output") + "/" + use! util::toml_get("owl.toml" "build" "profile") + "/main")
+
+    set binary_size = "0" :str mut
+    if fs::exists("bin/" + use! util::toml_get("owl.toml" "build" "profile") + "/main") {
+        set prof = use! util::toml_get("owl.toml" "build" "profile")
+        set sz = use! util::file_size("bin/" + prof + "/main")
+        set binary_size = use! util::i64_to_string(sz)
+    }
+    use dasu("  Binary:    " + binary_size + " bytes")
+
+    if fs::exists(status_path) {
+        set status_content = fs::read(status_path)
+        set status_copy = status_content :str
+        set last_build = use! util::toml_get_from_string(status_content "build" "last_build_time") :str mut
+        set build_count = use! util::toml_get_from_string(status_copy "build" "build_count") :str mut
+        if last_build == "" { set last_build = "never" }
+        if build_count == "" { set build_count = "0" }
+        use dasu("  Last build: " + last_build)
+        use dasu("  Builds:    " + build_count)
+    } else {
+        use dasu("  Last build: never")
+        use dasu("  Builds:    0")
+    }
+
+    if use! args::flag::has(args "--json") {
+        set json = "{\n" :str mut
+        set json = json + "  \"project\": \"" + use! util::toml_get("owl.toml" "project" "name") + "\",\n"
+        set json = json + "  \"version\": \"" + use! util::toml_get("owl.toml" "project" "version") + "\",\n"
+        set json = json + "  \"compiler\": \"" + mire + "\",\n"
+        set json = json + "  \"profile\": \"" + use! util::toml_get("owl.toml" "build" "profile") + "\",\n"
+        set json = json + "  \"opt_level\": \"" + use! util::toml_get("owl.toml" "build" "opt-level") + "\",\n"
+        set json = json + "  \"binary_size\": " + binary_size + "\n"
+        set json = json + "}"
+        use dasu("")
+        use dasu(json)
+    }
+}

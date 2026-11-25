@@ -1,3 +1,51 @@
+## [1.6.13] - 2026-11-25
+
+### Changed
+- **Source tree moved from `code/` to `src/`.** `owl.toml` declares
+  `sources = "src"` and `entry = "src/main.mire"`, and every internal `load!`
+  path uses `/src/...`. A build that pinned the old `code/` path must update
+  its generated config.
+- **New compiler flags are forwarded.** `owl build/run/check` accept `--link`,
+  `-H/--hash`, `--link-dir`, `--bundle`, `--error-format`, `--message-format`
+  and `--color`.
+- **Dependency paths resolve through symlinks.** Package validation uses
+  `fs::unrestricted`, so libraries installed under `~/.owl/libs` are found even
+  when that directory is a symlink.
+
+### Fixed
+- **Multi-dependency validation no longer crashes.** Nested protocol fields are
+  checked through raw field reads and sequential validator calls, avoiding the
+  struct-string codegen bug and duplicate temporary cleanup.
+- **Protocol CI is reproducible.** The job installs `tcc`/`libtcc-dev`, builds
+  Avenys from the checked-out `avenys-src`, and no longer copies a nonexistent
+  `testlib` directory.
+
+## [1.6.12] - 2026-11-12
+
+### Fixed
+- Release validation now uses immutable Kioto and Mire stdlib revisions compatible with Owl's test suite.
+- Manual workflow runs validate the manifest version without trying to publish a GitHub release.
+
+## [1.6.11] - 2026-11-12
+
+### Fixed
+- Release builds use the Kioto and Mire stdlib tags declared by Owl instead of incompatible rolling branches.
+
+## [1.6.10] - 2026-11-12
+
+### Fixed
+- Dependency validation now makes independent owned copies of each path value before cleanup, avoiding double frees in optimized ARM builds.
+
+## [1.6.9] - 2026-11-12
+
+### Fixed
+- Dependency diagnostics now validate each package in a separate call frame. This avoids duplicate temporary-string cleanup when checking projects with several dependencies, including optimized ARM builds.
+- The Owl release workflow runs the complete Owl suite on each release target before packaging its binary.
+
+### Changed
+- Release validation resolves dependencies in a separate command, checks them, and runs the suite for the target architecture. This keeps clean-checkout failures attributable to the relevant stage.
+- `owl test` takes its target from `OWL_TEST_TARGET` or its CLI option, writes it into the Mire test configuration, and does not forward the Owl-only flag to Mire.
+
 ## [1.6.2] - 2026-11-10
 
 ### Added

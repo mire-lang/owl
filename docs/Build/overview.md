@@ -39,7 +39,7 @@ To force a clean build (delete analysis cache first):
 
 ```bash
 owl clean --cache
-owl build -B code/main.mire --release
+owl build -B src/main.mire --release
 ```
 
 ### Build Cache v1.1.0
