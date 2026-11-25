@@ -1,4 +1,4 @@
-# Owl v1.6.12
+# Owl v1.6.13
 
 Package and project manager for the [Mire](https://github.com/mire-lang) (Avenys) language.
 Written in Mire, compiled by Avenys.
@@ -159,6 +159,13 @@ owl install              # resolve and install
 ```
 
 ## Version History
+
+### v1.6.13 - 2026-11-25
+**Layout, compiler flags and dependency checks**
+- **The source tree is `src/`.** `owl.toml` declares `sources = "src"`, `entry = "src/main.mire"`, and internal `load!` paths use `/src/...`.
+- **New compiler flags pass through.** `--link`, `-H/--hash`, `--link-dir`, `--bundle`, `--error-format`, `--message-format` and `--color` are accepted by `build`, `run` and `check`.
+- **Symlinked library stores work.** Dependency validation uses `fs::unrestricted`, so packages under `~/.owl/libs` resolve when that path is a symlink.
+- **Multi-dependency validation is stable.** Nested protocol fields are read through raw helpers instead of corrupt struct strings, and validators run sequentially.
 
 ### v1.6.12 - 2026-11-12
 **Changed**

@@ -1,3 +1,25 @@
+## [1.6.13] - 2026-11-25
+
+### Changed
+- **Source tree moved from `code/` to `src/`.** `owl.toml` declares
+  `sources = "src"` and `entry = "src/main.mire"`, and every internal `load!`
+  path uses `/src/...`. A build that pinned the old `code/` path must update
+  its generated config.
+- **New compiler flags are forwarded.** `owl build/run/check` accept `--link`,
+  `-H/--hash`, `--link-dir`, `--bundle`, `--error-format`, `--message-format`
+  and `--color`.
+- **Dependency paths resolve through symlinks.** Package validation uses
+  `fs::unrestricted`, so libraries installed under `~/.owl/libs` are found even
+  when that directory is a symlink.
+
+### Fixed
+- **Multi-dependency validation no longer crashes.** Nested protocol fields are
+  checked through raw field reads and sequential validator calls, avoiding the
+  struct-string codegen bug and duplicate temporary cleanup.
+- **Protocol CI is reproducible.** The job installs `tcc`/`libtcc-dev`, builds
+  Avenys from the checked-out `avenys-src`, and no longer copies a nonexistent
+  `testlib` directory.
+
 ## [1.6.12] - 2026-11-12
 
 ### Fixed
